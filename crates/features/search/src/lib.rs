@@ -23,6 +23,9 @@ struct QueryParams {
     kinds: Vec<String>,
     #[serde(default)]
     limit: Option<u32>,
+    /// Leave out records with any of these fields set (e.g. archived ones).
+    #[serde(default)]
+    hide: Vec<String>,
 }
 
 /// Splits text into passages of up to `max` words, at paragraph and then sentence ends.
@@ -199,17 +202,35 @@ pub fn contribute_views(v: &mut Vec<(String, Arc<dyn DerivedView>)>) {
 }
 
 pub fn query(ctx: &MethodCtx, text: &str, kinds: Vec<String>, limit: u32) -> Result<Vec<SearchHit>> {
+    query_hiding(ctx, text, kinds, limit, &[])
+}
+
+/// Like [`query`], leaving out records with any of the `hide` fields set.
+pub fn query_hiding(
+    ctx: &MethodCtx,
+    text: &str,
+    kinds: Vec<String>,
+    limit: u32,
+    hide: &[String],
+) -> Result<Vec<SearchHit>> {
     let views = ctx
         .views
         .ok_or_else(|| BackendError::new(librarium_contracts::ErrorCode::NotReady, "The index is starting."))?;
-    let hits = views.query(VIEW, |idx| idx.search(&TextQuery { text: text.into(), kinds, limit }))?;
+    // Ask for more when some may be hidden.
+    let ask = if hide.is_empty() { limit } else { limit.saturating_mul(3).max(limit + 20) };
+    let hits = views.query(VIEW, |idx| idx.search(&TextQuery { text: text.into(), kinds, limit: ask }))?;
     Ok(hits
         .into_iter()
         .filter_map(|h| {
             let id: Id = h.record.parse().ok()?;
-            let title = ctx.library.store.get(id).map(|e| e.title).unwrap_or(h.title);
+            let e = ctx.library.store.get(id);
+            if e.as_ref().is_some_and(|e| hide.iter().any(|f| e.fields.get(f).is_some_and(|v| !v.is_null()))) {
+                return None;
+            }
+            let title = e.map(|e| e.title).unwrap_or(h.title);
             Some(SearchHit { id, kind: h.kind, title, snippet: h.snippet, offset: h.offset, score: h.score })
         })
+        .take(limit as usize)
         .collect())
 }
 
@@ -219,7 +240,8 @@ pub fn contribute_methods(r: &mut Registry<ApiMethod>) -> Result<(), DuplicateId
         "search.query",
         Arc::new(|ctx: &MethodCtx, p: Value| {
             let p: QueryParams = serde_json::from_value(p).map_err(|e| BackendError::invalid(e.to_string()))?;
-            Ok(serde_json::to_value(query(ctx, &p.text, p.kinds, p.limit.unwrap_or(50).min(500))?).unwrap())
+            Ok(serde_json::to_value(query_hiding(ctx, &p.text, p.kinds, p.limit.unwrap_or(50).min(500), &p.hide)?)
+                .unwrap())
         }),
     )
 }

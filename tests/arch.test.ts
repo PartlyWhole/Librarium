@@ -29,6 +29,7 @@ it("records the interface's slot contributors", () => {
     "shell.side-panel-sections": shell.sidePanel.contributors(),
     "shell.settings-sections": shell.settings.contributors(),
     "shell.openers": shell.openers.contributors(),
+    "shell.hiding-fields": shell.hidingFields.contributors(),
     "shell.editor-extensions": shell.editorExtensions.contributors(),
     "shell.reader-engines": shell.readerEngines.contributors(),
     [NOTE_GROUPS]: shell.slot(NOTE_GROUPS).contributors(),

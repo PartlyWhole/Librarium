@@ -14,7 +14,8 @@ export class Records {
   readonly seq = signal(0);
   private waiters: { seq: number; resolve: () => void }[] = [];
 
-  constructor() {
+  /** `hiding()` names fields that hide a record from lists (shell.hiding-fields). */
+  constructor(readonly hiding: () => string[] = () => []) {
     on("event.change", (p) => void this.apply(p as Change));
   }
 
@@ -27,9 +28,16 @@ export class Records {
     }
   }
 
-  list(kind?: string): RecordInfo[] {
+  /** Records of a kind (or all), leaving out hidden ones (e.g. archived) unless asked. */
+  list(kind?: string, opts: { hidden?: boolean } = {}): RecordInfo[] {
     const all = [...this.byId().values()];
-    return kind ? all.filter((r) => r.kind === kind) : all;
+    const hide = opts.hidden ? [] : this.hiding();
+    return all.filter((r) => (!kind || r.kind === kind) && !hide.some((f) => r.fields[f] != null));
+  }
+
+  /** Whether a record is hidden from lists (e.g. archived). */
+  isHidden(r: RecordInfo): boolean {
+    return this.hiding().some((f) => r.fields[f] != null);
   }
 
   get(id: string): RecordInfo | undefined {

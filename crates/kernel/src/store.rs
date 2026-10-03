@@ -137,6 +137,9 @@ pub enum Intent {
     Relocate { record: Id, title: String, subfolder: Option<String> },
     /// Rename `from` to the canonical name for `id` and write the ID (and `copied-from`).
     Identify { from: String, id: Id, copied_from: Option<Id> },
+    /// Permanently delete a record: its own file first, then these files and folders
+    /// (store-relative), deepest first. Asked for only after the user's two-step confirmation.
+    Delete { record: Id, files: Vec<String>, folders: Vec<String> },
 }
 
 #[derive(Default)]
@@ -1104,6 +1107,7 @@ impl<'a> Tx<'a> {
         match intent {
             Intent::Relocate { record, title, subfolder } => self.apply_relocate(*record, title, subfolder.as_deref()),
             Intent::Identify { from, id, copied_from } => self.apply_identify(from, *id, *copied_from),
+            Intent::Delete { record, files, folders } => self.apply_delete(*record, files, folders),
         }
     }
 
@@ -1188,6 +1192,99 @@ impl<'a> Tx<'a> {
         };
         s.safe_write(&abs, &out, false, self.dur).map_err(|err| io_err(err, "rewriting the title"))?;
         self.indexed(&path, &out, ChangeOp::Renamed)
+    }
+
+    /// What permanently deleting a record would remove: its files (its own file first) and the
+    /// folders left empty. Markdown records take their sidecars (`<id>.*` beside them); folder
+    /// records take their whole folder.
+    pub fn deletion_plan(&self, id: Id) -> Result<(Vec<String>, Vec<String>)> {
+        let s = self.store;
+        let e = s.get(id).ok_or_else(|| BackendError::not_found(format!("no record {id}")))?;
+        let def = s.kind_def(&e.kind)?.clone();
+        let mut files = vec![e.path.clone()];
+        let mut folders = vec![];
+        match def.format {
+            Format::Markdown => {
+                let dir = Path::new(&e.path).parent().map(rel_str).unwrap_or_default();
+                for f in s.fs.list(&s.abs(&dir)).unwrap_or_default() {
+                    let sidecar = f.name.starts_with(&format!("{id}.")) && !f.name.ends_with(".md");
+                    if !f.is_dir && sidecar {
+                        files.push(format!("{dir}/{}", f.name));
+                    }
+                }
+            }
+            Format::JsonDir => {
+                let dir = Path::new(&e.path).parent().map(rel_str).unwrap_or_default();
+                let mut stack = vec![dir.clone()];
+                while let Some(d) = stack.pop() {
+                    folders.push(d.clone());
+                    for f in s.fs.list(&s.abs(&d)).unwrap_or_default() {
+                        let p = format!("{d}/{}", f.name);
+                        if f.is_dir {
+                            stack.push(p);
+                        } else if p != e.path {
+                            files.push(p);
+                        }
+                    }
+                }
+                folders.reverse();
+            }
+        }
+        Ok((files, folders))
+    }
+
+    /// Permanently deletes a record, if it is still at `expected_version`. Never call this
+    /// without the user's explicit, two-step confirmation (see the Archive feature).
+    pub fn delete_permanently(&self, id: Id, expected_version: &str) -> Result<u64> {
+        let s = self.store;
+        let e = s.get(id).ok_or_else(|| BackendError::not_found(format!("no record {id}")))?;
+        if e.hash != expected_version {
+            return Err(BackendError::conflict("it changed since you confirmed; nothing was deleted"));
+        }
+        let (files, folders) = self.deletion_plan(id)?;
+        let intent = Intent::Delete { record: id, files, folders };
+        let p = s.write_intent(&intent)?;
+        let r = self.apply(&intent).map(|(_, seq)| seq);
+        if r.is_ok() {
+            s.clear_intent(&p);
+        }
+        r
+    }
+
+    fn apply_delete(&self, id: Id, files: &[String], folders: &[String]) -> Result<(Entry, u64)> {
+        let s = self.store;
+        let kind = s.get(id).map(|e| e.kind.clone()).unwrap_or_default();
+        // The record's own file first: once it is gone, so is the record.
+        for f in files {
+            match s.fs.remove_file(&s.abs(f)) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) => return Err(io_err(e, "deleting")),
+            }
+            if let Some(dir) = Path::new(f).parent() {
+                let _ = s.fs.flush_dir(&s.abs(&rel_str(dir)), self.dur.flush());
+            }
+        }
+        for d in folders {
+            let _ = s.fs.remove_dir(&s.abs(d));
+        }
+        let gone = s.forget(id)?;
+        let kind = gone.as_ref().map(|g| g.kind.clone()).unwrap_or(kind);
+        let seq = s.changes.emit(id, &kind, ChangeOp::Removed, ChangeOrigin::App);
+        let entry = gone.unwrap_or(Entry {
+            id,
+            kind,
+            title: String::new(),
+            path: String::new(),
+            fp: Fingerprint { len: 0, mtime_ns: 0, ctime_ns: 0, inode: 0 },
+            hash: String::new(),
+            created: None,
+            read_only: None,
+            fields: Map::new(),
+            conflicts: vec![],
+            checked_ns: 0,
+        });
+        Ok((entry, seq))
     }
 
     /// Renames `from` to the canonical name for `id`, then writes the ID into it.

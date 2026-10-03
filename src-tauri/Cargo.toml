@@ -28,6 +28,7 @@ librarium-versions-none = { path = "../crates/adapters/versions-none" }
 librarium-feature-notes = { path = "../crates/features/notes" }
 librarium-feature-daily = { path = "../crates/features/daily" }
 librarium-feature-captures = { path = "../crates/features/captures" }
+librarium-feature-archive = { path = "../crates/features/archive" }
 librarium-feature-library = { path = "../crates/features/library" }
 librarium-feature-search = { path = "../crates/features/search" }
 librarium-feature-links = { path = "../crates/features/links" }

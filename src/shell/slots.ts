@@ -87,6 +87,9 @@ export interface ShellApi {
   settings: Registry<SettingsSection>;
   /** Which page opens a record of a kind. */
   openers: Registry<string>;
+  /** shell.hiding-fields: records with any of these fields set (e.g. archived ones) are left
+   * out of lists and search unless asked for. */
+  hidingFields: Registry<string>;
   /** A feature-hosted slot by its ID (defined in slots.ts). */
   slot<T>(id: string): Registry<T>;
   router: Router;
@@ -135,4 +138,4 @@ export interface EmbedRenderer {
 }
 
 /** Every interface slot, for the architecture report. */
-export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", "shell.embeds", NOTE_GROUPS, READER_TOOLS] as const;
+export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", "shell.embeds", "shell.hiding-fields", NOTE_GROUPS, READER_TOOLS] as const;

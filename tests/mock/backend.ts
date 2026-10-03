@@ -42,6 +42,10 @@ const state = {
   jobs: [] as { state: string; [k: string]: unknown }[],
   inspect: { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false },
   idn: 1,
+  /** Pending deletion confirmations: token → [id, version]. */
+  confirmations: new Map<string, [string, string][]>(),
+  /** Files deleted permanently (paths), for tests. */
+  deleted: [] as string[],
 };
 
 const listeners = new Map<string, Set<(p: unknown) => void>>();
@@ -73,6 +77,18 @@ function need(id: unknown): Rec {
   const r = state.records.get(String(id));
   if (!r) fail("not-found", `no record ${id}`);
   return r;
+}
+
+function archivedAt(r: Rec): boolean {
+  return r.info.fields["archive.at"] != null;
+}
+
+function setArchived(p: { id: string; base_version?: string }, at: string | null) {
+  const r = need(p.id);
+  if (p.base_version && p.base_version !== r.info.version) fail("conflict", "the record changed since it was read");
+  if (at === null) delete r.info.fields["archive.at"];
+  else r.info.fields["archive.at"] = at;
+  return { info: r.info, seq: touch(r, "updated") };
 }
 
 function touch(r: Rec, op: "created" | "updated" | "renamed") {
@@ -145,9 +161,43 @@ const api: Record<string, (p: any) => unknown> = {
   "export.write": (p) => (exports.set(p.path, p.text), null),
   "jobs.list": () => ({ running: state.jobs.filter((j) => j.state === "running" || j.state === "queued"), failed: state.jobs.filter((j) => j.state === "failed"), recent: state.jobs.filter((j) => j.state === "done"), resumed: null }),
   "index.rebuild": () => ({ id: "0192f3a4-7c1e-7b2a-9f00-0000000000ff", kind: "index.rebuild", key: "all", state: "queued", title: "Rebuilding the index", attempts: 0, error: null, progress: null, message: null, payload: null, created_ms: 0, updated_ms: 0 }),
+  "archive.archive": (p) => setArchived(p, "2026-10-02T10:00:00Z"),
+  "archive.restore": (p) => setArchived(p, null),
+  "archive.list": () => [...state.records.values()].filter(archivedAt).map((r) => r.info),
+  "archive.prepareDelete": (p: { ids: string[] }) => {
+    if (!p.ids?.length) fail("invalid-input", "nothing to delete");
+    const records = p.ids.map((id) => {
+      const r = need(id);
+      if (!archivedAt(r)) fail("invalid-input", "Archive it first: only archived records can be deleted permanently.");
+      return { id, title: r.info.title, kind: r.info.kind, version: r.info.version, files: [r.info.path] };
+    });
+    const token = `token-${state.idn++}`;
+    state.confirmations.set(token, records.map((r) => [r.id, r.version]));
+    return { token, records, files: records.length, expires_ms: Date.now() + 300_000 };
+  },
+  "archive.delete": (p: { token?: string }) => {
+    const c = p.token ? state.confirmations.get(p.token) : undefined;
+    if (!c) fail("invalid-input", "That confirmation has expired. Nothing was deleted.");
+    state.confirmations.delete(p.token!);
+    const out = { deleted: [] as string[], skipped: [] as { id: string; reason: string }[] };
+    for (const [id, v] of c) {
+      const r = state.records.get(id);
+      if (!r || !archivedAt(r) || r.info.version !== v) {
+        out.skipped.push({ id, reason: "it changed since you confirmed; nothing was deleted" });
+        continue;
+      }
+      state.records.delete(id);
+      state.deleted.push(r.info.path);
+      const seq = ++state.seq;
+      queueMicrotask(() => emit("event.change", { seq, id, kind: r.info.kind, op: "removed", origin: "app" }));
+      out.deleted.push(id);
+    }
+    return out;
+  },
   "search.query": (p) => {
     const words = String(p.text).toLowerCase().split(/\s+/).filter((w) => w && !w.startsWith("-"));
     return [...state.records.values()]
+      .filter((r) => !(p.hide ?? []).some((f: string) => r.info.fields[f] != null))
       .filter((r) => (!p.kinds?.length || p.kinds.includes(r.info.kind)) && words.every((w) => (r.info.title + " " + r.body).toLowerCase().includes(w.replace(/"/g, ""))))
       .map((r) => ({ id: r.info.id, kind: r.info.kind, title: r.info.title, snippet: r.body.replace(new RegExp(`(${words.map((w) => w.replace(/[^\p{L}\p{N}]/gu, "")).join("|")})`, "giu"), "\u0002$1\u0003"), offset: 0, score: 1 }));
   },
@@ -286,6 +336,8 @@ export const mock = {
     state.drafts.clear();
     state.failSave = null;
     state.jobs = [];
+    state.confirmations.clear();
+    state.deleted = [];
     state.inspect = { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false };
   },
   /** A sample library for the browser preview. */

@@ -57,3 +57,8 @@ fn power_cut_during_save() {
 fn power_cut_during_rename() {
     crash::rename_scenarios(&make);
 }
+
+#[test]
+fn power_cut_during_permanent_delete() {
+    crash::delete_scenarios(&make);
+}

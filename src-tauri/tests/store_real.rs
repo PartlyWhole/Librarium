@@ -104,6 +104,11 @@ fn process_crash_during_rename() {
     crash::rename_scenarios(&real);
 }
 
+#[test]
+fn process_crash_during_permanent_delete() {
+    crash::delete_scenarios(&real);
+}
+
 // ---------------------------------------------------------------------------------------------
 
 fn kinds() -> Kinds {

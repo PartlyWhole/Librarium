@@ -170,8 +170,8 @@ fn outside_edits_moves_and_removals_are_detected() {
     let new_rel = "pages/Elsewhere/renamed by hand.md";
     h.fs.write_outside(&h.abs(new_rel), text.as_bytes());
     h.fs.remove_outside(&h.abs(&e.path));
-    h.src.record(&h.abs(&e.path));
-    h.src.record(&h.abs(new_rel));
+    // FSEvents reports a move's two paths in one batch.
+    h.src.record_all(&[&h.abs(&e.path), &h.abs(new_rel)]);
     settle(&lib);
     assert_eq!(lib.store.get(e.id).unwrap().path, new_rel);
     assert!(h.changes.lock().unwrap().iter().any(|c| c.op == ChangeOp::Renamed));

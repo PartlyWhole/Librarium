@@ -2206,6 +2206,7 @@ dependencies = [
  "librarium-api",
  "librarium-changes-fsevents",
  "librarium-contracts",
+ "librarium-feature-archive",
  "librarium-feature-captures",
  "librarium-feature-daily",
  "librarium-feature-library",

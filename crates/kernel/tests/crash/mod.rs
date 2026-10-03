@@ -261,3 +261,41 @@ pub fn rename_scenarios<R: Rig>(make: &dyn Fn() -> R) {
     );
     assert!(steps >= 6, "rename took {steps} steps");
 }
+
+pub fn delete_scenarios<R: Rig>(make: &dyn Fn() -> R) {
+    // Deleting permanently: afterwards the record and its sidecars are all there, or all gone.
+    let steps = sweep(
+        make,
+        "delete",
+        &|lib| {
+            lib.write(Lane::Interactive, |tx| {
+                tx.create_with_sidecars(
+                    "page",
+                    "Seed",
+                    vec![],
+                    "old body\n",
+                    vec![(".anchor.json".into(), b"{}".to_vec())],
+                )
+            })
+            .unwrap()
+            .0
+            .id
+        },
+        &|lib, id| {
+            let v = lib.store.get(id).unwrap().hash;
+            lib.write(Lane::Interactive, move |tx| tx.delete_permanently(id, &v)).is_ok()
+        },
+        &|lib, id, ok| {
+            let sidecar = lib.store.fs.stat(&lib.store.root.join(format!("pages/{id}.anchor.json"))).unwrap().is_some();
+            match lib.store.get(id) {
+                Some(_) => {
+                    assert!(!ok, "a completed delete is durable");
+                    assert!(sidecar, "a record that survives keeps its sidecar");
+                    assert_eq!(body_of(lib, id), "old body\n");
+                }
+                None => assert!(!sidecar, "no sidecar outlives its record"),
+            }
+        },
+    );
+    assert!(steps >= 3, "delete took {steps} steps");
+}

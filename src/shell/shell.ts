@@ -63,7 +63,8 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const slots = new Map<string, Registry<unknown>>();
   const router = new Router();
   const prefs = new Prefs();
-  const records = new Records();
+  const hidingFields = new Registry<string>("shell.hiding-fields");
+  const records = new Records(() => hidingFields.values());
   const folder = signal<LibraryStatus | null>(null);
   const indexed = signal(0);
   on("event.indexed", (p) => indexed.set((p as { seq: number }).seq));
@@ -87,6 +88,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     sidePanel,
     settings,
     openers,
+    hidingFields,
     slot<T>(id: string) {
       let r = slots.get(id);
       if (!r) slots.set(id, (r = new Registry<unknown>(id)));

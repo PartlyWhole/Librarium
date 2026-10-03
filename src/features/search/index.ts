@@ -54,7 +54,7 @@ export function search(shell: ShellApi): void {
           return;
         }
         try {
-          const hits = await call<SearchHit[]>("search.query", { text: q, kinds: kind ? [kind] : [], limit: 50 });
+          const hits = await call<SearchHit[]>("search.query", { text: q, kinds: kind ? [kind] : [], limit: 50, hide: shell.hidingFields.values() });
           if (mine !== n) return;
           replace(
             results,

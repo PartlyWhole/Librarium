@@ -32,13 +32,21 @@ impl ScriptedChanges {
 
     /// Records an event; delivers it at once if watching.
     pub fn record(&self, path: &Path) {
+        self.record_all(&[path])
+    }
+
+    /// Records events delivered together in one batch, as FSEvents coalesces a move.
+    pub fn record_all(&self, paths: &[&Path]) {
         let (sink, batch) = {
             let mut s = self.s.lock().unwrap();
-            s.next += 1;
+            for p in paths {
+                s.next += 1;
+                let id = s.next;
+                s.log.push((id, p.to_path_buf()));
+            }
             let id = s.next;
-            s.log.push((id, path.to_path_buf()));
             let batch = ChangeBatch {
-                paths: vec![path.to_path_buf()],
+                paths: paths.iter().map(|p| p.to_path_buf()).collect(),
                 rescan: false,
                 history_done: false,
                 state: ReplayState { event_id: id, volume_uuid: s.volume.clone() },
