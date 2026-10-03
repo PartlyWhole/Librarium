@@ -22,6 +22,14 @@ fn serve_fixtures() -> String {
             let n = s.read(&mut buf).unwrap_or(0);
             let req = String::from_utf8_lossy(&buf[..n]);
             let path = req.split_whitespace().nth(1).unwrap_or("/").trim_start_matches('/').to_string();
+            // A page that never finishes loading: half a page, then nothing for a minute.
+            if path == "hang.html" {
+                std::thread::spawn(move || {
+                    let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 100000\r\n\r\n<html><body><p>Still loading");
+                    std::thread::sleep(std::time::Duration::from_secs(60));
+                });
+                continue;
+            }
             let (status, ctype, body) = if path == "factory.png" {
                 (200, "image/png", std::fs::read(dir.join("../library/gradient.png")).unwrap())
             } else if let Ok(b) = std::fs::read(dir.join(&path)) {
@@ -94,7 +102,30 @@ fn main() {
                     assert!(!p.visible_text.contains("fading popup"), "the fading popup was removed from the page");
                 }));
                 println!("late popup page: {late:?}");
-                if r.is_ok() && long.is_ok() && popup.is_ok() && late.is_ok() {
+                // Cancelling stops a save that is waiting for a page within a moment.
+                let cancel = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let flag = std::sync::atomic::AtomicBool::new(false);
+                    let started = std::time::Instant::now();
+                    let r = std::thread::scope(|s| {
+                        s.spawn(|| {
+                            std::thread::sleep(Duration::from_secs(1));
+                            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                        });
+                        saver.save_cancellable(&format!("{base}/hang.html"), Duration::from_secs(60), &flag)
+                    });
+                    let took = started.elapsed();
+                    assert!(
+                        matches!(&r, Err(e) if e.code == librarium_contracts::ErrorCode::Cancelled),
+                        "{:?}",
+                        r.map(|_| ())
+                    );
+                    assert!(took < Duration::from_secs(4), "stopped after {took:?}");
+                    // The saver is ready for the next page.
+                    let p = saver.save(&format!("{base}/article.html"), Duration::from_secs(60)).unwrap();
+                    assert!(p.text.contains("Technique integrates everything."));
+                }));
+                println!("cancel: {cancel:?}");
+                if r.is_ok() && long.is_ok() && popup.is_ok() && late.is_ok() && cancel.is_ok() {
                     0
                 } else {
                     1

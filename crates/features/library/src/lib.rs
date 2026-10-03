@@ -437,7 +437,7 @@ fn save_page(saver: &dyn librarium_contracts::ports::PageSaver, ctx: &JobCtx, p:
     let url = p["url"].as_str().ok_or_else(|| BackendError::invalid("no address"))?.to_string();
     let store = &ctx.library.store;
     ctx.progress(None, Some("Loading the page"));
-    let page = saver.save(&url, Duration::from_secs(90))?;
+    let page = saver.save_cancellable(&url, Duration::from_secs(90), ctx.cancel_flag())?;
     ctx.check_cancelled()?;
     // A page that ends anywhere but on the web (about:blank, an error page of the browser…)
     // wasn't loaded: never keep it, and never let it match another item.

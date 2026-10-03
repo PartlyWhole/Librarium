@@ -39,6 +39,10 @@ impl JobCtx<'_> {
     pub fn cancelled(&self) -> bool {
         self.cancelled.load(Ordering::SeqCst)
     }
+    /// The flag set when the user cancels this job (for waits that check it as they go).
+    pub fn cancel_flag(&self) -> &AtomicBool {
+        self.cancelled
+    }
     pub fn check_cancelled(&self) -> Result<()> {
         if self.cancelled() {
             Err(BackendError::new(ErrorCode::Cancelled, "cancelled"))

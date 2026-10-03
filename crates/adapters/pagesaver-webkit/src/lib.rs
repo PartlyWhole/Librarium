@@ -10,7 +10,7 @@
 //! tall pages are captured in slices and joined into one PDF with PDFKit.
 
 use librarium_contracts::ports::{PageSaver, SavedPage};
-use librarium_contracts::{BackendError, Result};
+use librarium_contracts::{BackendError, ErrorCode, Result};
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{AnyThread, MainThreadMarker};
@@ -18,7 +18,7 @@ use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{NSData, NSDate, NSError, NSString};
 use objc2_web_kit::{WKContentWorld, WKPDFConfiguration, WKWebView, WKWebsiteDataStore};
 use serde::Deserialize;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -171,6 +171,8 @@ pub struct WebKitPageSaver {
     window: Mutex<Option<String>>,
     /// Told when the page being saved finishes loading.
     loaded: Arc<Mutex<Option<mpsc::Sender<()>>>>,
+    /// Set when the save in progress is cancelled: every wait checks it.
+    stop: AtomicBool,
 }
 
 fn err(m: impl Into<String>) -> BackendError {
@@ -179,7 +181,13 @@ fn err(m: impl Into<String>) -> BackendError {
 
 impl WebKitPageSaver {
     pub fn new(app: AppHandle) -> Self {
-        WebKitPageSaver { app, n: AtomicU64::new(0), window: Mutex::new(None), loaded: Arc::default() }
+        WebKitPageSaver {
+            app,
+            n: AtomicU64::new(0),
+            window: Mutex::new(None),
+            loaded: Arc::default(),
+            stop: AtomicBool::new(false),
+        }
     }
 
     /// Makes the hidden window now (at startup, while the app is in front anyway), so the first
@@ -220,6 +228,8 @@ impl WebKitPageSaver {
 
     /// Leaves the page and forgets everything it stored (cookies, storage, caches).
     fn reset(&self, label: &str) {
+        // Leaving the page always completes, cancelled or not.
+        self.stop.store(false, Ordering::SeqCst);
         *self.loaded.lock().unwrap() = None;
         let Some(w) = self.app.get_webview_window(label) else { return };
         let _ = w.navigate("about:blank".parse().unwrap());
@@ -266,7 +276,27 @@ impl WebKitPageSaver {
             f(wk, mtm, tx);
         })
         .map_err(|e| err(e.to_string()))?;
-        rx.recv_timeout(timeout).map_err(|_| err("the page did not answer in time"))
+        self.recv(&rx, timeout)?.ok_or_else(|| err("the page did not answer in time"))
+    }
+
+    /// Waits for an answer, a little at a time, so a cancelled save stops within a moment.
+    /// `Ok(None)` when the time is up.
+    fn recv<R>(&self, rx: &mpsc::Receiver<R>, timeout: Duration) -> Result<Option<R>> {
+        let until = Instant::now() + timeout;
+        loop {
+            if self.stop.load(Ordering::SeqCst) {
+                return Err(BackendError::new(ErrorCode::Cancelled, "cancelled"));
+            }
+            let left = until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Ok(None);
+            }
+            match rx.recv_timeout(left.min(Duration::from_millis(150))) {
+                Ok(r) => return Ok(Some(r)),
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(None),
+            }
+        }
     }
 
     fn extract(&self, label: &str, timeout: Duration) -> Result<Extracted> {
@@ -377,6 +407,31 @@ fn join_pdfs(parts: &[Vec<u8>]) -> Result<Vec<u8>> {
 
 impl PageSaver for WebKitPageSaver {
     fn save(&self, url: &str, timeout: Duration) -> Result<SavedPage> {
+        self.save_cancellable(url, timeout, &AtomicBool::new(false))
+    }
+
+    fn save_cancellable(&self, url: &str, timeout: Duration, cancelled: &AtomicBool) -> Result<SavedPage> {
+        // While saving, pass the job's cancellation on to the saver's waits.
+        let done = AtomicBool::new(false);
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                while !done.load(Ordering::SeqCst) {
+                    if cancelled.load(Ordering::SeqCst) {
+                        self.stop.store(true, Ordering::SeqCst);
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            });
+            let r = self.save_page(url, timeout);
+            done.store(true, Ordering::SeqCst);
+            self.stop.store(false, Ordering::SeqCst);
+            r
+        })
+    }
+}
+
+impl WebKitPageSaver {
+    fn save_page(&self, url: &str, timeout: Duration) -> Result<SavedPage> {
         let mut slot = self.window.lock().unwrap();
         let parsed: tauri::Url = url.parse().map_err(|_| BackendError::invalid(format!("not a web address: {url}")))?;
         if !matches!(parsed.scheme(), "http" | "https") {
@@ -391,7 +446,13 @@ impl PageSaver for WebKitPageSaver {
         let close = || self.reset(&label);
         // Wait for the load to finish, but not forever: some pages never stop loading.
         // Then save what is there, and say so.
-        let complete = rx.recv_timeout(timeout.mul_f64(0.6)).is_ok();
+        let complete = match self.recv(&rx, timeout.mul_f64(0.6)) {
+            Ok(r) => r.is_some(),
+            Err(e) => {
+                close();
+                return Err(e);
+            }
+        };
         let left = timeout.saturating_sub(started.elapsed()).max(Duration::from_secs(20));
         let result = self.extract(&label, left).and_then(|x| {
             if !complete && x.visible_text.split_whitespace().count() < 20 {

@@ -328,6 +328,16 @@ pub struct SavedPage {
 /// Saves a web page from its address. The real adapter uses WebKit in the app's webview.
 pub trait PageSaver: Send + Sync {
     fn save(&self, url: &str, timeout: Duration) -> Result<SavedPage>;
+    /// Like `save`, stopping soon (with a `Cancelled` error) once `cancelled` is set.
+    fn save_cancellable(
+        &self,
+        url: &str,
+        timeout: Duration,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<SavedPage> {
+        let _ = cancelled;
+        self.save(url, timeout)
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
