@@ -1,12 +1,12 @@
-/** Files: folders across notes and library items, browsed and organised as in Finder. */
+/** Folders: notes and library items each have their own, browsed and organised as in Finder. */
 import { describe, expect, it } from "vitest";
 import { mock, seed } from "./mock/backend";
 import { createShell, type Shell } from "../src/shell/shell";
 import { notes } from "../src/features/notes";
 import { library } from "../src/features/library";
 import { archive } from "../src/features/archive";
-import { files } from "../src/features/files";
-import { Contents, folderOf, placed, sortEntries, uniqueName, type Entry } from "../src/features/files/model";
+import { captures } from "../src/features/captures";
+import { Contents, folderOf, placed, sortEntries, uniqueName, type Entry } from "../src/shell/folders/model";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let last: Shell | null = null;
@@ -20,9 +20,9 @@ async function boot() {
   const list = seed("note", "Reading list");
   const book = seed("item", "The Technological Society", "", { "library.format": "pdf", "library.pages": 12 });
   const page = seed("item", "On attention", "", { "library.format": "web", provenance: { source: "https://www.example.org/attention" } }, "Thinkers");
-  mock.state.folders.add("Empty");
+  mock.state.folders.add("note:Empty");
   document.body.innerHTML = '<div id="app"></div>';
-  const shell = createShell(document.getElementById("app")!, [notes, files, library, archive]);
+  const shell = createShell(document.getElementById("app")!, [notes, library, captures, archive]);
   last = shell;
   await wait(60);
   return { shell, ellul, weil, list, book, page };
@@ -61,7 +61,7 @@ describe("the folder model", () => {
   it("hides a folder whose records are all hidden, and keeps an empty one", async () => {
     const { weil, ellul } = await boot();
     const hidden = (r: { id: string }) => r.id === weil.id;
-    const c = new Contents(["Empty"], [weil, ellul], ["note", "item"], hidden);
+    const c = new Contents(["Empty"], [weil, ellul], hidden);
     expect(c.folders).toEqual(["Empty", "Thinkers"]);
     expect(c.entries("Thinkers").map((e) => e.name)).toEqual(["Jacques Ellul"]);
   });
@@ -86,42 +86,48 @@ describe("the folder model", () => {
   });
 });
 
-describe("the Files page", () => {
-  it("shows a folder's folders first, then notes and items together, with their kinds", async () => {
+describe("the Notes and Library pages", () => {
+  it("each show their own folders first, then their records, with kinds; a double-click opens a folder", async () => {
     const { shell } = await boot();
-    shell.router.go("files", {});
+    shell.router.go("notes", {});
     await wait(30);
-    expect(names()).toEqual(["Empty", "Thinkers", "Reading list", "The Technological Society"]);
-    expect(row("Thinkers").textContent).toContain("Folder · 3 items");
-    expect(row("The Technological Society").textContent).toContain("PDF");
-    expect(document.querySelector(".files-crumbs")?.textContent).toBe("Reading room");
-    expect(document.querySelector(".files-foot")?.textContent).toBe("2 folders, 2 items");
-    // A double-click opens a folder; the path shows where one is.
+    expect(names()).toEqual(["Empty", "Thinkers", "Reading list"]);
+    expect(row("Thinkers").textContent).toContain("Folder · 2 items");
+    expect(document.querySelector(".files-crumbs")?.textContent).toBe("Notes");
+    expect(document.querySelector(".files-count")?.textContent).toBe("2 folders, 1 item");
     row("Thinkers").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     await wait(30);
-    expect(shell.router.current().params.folder).toBe("Thinkers");
-    expect(names()).toEqual(["French", "Jacques Ellul", "On attention"]);
-    expect([...document.querySelectorAll(".crumb")].map((c) => c.textContent)).toEqual(["Reading room", "Thinkers"]);
-    expect(shell.here()).toBe("Thinkers");
+    expect(shell.router.current()).toEqual({ page: "notes", params: { folder: "Thinkers" } });
+    expect(names()).toEqual(["French", "Jacques Ellul"]);
+    expect([...document.querySelectorAll(".crumb")].map((c) => c.textContent)).toEqual(["Notes", "Thinkers"]);
+    expect(shell.here()).toEqual({ kind: "note", folder: "Thinkers" });
+    // The Library has its own "Thinkers", holding only library items.
+    shell.router.go("library", {});
+    await wait(30);
+    expect(names()).toEqual(["Thinkers", "The Technological Society"]);
+    expect(row("The Technological Society").textContent).toContain("PDF");
+    expect(row("The Technological Society").textContent).toContain("12 pages");
+    row("Thinkers").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await wait(30);
+    expect(names()).toEqual(["On attention"]);
   });
 
   it("selects with clicks (⌘ and ⇧ for several) and opens with Return; ⌘↑ goes up to where one was", async () => {
     const { shell, list } = await boot();
-    shell.router.go("files", {});
+    shell.router.go("notes", {});
     await wait(30);
     row("Empty").dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    row("The Technological Society").dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
-    expect(rows().filter((r) => r.classList.contains("selected"))).toHaveLength(4);
+    row("Reading list").dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
+    expect(rows().filter((r) => r.classList.contains("selected"))).toHaveLength(3);
     row("Thinkers").dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
-    expect(rows().filter((r) => r.getAttribute("aria-selected") === "true").map((r) => r.textContent?.split("Folder")[0])).not.toContain("Thinkers");
-    expect(document.querySelector(".files-foot")?.textContent).toContain("3 selected");
+    expect(document.querySelector(".files-count")?.textContent).toContain("2 selected");
     // A plain click selects only; it never opens.
     row("Reading list").dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(shell.router.current().page).toBe("files");
+    expect(shell.router.current().page).toBe("notes");
     key(row("Reading list"), "Enter");
     await wait(30);
     expect(shell.router.current()).toEqual({ page: "note", params: { id: list.id } });
-    shell.router.go("files", { folder: "Thinkers/French" });
+    shell.router.go("notes", { folder: "Thinkers/French" });
     await wait(30);
     key(rows()[0]!, "ArrowUp", { metaKey: true });
     await wait(30);
@@ -129,42 +135,39 @@ describe("the Files page", () => {
     expect(document.activeElement?.textContent).toContain("French");
   });
 
-  it("moves what is dragged onto a folder, a part of the path or the sidebar, and undoes it", async () => {
-    const { shell, book, list } = await boot();
-    shell.router.go("files", {});
+  it("moves what is dragged onto a folder or the sidebar, and undoes it; never across kinds", async () => {
+    const { shell, ellul, list } = await boot();
+    shell.router.go("notes", {});
     await wait(30);
-    // Several selected travel together.
-    row("Reading list").dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    row("The Technological Society").dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
     expect(drag(row("Reading list"), row("Thinkers"))).toBe("drop-over");
     await wait(30);
     expect(names()).toEqual(["Empty", "Thinkers"]);
-    expect(folderOf(shell.records.get(book.id)!)).toBe("Thinkers");
     expect(folderOf(shell.records.get(list.id)!)).toBe("Thinkers");
     await shell.undo.undoLast();
     await wait(30);
-    expect(folderOf(shell.records.get(book.id)!)).toBe("");
     expect(folderOf(shell.records.get(list.id)!)).toBe("");
     // A folder into a folder; never into itself.
     expect(drag(row("Thinkers"), row("Thinkers"))).toBeNull();
     expect(drag(row("Thinkers"), row("Empty"))).toBe("drop-over");
     await wait(30);
-    expect(shell.records.get(book.id)!.path).toMatch(/^items\//);
+    expect(folderOf(shell.records.get(ellul.id)!)).toBe("Empty/Thinkers");
     expect(methods()).toContain("folders.move");
-    expect(names()).toEqual(["Empty", "Reading list", "The Technological Society"]);
-    // Onto the sidebar's tree.
+    // Onto a folder in the sidebar's tree.
     const tree = () => [...document.querySelectorAll<HTMLElement>(".tree [role=treeitem]")];
-    const target = tree().find((t) => t.textContent === "Empty")!;
-    expect(drag(row("Reading list"), target)).toBe("drop-over");
+    expect(drag(row("Reading list"), tree().find((t) => t.textContent === "Empty")!)).toBe("drop-over");
     await wait(30);
     expect(folderOf(shell.records.get(list.id)!)).toBe("Empty");
+    // A library item isn't taken by a notes folder.
+    shell.router.go("library", {});
+    await wait(30);
+    expect(drag(row("The Technological Society"), tree().find((t) => t.textContent === "Empty")!)).toBeNull();
   });
 
-  it("makes a folder named in place, renames with F2, and removes an empty one", async () => {
+  it("makes a folder named in place, renames with F2, and removes only an empty one", async () => {
     const { shell } = await boot();
-    shell.router.go("files", {});
+    shell.router.go("library", {});
     await wait(30);
-    shell.actions.run("files.newFolder");
+    shell.actions.run("folders.newFolder");
     await wait(30);
     const input = document.querySelector<HTMLInputElement>(".files-rename")!;
     expect(input.value).toBe("untitled folder");
@@ -172,8 +175,8 @@ describe("the Files page", () => {
     key(input, "Enter");
     await wait(30);
     expect(names()).toContain("Plato");
-    expect(mock.state.folders.has("Plato")).toBe(true);
-    // F2 renames.
+    expect(mock.state.folders.has("item:Plato")).toBe(true);
+    expect(mock.state.folders.has("note:Plato")).toBe(false);
     row("Plato").focus();
     key(row("Plato"), "F2");
     const again = document.querySelector<HTMLInputElement>(".files-rename")!;
@@ -181,30 +184,30 @@ describe("the Files page", () => {
     key(again, "Enter");
     await wait(30);
     expect(names()).toContain("Platonists");
-    expect(mock.state.folders.has("Plato")).toBe(false);
-    // A folder with something in it is never removed.
+    expect(mock.state.folders.has("item:Plato")).toBe(false);
     const { call } = await import("./mock/backend");
-    await expect(call("folders.remove", { path: "Thinkers" })).rejects.toThrow(/isn’t empty/);
+    await expect(call("folders.remove", { kind: "item", path: "Thinkers" })).rejects.toThrow(/isn’t empty/);
   });
 
   it("filters the folder, and switches to icons", async () => {
     const { shell } = await boot();
-    shell.router.go("files", { folder: "Thinkers" });
+    shell.router.go("library", { folder: "Thinkers" });
+    await wait(30);
+    shell.router.go("library", {});
     await wait(30);
     const filter = document.querySelector<HTMLInputElement>(".files-filter")!;
-    filter.value = "atten";
+    filter.value = "techno";
     filter.dispatchEvent(new Event("input"));
     await wait(10);
-    expect(names()).toEqual(["On attention"]);
-    shell.prefs.pref("files.view", "list").set("icons");
+    expect(names()).toEqual(["The Technological Society"]);
+    shell.prefs.pref("folders.view.item", "list").set("icons");
     await wait(10);
     expect(document.querySelector(".files-body")?.classList.contains("icons")).toBe(true);
-    expect(row("On attention").textContent).toContain("example.org");
   });
 
-  it("hides archived items, and a folder holding only archived ones", async () => {
+  it("hides archived records, and a folder holding only archived ones", async () => {
     const { shell, weil } = await boot();
-    shell.router.go("files", { folder: "Thinkers" });
+    shell.router.go("notes", { folder: "Thinkers" });
     await wait(30);
     expect(names()).toContain("French");
     const { call } = await import("./mock/backend");
@@ -213,9 +216,9 @@ describe("the Files page", () => {
     expect(names()).not.toContain("French");
   });
 
-  it("puts new notes into the folder being looked at, and offers Move to folder… in records' menus", async () => {
+  it("puts new notes into the notes folder being looked at, and offers Move to folder… in records' menus", async () => {
     const { shell, list } = await boot();
-    shell.router.go("files", { folder: "Thinkers/French" });
+    shell.router.go("notes", { folder: "Thinkers/French" });
     await wait(30);
     shell.actions.run("notes.new");
     await wait(30);
@@ -226,35 +229,60 @@ describe("the Files page", () => {
 
   it("places dragged things between others, arranging the folder by hand, and undoes it", async () => {
     const { shell } = await boot();
-    shell.router.go("files", {});
+    shell.router.go("notes", {});
     await wait(30);
-    expect(names()).toEqual(["Empty", "Thinkers", "Reading list", "The Technological Society"]);
+    expect(names()).toEqual(["Empty", "Thinkers", "Reading list"]);
     // The top edge of a folder places beside it; its middle would move into it.
-    expect(drag(row("The Technological Society"), row("Empty"), "before")).toBe("drop-before");
+    expect(drag(row("Reading list"), row("Empty"), "before")).toBe("drop-before");
     await wait(30);
-    expect(names()).toEqual(["The Technological Society", "Empty", "Thinkers", "Reading list"]);
-    expect(shell.prefs.pref("files.sort", { key: "name", dir: 1 })().key).toBe("manual");
-    expect(mock.state.order[""]).toEqual([expect.any(String), "folder:Empty", "folder:Thinkers", expect.any(String)]);
+    expect(names()).toEqual(["Reading list", "Empty", "Thinkers"]);
+    expect(shell.prefs.pref("folders.sort.note", { key: "name", dir: 1 })().key).toBe("manual");
+    expect(mock.state.order.note![""]).toEqual([expect.any(String), "folder:Empty", "folder:Thinkers"]);
     // An item's bottom edge places after it.
-    expect(drag(row("Empty"), row("Reading list"), "after")).toBe("drop-after");
+    expect(drag(row("Empty"), row("Thinkers"), "after")).toBe("drop-after");
     await wait(30);
-    expect(names()).toEqual(["The Technological Society", "Thinkers", "Reading list", "Empty"]);
-    // The sidebar shows folders in the same order.
+    expect(names()).toEqual(["Reading list", "Thinkers", "Empty"]);
+    // The sidebar shows the same order.
     const tree = [...document.querySelectorAll(".tree [role=treeitem]")].map((t) => t.textContent);
     expect(tree.indexOf("Thinkers")).toBeLessThan(tree.indexOf("Empty"));
     await shell.undo.undoLast();
     await wait(30);
-    expect(names()).toEqual(["The Technological Society", "Empty", "Thinkers", "Reading list"]);
+    expect(names()).toEqual(["Reading list", "Empty", "Thinkers"]);
     // ⌥↓ moves the selection one place down.
     row("Empty").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     key(row("Empty"), "ArrowDown", { altKey: true });
     await wait(30);
-    expect(names()).toEqual(["The Technological Society", "Thinkers", "Empty", "Reading list"]);
+    expect(names()).toEqual(["Reading list", "Thinkers", "Empty"]);
     // Something from another folder is moved here, to that place.
-    shell.router.go("files", { folder: "Thinkers" });
+    shell.router.go("notes", { folder: "Thinkers" });
     await wait(30);
-    expect(drag(row("Jacques Ellul"), row("On attention"), "after")).toBe("drop-after");
+    expect(drag(row("Jacques Ellul"), row("French"), "before")).toBe("drop-before");
     await wait(30);
-    expect(names()).toEqual(["French", "On attention", "Jacques Ellul"]);
+    expect(names()).toEqual(["Jacques Ellul", "French"]);
+  });
+});
+
+describe("the sidebar", () => {
+  it("has a Notes tree and a Library tree, each with its own folders, and captures under their items", async () => {
+    const { shell, book } = await boot();
+    const { call } = await import("./mock/backend");
+    await call("captures.create", { source: book.id, snapshot: null, text: null, parts: [{ selector: [], quote: "Technique integrates everything.", locator: "p. 1", region_png: null, boxes: [] }], words: "" }).catch(() => null);
+    seed("capture", "Technique integrates everything.", "", { "captures.source": book.id });
+    await shell.records.load();
+    await wait(30);
+    const labels = () => [...document.querySelectorAll(".tree [role=treeitem]")].map((t) => `${t.getAttribute("aria-level")} ${t.textContent}`);
+    expect(labels()).toEqual(expect.arrayContaining(["1 Notes", "2 Empty", "2 Thinkers", "3 French", "3 Jacques Ellul", "2 Reading list", "1 Library", "2 Thinkers", "3 On attention", "2 The Technological Society"]));
+    expect(labels().some((l) => l.endsWith("Folders") || l.endsWith("Captures"))).toBe(false);
+    // An item's captures are folded under it until it is unfolded.
+    expect(labels()).not.toContain("3 Technique integrates everything.");
+    const item = [...document.querySelectorAll<HTMLElement>(".tree [role=treeitem]")].find((t) => t.textContent === "The Technological Society")!;
+    expect(item.getAttribute("aria-expanded")).toBe("false");
+    item.querySelector<HTMLElement>(".tree-twisty")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await wait(10);
+    expect(labels()).toContain("3 Technique integrates everything.");
+    // A click on the item (not its arrow) opens it.
+    [...document.querySelectorAll<HTMLElement>(".tree [role=treeitem]")].find((t) => t.textContent === "The Technological Society")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await wait(10);
+    expect(shell.router.current()).toEqual({ page: "item", params: { id: book.id } });
   });
 });

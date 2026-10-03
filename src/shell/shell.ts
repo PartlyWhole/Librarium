@@ -25,7 +25,8 @@ import { refreshMenu } from "./menu";
 import { Prefs } from "./prefs";
 import { Records } from "./records";
 import { Router } from "./router";
-import type { EmbedRenderer, Page, RecordAction, RecordLook, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
+import { createFolders } from "./folders";
+import type { EmbedRenderer, Folders, Page, RecordAction, RecordLook, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
 import { contextMenu, type MenuItem } from "../kit/menu";
 import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, Command, Keyboard, Settings, FolderOpen, X } from "lucide";
 
@@ -67,7 +68,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const hidingFields = new Registry<string>("shell.hiding-fields");
   const recordActions = new Registry<RecordAction>("shell.record-actions");
   const looks = new Registry<RecordLook>("shell.record-looks");
-  const here = signal<string | null>(null);
+  const here = signal<{ kind: string; folder: string } | null>(null);
   const records = new Records(() => hidingFields.values());
   const folder = signal<LibraryStatus | null>(null);
   const indexed = signal(0);
@@ -96,6 +97,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     recordActions,
     looks,
     here,
+    folders: null as unknown as Folders,
     showRecordMenu(target, at) {
       const rs = Array.isArray(target) ? target : [target];
       if (!rs.length) return;
@@ -191,6 +193,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
 
   // ---- features contribute ------------------------------------------------------------
   jobsUi(shell);
+  shell.folders = createFolders(shell);
   for (const f of features) f(shell);
   for (const p of pages.values()) {
     if (p.keys || p.ribbon !== undefined) {
@@ -219,7 +222,12 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const filter = h("input", { class: "sidebar-filter", type: "search", placeholder: "Filter", "aria-label": "Filter the sidebar", spellcheck: false });
   const filterText = signal("");
   filter.addEventListener("input", () => filterText.set(filter.value));
-  const tree = new Tree("Notes and library", (id, expanded) => folded.update((f) => (expanded ? f.filter((x) => x !== id) : [...new Set([...f, id])])));
+  // Rows are open until folded, except those that start folded (an item's captures).
+  const unfolded = prefs.pref<string[]>("ui.unfolded", []);
+  const tree = new Tree("Notes and library", (id, expanded) => {
+    folded.update((f) => (expanded ? f.filter((x) => x !== id) : [...new Set([...f, id])]));
+    unfolded.update((u) => (expanded ? [...new Set([...u, id])] : u.filter((x) => x !== id)));
+  });
   // A record's row in the sidebar has the record's menu.
   tree.onContext = (ids, at) => {
     const rs = ids.map((id) => records.get(id)).filter((r): r is NonNullable<typeof r> => !!r);
@@ -282,20 +290,23 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   effect(() => {
     const q = filterText().trim().toLowerCase();
     const f = folded();
+    const unf = unfolded();
     const open = libraryOpen();
     const match = (n: TreeNode): TreeNode | null => {
       if (n.children) {
         const kids = n.children.map(match).filter((x): x is TreeNode => !!x);
-        return kids.length || n.label.toLowerCase().includes(q) ? { ...n, children: kids, expanded: q ? true : !f.includes(n.id) } : null;
+        const expanded = q ? true : n.startCollapsed ? unf.includes(n.id) : !f.includes(n.id);
+        return kids.length || n.label.toLowerCase().includes(q) ? { ...n, children: kids, expanded } : null;
       }
       if (q && !n.label.toLowerCase().includes(q)) return null;
       // A record's row can be dragged (onto a folder).
-      return !n.drag && records.get(n.id) ? { ...n, drag: () => ({ records: [n.id], folders: [] }) } : n;
+      const r = records.get(n.id);
+      return !n.drag && r ? { ...n, drag: () => ({ records: [n.id], folders: [], kind: r.kind }) } : n;
     };
     const nodes: TreeNode[] = open
       ? sidebar.values().map((s) => {
           const items = s.nodes().map(match).filter((x): x is TreeNode => !!x);
-          return { id: `section:${s.id}`, label: s.title, expanded: q ? true : !f.includes(`section:${s.id}`), children: items.length ? items : [{ id: `empty:${s.id}`, label: q ? "Nothing matches" : s.emptyText, placeholder: true }] };
+          return { id: `section:${s.id}`, label: s.title, drop: s.drop, expanded: q ? true : !f.includes(`section:${s.id}`), children: items.length ? items : [{ id: `empty:${s.id}`, label: q ? "Nothing matches" : s.emptyText, placeholder: true }] };
         })
       : [];
     tree.render(nodes);

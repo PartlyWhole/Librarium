@@ -1,7 +1,7 @@
 //! The user's folders. A kind that names a subfolder field (notes, library items) keeps its
-//! records in subfolders of its own top folder; the same subfolder path in each of them is one
-//! folder to the user (`Reading/Plato` is `notes/Reading/Plato/` and `items/Reading/Plato/`).
-//! The disk is the truth: a folder exists while a directory does, even an empty one.
+//! records in subfolders of its own top folder, and each such kind has its own folders: notes'
+//! folders are under `notes/`, the library's under `items/`. The disk is the truth: a folder
+//! exists while a directory does, even an empty one.
 
 use crate::frontmatter::FmValue;
 use crate::kinds::{Format, RecordKindDef};
@@ -51,9 +51,10 @@ fn display(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
-/// Where the order the user arranged things in is kept: `{ folder: [entry, …] }`, the top
-/// level as `""`. An entry is a record's ID, or `folder:<name>` for a folder inside. Anything
-/// not listed comes after, in the usual order. Losing it loses only the arrangement.
+/// Where the order the user arranged things in is kept: `{ kind's top folder: { folder:
+/// [entry, …] } }`, a top level as `""`. An entry is a record's ID, or `folder:<name>` for a
+/// folder inside. Anything not listed comes after, in the usual order. Losing it loses only
+/// the arrangement.
 pub const ORDER_FILE: &str = ".librarium/order.json";
 
 /// The key a folder has in its parent's order.
@@ -61,16 +62,23 @@ pub fn folder_key(path: &str) -> String {
     format!("folder:{}", display(path))
 }
 
+/// One kind's arrangement: `{ folder: [entry, …] }`.
 pub type FolderOrder = BTreeMap<String, Vec<String>>;
+type AllOrders = BTreeMap<String, FolderOrder>;
 
 fn parent(path: &str) -> &str {
     path.rsplit_once('/').map(|(p, _)| p).unwrap_or("")
 }
 
 impl Store {
-    /// The order the user arranged each folder in.
-    pub fn folder_order(&self) -> FolderOrder {
+    fn all_orders(&self) -> AllOrders {
         self.fs.read(&self.abs(ORDER_FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
+    /// The order the user arranged each folder of a kind in.
+    pub fn folder_order(&self, kind: &str) -> FolderOrder {
+        let Ok(def) = self.foldered_kind(kind) else { return FolderOrder::new() };
+        self.all_orders().remove(&def.folder).unwrap_or_default()
     }
 
     /// The kinds kept in the user's folders.
@@ -78,78 +86,79 @@ impl Store {
         self.kinds.all().filter(|d| d.subfolder_field.is_some()).cloned().collect()
     }
 
-    /// Every user folder, from the disk (empty ones too) and from records' paths, sorted.
-    pub fn folders(&self) -> Vec<String> {
+    /// A kind kept in folders, by name.
+    pub fn foldered_kind(&self, kind: &str) -> Result<RecordKindDef> {
+        self.foldered()
+            .into_iter()
+            .find(|d| d.kind == kind)
+            .ok_or_else(|| BackendError::invalid(format!("“{kind}” records aren’t kept in folders")))
+    }
+
+    /// Every folder of a kind, from the disk (empty ones too) and from records' paths, sorted.
+    pub fn folders(&self, kind: &str) -> Vec<String> {
+        let Ok(def) = self.foldered_kind(kind) else { return vec![] };
         let mut out = BTreeSet::new();
-        for def in self.foldered() {
-            let top = self.abs(&def.folder);
-            let mut stack = vec![(top, String::new())];
-            while let Some((dir, rel)) = stack.pop() {
-                for e in self.fs.list(&dir).unwrap_or_default() {
-                    if !e.is_dir || e.name.starts_with('.') {
-                        continue;
-                    }
-                    let p = dir.join(&e.name);
-                    if def.format == Format::JsonDir
-                        && (is_record_dir_name(&e.name)
-                            || self.fs.stat(&p.join("record.json")).ok().flatten().is_some())
-                    {
-                        continue;
-                    }
-                    let r = if rel.is_empty() { e.name.clone() } else { format!("{rel}/{}", e.name) };
-                    out.insert(r.clone());
-                    stack.push((p, r));
+        let top = self.abs(&def.folder);
+        let mut stack = vec![(top, String::new())];
+        while let Some((dir, rel)) = stack.pop() {
+            for e in self.fs.list(&dir).unwrap_or_default() {
+                if !e.is_dir || e.name.starts_with('.') {
+                    continue;
                 }
+                let p = dir.join(&e.name);
+                if def.format == Format::JsonDir
+                    && (is_record_dir_name(&e.name) || self.fs.stat(&p.join("record.json")).ok().flatten().is_some())
+                {
+                    continue;
+                }
+                let r = if rel.is_empty() { e.name.clone() } else { format!("{rel}/{}", e.name) };
+                out.insert(r.clone());
+                stack.push((p, r));
             }
-            for e in self.list(Some(&def.kind)) {
-                if let Some(sub) = self.subfolder_of(&def, &e.path).filter(|s| !s.is_empty()) {
-                    let parts: Vec<&str> = sub.split('/').collect();
-                    for i in 1..=parts.len() {
-                        out.insert(parts[..i].join("/"));
-                    }
+        }
+        for e in self.list(Some(&def.kind)) {
+            if let Some(sub) = self.subfolder_of(&def, &e.path).filter(|s| !s.is_empty()) {
+                let parts: Vec<&str> = sub.split('/').collect();
+                for i in 1..=parts.len() {
+                    out.insert(parts[..i].join("/"));
                 }
             }
         }
         out.into_iter().collect()
     }
 
-    /// Whether a folder exists in any kind's top folder.
-    pub fn folder_exists(&self, path: &str) -> bool {
-        self.foldered()
-            .iter()
-            .any(|d| self.fs.stat(&self.abs(&format!("{}/{path}", d.folder))).ok().flatten().is_some_and(|m| m.is_dir))
+    /// Whether a kind has a folder.
+    pub fn folder_exists(&self, def: &RecordKindDef, path: &str) -> bool {
+        self.fs.stat(&self.abs(&format!("{}/{path}", def.folder))).ok().flatten().is_some_and(|m| m.is_dir)
     }
 
-    /// Records inside a folder (at any depth), of every kind kept in folders.
-    pub fn records_in_folder(&self, path: &str) -> Vec<Entry> {
-        let defs = self.foldered();
-        self.list(None)
-            .into_iter()
-            .filter(|e| defs.iter().any(|d| d.kind == e.kind && e.path.starts_with(&format!("{}/{path}/", d.folder))))
-            .collect()
+    /// Records inside a kind's folder (at any depth).
+    pub fn records_in_folder(&self, def: &RecordKindDef, path: &str) -> Vec<Entry> {
+        let prefix = format!("{}/{path}/", def.folder);
+        self.list(Some(&def.kind)).into_iter().filter(|e| e.path.starts_with(&prefix)).collect()
     }
 }
 
 impl Tx<'_> {
-    /// Makes a new, empty folder (in each kind's top folder, so each one shows it).
-    pub fn create_folder(&self, path: &str) -> Result<String> {
+    /// Makes a new, empty folder for a kind.
+    pub fn create_folder(&self, kind: &str, path: &str) -> Result<String> {
         let s = self.store;
+        let def = s.foldered_kind(kind)?;
         let path = clean_folder(path)?;
-        if s.folder_exists(&path) {
+        if s.folder_exists(&def, &path) {
             return Err(BackendError::conflict(format!("There’s already a folder called “{}” there.", display(&path))));
         }
-        for d in s.foldered() {
-            let abs = s.abs(&format!("{}/{path}", d.folder));
-            s.fs.create_dir_all(&abs).map_err(|e| io_error(e, "making the folder"))?;
-            let _ = s.fs.flush_dir(abs.parent().unwrap(), self.dur.flush());
-        }
+        let abs = s.abs(&format!("{}/{path}", def.folder));
+        s.fs.create_dir_all(&abs).map_err(|e| io_error(e, "making the folder"))?;
+        let _ = s.fs.flush_dir(abs.parent().unwrap(), self.dur.flush());
         Ok(path)
     }
 
     /// Moves or renames a folder with everything in it, as an intent. Refuses to merge into a
     /// folder that already exists. Returns how many records moved.
-    pub fn move_folder(&self, from: &str, to: &str) -> Result<usize> {
+    pub fn move_folder(&self, kind: &str, from: &str, to: &str) -> Result<usize> {
         let s = self.store;
+        let def = s.foldered_kind(kind)?;
         let (from, to) = (clean_folder(from)?, clean_folder(to)?);
         if from == to {
             return Ok(0);
@@ -157,16 +166,16 @@ impl Tx<'_> {
         if to.starts_with(&format!("{from}/")) {
             return Err(BackendError::invalid(format!("“{}” can’t go inside itself.", display(&from))));
         }
-        if !s.folder_exists(&from) {
+        if !s.folder_exists(&def, &from) {
             return Err(BackendError::not_found(format!("There’s no folder “{}” any more.", display(&from))));
         }
-        if s.folder_exists(&to) {
+        if s.folder_exists(&def, &to) {
             return Err(BackendError::conflict(format!("There’s already a folder called “{}” there.", display(&to))));
         }
-        let intent = Intent::MoveFolder { from, to };
+        let intent = Intent::MoveFolder { kind: kind.to_string(), from, to };
         let p = s.write_intent(&intent)?;
-        let Intent::MoveFolder { from, to } = &intent else { unreachable!() };
-        let r = self.apply_move_folder(from, to);
+        let Intent::MoveFolder { kind, from, to } = &intent else { unreachable!() };
+        let r = self.apply_move_folder(kind, from, to);
         if r.is_ok() {
             s.clear_intent(&p);
         }
@@ -174,9 +183,9 @@ impl Tx<'_> {
     }
 
     /// Carries out a folder move. Idempotent: redone at startup, it finishes what's left.
-    pub(crate) fn apply_move_folder(&self, from: &str, to: &str) -> Result<usize> {
+    pub(crate) fn apply_move_folder(&self, kind: &str, from: &str, to: &str) -> Result<usize> {
         let s = self.store;
-        let defs = s.foldered();
+        let defs = vec![s.foldered_kind(kind)?];
         // The folders themselves, one rename each (other files inside go along).
         for d in &defs {
             let (a, b) = (s.abs(&format!("{}/{from}", d.folder)), s.abs(&format!("{}/{to}", d.folder)));
@@ -221,16 +230,17 @@ impl Tx<'_> {
                 s.changes.emit(e.id, &e.kind, ChangeOp::Renamed, ChangeOrigin::App);
             }
         }
-        self.order_follows(from, to)?;
+        self.order_follows(&defs[0], from, to)?;
         Ok(moved.len())
     }
 
     /// Removes an empty folder. Refuses while records (archived ones too) or other files are
     /// inside; the system's litter (`.DS_Store`) doesn't count.
-    pub fn remove_folder(&self, path: &str) -> Result<()> {
+    pub fn remove_folder(&self, kind: &str, path: &str) -> Result<()> {
         let s = self.store;
+        let def = s.foldered_kind(kind)?;
         let path = clean_folder(path)?;
-        let inside = s.records_in_folder(&path);
+        let inside = s.records_in_folder(&def, &path);
         if !inside.is_empty() {
             let n = inside.len();
             return Err(BackendError::conflict(format!(
@@ -242,8 +252,8 @@ impl Tx<'_> {
         // Everything to remove, checked before anything is.
         let mut litter = vec![];
         let mut dirs = vec![];
-        for d in s.foldered() {
-            let top = format!("{}/{path}", d.folder);
+        {
+            let top = format!("{}/{path}", def.folder);
             let mut stack = vec![top];
             while let Some(rel) = stack.pop() {
                 let Ok(list) = s.fs.list(&s.abs(&rel)) else { continue };
@@ -277,70 +287,74 @@ impl Tx<'_> {
             }
         }
         // Its arrangement goes with it.
-        let mut order = s.folder_order();
-        let before = order.clone();
-        order.retain(|k, _| k != &path && !k.starts_with(&format!("{path}/")));
-        if let Some(list) = order.get_mut(parent(&path)) {
-            list.retain(|e| *e != folder_key(&path));
-        }
-        if order != before {
-            self.write_order(&order)?;
-        }
-        Ok(())
+        self.change_order(&def, |order| {
+            order.retain(|k, _| k != &path && !k.starts_with(&format!("{path}/")));
+            if let Some(list) = order.get_mut(parent(&path)) {
+                list.retain(|e| *e != folder_key(&path));
+            }
+        })
     }
 
-    /// Keeps the order the user arranged a folder in (`""`: the top level).
-    pub fn set_folder_order(&self, path: &str, entries: Vec<String>) -> Result<()> {
+    /// Keeps the order the user arranged a kind's folder in (`""`: its top level).
+    pub fn set_folder_order(&self, kind: &str, path: &str, entries: Vec<String>) -> Result<()> {
+        let def = self.store.foldered_kind(kind)?;
         let path = if path.trim_matches('/').is_empty() { String::new() } else { clean_folder(path)? };
         if entries.len() > 100_000 || entries.iter().any(|e| e.len() > 300) {
             return Err(BackendError::invalid("that order is too long"));
         }
-        let mut order = self.store.folder_order();
         let mut seen = BTreeSet::new();
         let entries: Vec<String> = entries.into_iter().filter(|e| seen.insert(e.clone())).collect();
-        if entries.is_empty() {
-            order.remove(&path);
-        } else {
-            order.insert(path, entries);
-        }
-        self.write_order(&order)
+        self.change_order(&def, move |order| {
+            if entries.is_empty() {
+                order.remove(&path);
+            } else {
+                order.insert(path, entries);
+            }
+        })
     }
 
-    fn write_order(&self, order: &FolderOrder) -> Result<()> {
+    /// Changes one kind's arrangement, writing the file only if something changed.
+    fn change_order(&self, def: &RecordKindDef, f: impl FnOnce(&mut FolderOrder)) -> Result<()> {
         let s = self.store;
+        let mut all = s.all_orders();
+        let before = all.clone();
+        let order = all.entry(def.folder.clone()).or_default();
+        f(order);
+        if order.is_empty() {
+            all.remove(&def.folder);
+        }
+        if all == before {
+            return Ok(());
+        }
         let p = s.abs(ORDER_FILE);
         s.fs.create_dir_all(p.parent().unwrap()).map_err(|e| io_error(e, "making .librarium"))?;
-        let mut b = serde_json::to_vec_pretty(order).unwrap();
+        let mut b = serde_json::to_vec_pretty(&all).unwrap();
         b.push(b'\n');
         s.safe_write(&p, &b, false, self.dur).map_err(|e| io_error(e, "keeping the order"))
     }
 
     /// The arrangement follows a folder that moved (idempotent, so a redo changes nothing).
-    fn order_follows(&self, from: &str, to: &str) -> Result<()> {
-        let mut order = self.store.folder_order();
-        let before = order.clone();
-        let under = |k: &str| k == from || k.starts_with(&format!("{from}/"));
-        let moved: Vec<String> = order.keys().filter(|k| under(k)).cloned().collect();
-        for k in moved {
-            if let Some(v) = order.remove(&k) {
-                order.insert(format!("{to}{}", &k[from.len()..]), v);
-            }
-        }
-        // Its place among its siblings: kept when renamed in place, dropped when moved away.
-        let (old, new) = (folder_key(from), folder_key(to));
-        if let Some(list) = order.get_mut(parent(from)) {
-            if let Some(i) = list.iter().position(|e| *e == old) {
-                if parent(from) == parent(to) {
-                    list[i] = new;
-                } else {
-                    list.remove(i);
+    fn order_follows(&self, def: &RecordKindDef, from: &str, to: &str) -> Result<()> {
+        self.change_order(def, |order| {
+            let under = |k: &str| k == from || k.starts_with(&format!("{from}/"));
+            let moved: Vec<String> = order.keys().filter(|k| under(k)).cloned().collect();
+            for k in moved {
+                if let Some(v) = order.remove(&k) {
+                    order.insert(format!("{to}{}", &k[from.len()..]), v);
                 }
             }
-        }
-        if order != before {
-            self.write_order(&order)?;
-        }
-        Ok(())
+            // Its place among its siblings: kept when renamed in place, dropped when moved away.
+            let (old, new) = (folder_key(from), folder_key(to));
+            if let Some(list) = order.get_mut(parent(from)) {
+                if let Some(i) = list.iter().position(|e| *e == old) {
+                    if parent(from) == parent(to) {
+                        list[i] = new;
+                    } else {
+                        list.remove(i);
+                    }
+                }
+            }
+        })
     }
 
     /// Moves records into a folder (`None`: the top level). Each move is its own intent.

@@ -312,7 +312,7 @@ pub fn move_folder_scenarios<R: Rig>(make: &dyn Fn() -> R) {
             lib.write(Lane::Interactive, |tx| tx.create("page", "Deeper", vec![], "deep\n", Some("A/B"))).unwrap();
             a.0.id
         },
-        &|lib, _| lib.write(Lane::Interactive, |tx| tx.move_folder("A", "Z/A")).is_ok(),
+        &|lib, _| lib.write(Lane::Interactive, |tx| tx.move_folder("page", "A", "Z/A")).is_ok(),
         &|lib, id, ok| {
             let all = lib.store.list(Some("page"));
             assert_eq!(all.len(), 2, "both records survive");

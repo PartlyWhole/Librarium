@@ -1,6 +1,6 @@
 /**
- * The user's folders as the interface sees them: one tree across the kinds kept in folders
- * (a folder path is the same in `notes/` and `items/`), with what each folder holds.
+ * One kind's folders as the interface sees them (notes and library items each have their
+ * own), with what each folder holds.
  */
 import type { RecordInfo } from "../../generated/RecordInfo";
 
@@ -53,10 +53,10 @@ export class Contents {
   private holding = new Set<string>();
   private showing = new Set<string>();
 
-  constructor(folders: string[], all: RecordInfo[], kinds: string[], hidden: (r: RecordInfo) => boolean) {
+  /** `all`: the kind's records, hidden ones too; `hidden`: left out of lists (archived). */
+  constructor(folders: string[], all: RecordInfo[], hidden: (r: RecordInfo) => boolean) {
     const known = new Set(folders);
     for (const r of all) {
-      if (!kinds.includes(r.kind)) continue;
       const f = folderOf(r);
       for (const a of ancestry(f)) {
         known.add(a);

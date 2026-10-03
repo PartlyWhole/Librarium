@@ -1,4 +1,4 @@
-//! The user's folders: one tree across the kinds that have subfolders, kept on disk.
+//! The user's folders: each kind with subfolders has its own, kept on disk.
 mod common;
 
 use common::H;
@@ -21,24 +21,26 @@ fn thing_in(h: &H, sub: &str) -> String {
 }
 
 #[test]
-fn folders_are_one_tree_across_kinds_and_found_on_disk() {
+fn each_kind_has_its_own_folders_found_on_disk() {
     let h = H::new();
     let rel = thing_in(&h, "Reading/Plato");
     let lib = h.open();
     // A folder record inside a user's folder is found by the full check.
     let thing = lib.store.get(THING.parse().unwrap()).expect("found inside the folder");
     assert_eq!(thing.path, rel);
-    lib.write(Lane::Interactive, |tx| tx.create("page", "Note", vec![], "", Some("Reading"))).unwrap();
-    lib.write(Lane::Interactive, |tx| tx.create_folder("Empty")).unwrap();
-    assert_eq!(lib.store.folders(), ["Empty", "Reading", "Reading/Plato"]);
-    // A new folder is made in each kind's folder, so it is there whichever is looked at.
-    for top in ["pages", "things"] {
-        assert!(h.fs.stat(&h.abs(&format!("{top}/Empty"))).unwrap().unwrap().is_dir);
-    }
-    let again = lib.write(Lane::Interactive, |tx| tx.create_folder("Empty")).unwrap_err();
+    lib.write(Lane::Interactive, |tx| tx.create("page", "Note", vec![], "", Some("Notebook"))).unwrap();
+    lib.write(Lane::Interactive, |tx| tx.create_folder("thing", "Empty")).unwrap();
+    assert_eq!(lib.store.folders("thing"), ["Empty", "Reading", "Reading/Plato"]);
+    assert_eq!(lib.store.folders("page"), ["Notebook"]);
+    assert!(h.fs.stat(&h.abs("things/Empty")).unwrap().unwrap().is_dir);
+    assert!(h.fs.stat(&h.abs("pages/Empty")).unwrap().is_none(), "only in that kind's folder");
+    // The same name is fine in another kind.
+    lib.write(Lane::Interactive, |tx| tx.create_folder("page", "Empty")).unwrap();
+    let again = lib.write(Lane::Interactive, |tx| tx.create_folder("thing", "Empty")).unwrap_err();
     assert_eq!(again.code, ErrorCode::Conflict);
+    assert!(lib.write(Lane::Interactive, |tx| tx.create_folder("clip", "X")).is_err(), "a kind without folders");
     for bad in ["", ".hidden", "a/../b", "a//b", "a/ b", "x:y", THING] {
-        assert!(lib.write(Lane::Interactive, move |tx| tx.create_folder(bad)).is_err(), "{bad:?} refused");
+        assert!(lib.write(Lane::Interactive, move |tx| tx.create_folder("thing", bad)).is_err(), "{bad:?} refused");
     }
 }
 
@@ -46,35 +48,44 @@ fn folders_are_one_tree_across_kinds_and_found_on_disk() {
 fn moving_a_folder_takes_everything_inside_along() {
     let h = H::new();
     thing_in(&h, "Reading/Plato");
-    h.fs.write_outside(&h.abs("pages/Reading/picture.png"), b"png");
+    h.fs.write_outside(&h.abs("things/Reading/picture.png"), b"png");
     let lib = h.open();
+    // A note folder of the same name is another folder, and stays.
     let (n, _) =
-        lib.write(Lane::Interactive, |tx| tx.create("page", "Note", vec![], "body\n", Some("Reading/Plato"))).unwrap();
+        lib.write(Lane::Interactive, |tx| tx.create("page", "Note", vec![], "body\n", Some("Reading"))).unwrap();
     let nid = n.id;
-    let moved = lib.write(Lane::Interactive, |tx| tx.move_folder("Reading", "Archive/Old reading")).unwrap();
-    assert_eq!(moved, 2);
-    let n = lib.store.get(nid).unwrap();
-    assert_eq!(n.path, format!("pages/Archive/Old reading/Plato/{nid}-note.md"));
-    assert!(h.read(&n.path).contains("test.folder: \"Archive/Old reading/Plato\"\n"), "{}", h.read(&n.path));
+    let moved = lib.write(Lane::Interactive, |tx| tx.move_folder("thing", "Reading", "Archive/Old reading")).unwrap();
+    assert_eq!(moved, 1);
     let t = lib.store.get(THING.parse().unwrap()).unwrap();
     assert_eq!(t.path, format!("things/Archive/Old reading/Plato/{THING}-an-essay/record.json"));
-    assert_eq!(t.fields["test.place"], "Archive/Old reading/Plato", "a folder record's field follows too");
+    assert_eq!(t.fields["test.place"], "Archive/Old reading/Plato", "the field follows the path");
     assert_eq!(h.read(&format!("things/Archive/Old reading/Plato/{THING}-an-essay/original.pdf")), "%PDF");
-    assert_eq!(h.read("pages/Archive/Old reading/picture.png"), "png", "other files go along");
-    assert!(h.fs.stat(&h.abs("pages/Reading")).unwrap().is_none());
-    assert_eq!(lib.store.folders(), ["Archive", "Archive/Old reading", "Archive/Old reading/Plato"]);
+    assert_eq!(h.read("things/Archive/Old reading/picture.png"), "png", "other files go along");
+    assert!(h.fs.stat(&h.abs("things/Reading")).unwrap().is_none());
+    assert_eq!(lib.store.folders("thing"), ["Archive", "Archive/Old reading", "Archive/Old reading/Plato"]);
+    assert_eq!(lib.store.get(nid).unwrap().path, format!("pages/Reading/{nid}-note.md"));
 
     // Never into itself, never over another folder.
-    let e = lib.write(Lane::Interactive, |tx| tx.move_folder("Archive", "Archive/Inner")).unwrap_err();
+    let e = lib.write(Lane::Interactive, |tx| tx.move_folder("thing", "Archive", "Archive/Inner")).unwrap_err();
     assert_eq!(e.code, ErrorCode::InvalidInput);
-    lib.write(Lane::Interactive, |tx| tx.create_folder("Taken")).unwrap();
-    let e = lib.write(Lane::Interactive, |tx| tx.move_folder("Archive", "Taken")).unwrap_err();
+    lib.write(Lane::Interactive, |tx| tx.create_folder("thing", "Taken")).unwrap();
+    let e = lib.write(Lane::Interactive, |tx| tx.move_folder("thing", "Archive", "Taken")).unwrap_err();
     assert_eq!(e.code, ErrorCode::Conflict);
+
+    // A note folder moves its notes, and the field mirrors it.
+    lib.write(Lane::Interactive, |tx| tx.move_folder("page", "Reading", "Done")).unwrap();
+    let n = lib.store.get(nid).unwrap();
+    assert_eq!(n.path, format!("pages/Done/{nid}-note.md"));
+    assert!(
+        h.read(&n.path).contains("test.folder: Done\n") || h.read(&n.path).contains("test.folder: \"Done\"\n"),
+        "{}",
+        h.read(&n.path)
+    );
 
     // What was moved is found where it is after a restart.
     drop(lib);
     let lib = h.open();
-    assert_eq!(lib.store.get(nid).unwrap().path, format!("pages/Archive/Old reading/Plato/{nid}-note.md"));
+    assert_eq!(lib.store.get(nid).unwrap().path, format!("pages/Done/{nid}-note.md"));
     assert!(lib.store.duplicates().is_empty());
 }
 
@@ -90,7 +101,7 @@ fn records_move_between_folders_and_only_empty_folders_are_removed() {
     assert_eq!(h.read(&format!("things/Sorted/Essays/{THING}-an-essay/original.pdf")), "%PDF", "its files go along");
 
     // Not empty: refused, and nothing is touched.
-    let err = lib.write(Lane::Interactive, |tx| tx.remove_folder("Sorted")).unwrap_err();
+    let err = lib.write(Lane::Interactive, |tx| tx.remove_folder("thing", "Sorted")).unwrap_err();
     assert_eq!(err.code, ErrorCode::Conflict);
     assert!(err.message.contains("isn’t empty"), "{}", err.message);
 
@@ -101,11 +112,11 @@ fn records_move_between_folders_and_only_empty_folders_are_removed() {
 
     // The system's litter doesn't keep a folder; anyone else's file does.
     h.fs.write_outside(&h.abs("things/Sorted/Essays/.DS_Store"), b"x");
-    lib.write(Lane::Interactive, |tx| tx.remove_folder("Sorted")).unwrap();
+    lib.write(Lane::Interactive, |tx| tx.remove_folder("thing", "Sorted")).unwrap();
     assert!(h.fs.stat(&h.abs("things/Sorted")).unwrap().is_none());
-    assert!(!lib.store.folders().contains(&"Sorted".to_string()));
+    assert!(!lib.store.folders("thing").contains(&"Sorted".to_string()));
     h.fs.write_outside(&h.abs("things/Inbox/keep.txt"), b"mine");
-    let err = lib.write(Lane::Interactive, |tx| tx.remove_folder("Inbox")).unwrap_err();
+    let err = lib.write(Lane::Interactive, |tx| tx.remove_folder("thing", "Inbox")).unwrap_err();
     assert!(err.message.contains("keep.txt"), "{}", err.message);
     assert_eq!(h.read("things/Inbox/keep.txt"), "mine");
 
@@ -120,24 +131,28 @@ fn an_arrangement_follows_renames_and_goes_with_a_removed_folder() {
     let h = H::new();
     let lib = h.open();
     for f in ["B", "A", "A/Inner"] {
-        lib.write(Lane::Interactive, move |tx| tx.create_folder(f)).unwrap();
+        lib.write(Lane::Interactive, move |tx| tx.create_folder("thing", f)).unwrap();
     }
-    lib.write(Lane::Interactive, |tx| tx.set_folder_order("", vec!["folder:B".into(), "folder:A".into()])).unwrap();
-    lib.write(Lane::Interactive, |tx| tx.set_folder_order("A", vec!["folder:Inner".into()])).unwrap();
+    lib.write(Lane::Interactive, |tx| tx.set_folder_order("thing", "", vec!["folder:B".into(), "folder:A".into()]))
+        .unwrap();
+    lib.write(Lane::Interactive, |tx| tx.set_folder_order("thing", "A", vec!["folder:Inner".into()])).unwrap();
+    lib.write(Lane::Interactive, |tx| tx.set_folder_order("page", "", vec!["x".into()])).unwrap();
     // Renamed in place: same spot, new name; what it held keeps its arrangement.
-    lib.write(Lane::Interactive, |tx| tx.move_folder("A", "Alpha")).unwrap();
-    let o = lib.store.folder_order();
+    lib.write(Lane::Interactive, |tx| tx.move_folder("thing", "A", "Alpha")).unwrap();
+    let o = lib.store.folder_order("thing");
     assert_eq!(o[""], ["folder:B", "folder:Alpha"]);
     assert_eq!(o["Alpha"], ["folder:Inner"]);
     assert!(!o.contains_key("A"));
+    assert_eq!(lib.store.folder_order("page")[""], ["x"], "each kind has its own");
     // Moved elsewhere: it leaves its old place.
-    lib.write(Lane::Interactive, |tx| tx.move_folder("Alpha", "B/Alpha")).unwrap();
-    let o = lib.store.folder_order();
+    lib.write(Lane::Interactive, |tx| tx.move_folder("thing", "Alpha", "B/Alpha")).unwrap();
+    let o = lib.store.folder_order("thing");
     assert_eq!(o[""], ["folder:B"]);
     assert_eq!(o["B/Alpha"], ["folder:Inner"]);
     // Removed: so is its arrangement.
-    lib.write(Lane::Interactive, |tx| tx.remove_folder("B/Alpha/Inner")).unwrap();
-    lib.write(Lane::Interactive, |tx| tx.remove_folder("B/Alpha")).unwrap();
-    assert!(!lib.store.folder_order().contains_key("B/Alpha"));
-    assert!(h.read(".librarium/order.json").ends_with("}\n"), "a plain file, readable without the app");
+    lib.write(Lane::Interactive, |tx| tx.remove_folder("thing", "B/Alpha/Inner")).unwrap();
+    lib.write(Lane::Interactive, |tx| tx.remove_folder("thing", "B/Alpha")).unwrap();
+    assert!(!lib.store.folder_order("thing").contains_key("B/Alpha"));
+    let file = h.read(".librarium/order.json");
+    assert!(file.contains("\"things\"") && file.ends_with("}\n"), "a plain file, readable without the app: {file}");
 }

@@ -1,5 +1,5 @@
 /**
- * The Files page: one folder's contents, as in Finder or Drive. A list (Name, Kind, Added) or
+ * A space's page (Notes, Library): one folder's contents, as in Finder or Drive. A list (Name, Kind, Added) or
  * icons; folders first. A click selects (⌘-click and ⇧-click select several, a drag on the
  * background draws a box), a double-click or Return opens, ⌘↑ goes up. Items are dragged onto
  * folders, the path above or the sidebar to move them; F2 renames; the context menu (or the
@@ -7,26 +7,28 @@
  */
 import { h, replace } from "../../kit/dom";
 import { icon, type IconNode } from "../../kit/icon";
-import { effect, signal, untracked } from "../../kit/signal";
+import { effect, signal, untracked, type Signal } from "../../kit/signal";
 import { count } from "../../kit/format";
 import { contextMenu, isMenuKey, menuPointFor, type MenuItem } from "../../kit/menu";
 import { Selection } from "../../kit/selection";
 import { dragSource, dropTarget, zone, type DragPayload } from "../../kit/dnd";
 import { toast } from "../../kit/toast";
-import type { PageContext } from "../../shell/slots";
+import type { FolderSpace, PageContext, ShellApi } from "../slots";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import { ArrowDownUp, Folder, FolderPlus, LayoutGrid, List } from "lucide";
 import { Contents, badFolderName, folderId, isFolderId, join, keyOf, nameOf, parentOf, pathOfId, sortEntries, type Entry, type Sort, type SortKey } from "./model";
 import { canMoveInto, canPlaceIn, moveInto, newFolder, renameFolder, renameRecord, type FolderStore } from "./ops";
 import { uniqueName } from "./model";
-import type { ShellApi } from "../../shell/api";
 
 export interface FilesCtx {
   shell: ShellApi;
+  space: FolderSpace;
   store: FolderStore;
+  sort: Signal<Sort>;
+  view: Signal<"list" | "icons">;
   /** What the folders hold (reads signals: call inside an effect). */
   contents(): Contents;
-  /** The name shown for the top level (the library folder's name). */
+  /** The name shown for the top level (the space's). */
   rootName(): string;
   iconOf(r: RecordInfo): IconNode;
   kindName(r: RecordInfo): string;
@@ -41,13 +43,13 @@ export interface FilesCtx {
   recordMenu(rs: RecordInfo[]): MenuItem[];
 }
 
-/** The entry last focused in each folder, so going back up lands where one left. */
+/** The entry last focused in each folder (by page and folder), so going back up lands where
+ * one left. */
 const lastFocus = new Map<string, string>();
 /** An entry to select when a folder opens next ("Show in its folder"). */
 let arrival: { folder: string; id: string } | null = null;
 export function arriveWith(folder: string, id: string): void {
   arrival = { folder, id };
-  lastFocus.set(folder, id);
 }
 
 const added = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "");
@@ -55,19 +57,24 @@ const added = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(un
 export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<string, string>, ctx: PageContext): () => void {
   const { shell } = fx;
   const here = params.folder ?? "";
-  const view = shell.prefs.pref<"list" | "icons">("files.view", "list");
-  const sort = shell.prefs.pref<Sort>("files.sort", { key: "name", dir: 1 });
+  const { view, sort } = fx;
+  const kind = fx.store.kind;
+  const page = fx.space.page;
+  const spot = (folder: string) => `${page}:${folder}`;
   const filterText = signal("");
   const selection = new Selection();
   let order: string[] = [];
   let entries = new Map<string, Entry>();
-  let focused: string | null = lastFocus.get(here) ?? null;
-  if (arrival?.folder === here) selection.set([arrival.id], arrival.id);
+  let focused: string | null = lastFocus.get(spot(here)) ?? null;
+  if (arrival?.folder === here) {
+    selection.set([arrival.id], arrival.id);
+    focused = arrival.id;
+  }
   arrival = null;
   let renaming: string | null = null;
   let stale = false;
   let alive = true;
-  shell.here.set(here);
+  shell.here.set({ kind, folder: here });
 
   // ---- the frame -----------------------------------------------------------------------
   const crumbs = h("ol", { class: "crumbs" });
@@ -91,25 +98,28 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
   const head = h("div", { class: "files-head", role: "presentation" });
   const body = h("div", { class: "files-body", role: "listbox", "aria-multiselectable": "true", "aria-label": "Contents", tabindex: "-1" });
   const empty = h("div", { class: "files-empty" });
-  const foot = h("div", { class: "files-foot", role: "status", "aria-live": "polite" });
+  // Below: how much is here, and what can be done with what is selected.
+  const footText = h("span", { class: "files-count", role: "status", "aria-live": "polite" });
+  const footActions = h("span", { class: "files-actions", role: "toolbar", "aria-label": "Selected items" });
+  const foot = h("div", { class: "files-foot" }, footText, footActions);
   replace(host, bar, head, body, empty, foot);
   host.classList.add("files-page");
-  ctx.setHeaderActions([h("button", { class: "icon-button", type: "button", "aria-label": "New folder", title: "New folder (⇧⌘N)", onclick: () => void makeFolder() }, icon(FolderPlus))]);
+  ctx.setHeaderActions([...(fx.space.headerActions?.() ?? []), h("button", { class: "icon-button", type: "button", "aria-label": "New folder", title: "New folder (⇧⌘N)", onclick: () => void makeFolder() }, icon(FolderPlus))]);
 
   const go = (folder: string) => {
-    if (focused) lastFocus.set(here, focused);
-    shell.router.go("files", folder ? { folder } : {});
+    if (focused) lastFocus.set(spot(here), focused);
+    shell.router.go(page, folder ? { folder } : {});
   };
   const goUp = () => {
     if (!here) return;
-    lastFocus.set(parentOf(here), folderId(here));
+    lastFocus.set(spot(parentOf(here)), folderId(here));
     go(parentOf(here));
   };
-  const open = (e: Entry) => (e.type === "folder" ? go(e.path) : (lastFocus.set(here, e.id), shell.openRecord(e.id)));
-  const payload = (ids: string[]): DragPayload => ({ records: ids.filter((i) => !isFolderId(i)), folders: ids.filter(isFolderId).map(pathOfId) });
+  const open = (e: Entry) => (e.type === "folder" ? go(e.path) : (lastFocus.set(spot(here), e.id), shell.openRecord(e.id)));
+  const payload = (ids: string[]): DragPayload => ({ kind, records: ids.filter((i) => !isFolderId(i)), folders: ids.filter(isFolderId).map(pathOfId) });
   const dropInto = (el: HTMLElement, dest: string) =>
     dropTarget(el, {
-      accepts: (p) => canMoveInto(shell, p, dest, fx.store.kinds()),
+      accepts: (p) => canMoveInto(shell, p, dest, kind),
       drop: (p) => void moveInto(shell, fx.store, p, dest, fx.rootName()),
     });
   // Dropped on the background: into this folder (from the sidebar, say).
@@ -127,9 +137,18 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
     paintFoot();
   };
   let counts = "";
+  let footFor = "";
+  let ready = false;
   const paintFoot = () => {
-    const n = selection.ids.peek().size;
-    foot.textContent = n ? `${n} selected · ${counts}` : counts;
+    const ids = selection.inOrder(order);
+    const n = ids.length;
+    footText.textContent = n ? `${n} selected · ${counts}` : counts;
+    // Rebuilt only when the selection changes (and once the menus below exist).
+    const sig = ids.join(",");
+    if (sig === footFor || !ready) return;
+    footFor = sig;
+    const items = n ? menuItems(ids).filter((i): i is Exclude<MenuItem, "separator"> => i !== "separator") : [];
+    replace(footActions, items.map((i) => h("button", { class: `button small${i.destructive ? " destructive" : ""}`, type: "button", onclick: () => i.run() }, i.label)));
   };
   const elOf = (id: string | null | undefined) => (id ? [...body.querySelectorAll<HTMLElement>("[role=option]")].find((x) => x.dataset.id === id) : undefined);
   const focusEntry = (id: string | undefined) => {
@@ -144,24 +163,23 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
   const nameCell = (e: Entry) => {
     const name = h("span", { class: "files-name-text" }, e.name);
     const sub = e.type === "record" ? fx.detail(e.record) : "";
-    return h("span", { class: "files-name" }, icon(e.type === "folder" ? Folder : fx.iconOf(e.record), view.peek() === "icons" ? 40 : 16), h("span", { class: "files-name-lines" }, name, sub && view.peek() === "icons" ? h("span", { class: "files-detail" }, sub) : null));
+    return h("span", { class: "files-name" }, icon(e.type === "folder" ? Folder : fx.iconOf(e.record), view.peek() === "icons" ? 40 : 16), h("span", { class: "files-name-lines" }, name, sub ? h("span", { class: "files-detail" }, sub) : null));
   };
   const entryEl = (e: Entry) => {
-    const kind = e.type === "folder" ? `Folder · ${e.count ? count(e.count, "item") : "empty"}` : fx.kindName(e.record);
+    const kindText = e.type === "folder" ? `Folder · ${e.count ? count(e.count, "item") : "empty"}` : fx.kindName(e.record);
     const el = h("div", { role: "option", class: `files-entry ${e.type}`, tabindex: "-1", dataset: { id: e.id }, title: e.type === "record" && fx.detail(e.record) ? `${e.name}\n${fx.detail(e.record)}` : e.name },
       nameCell(e),
-      view.peek() === "list" ? [h("span", { class: "files-kind" }, kind), h("span", { class: "files-added" }, e.type === "record" ? added(e.record.created) : "")] : null,
+      view.peek() === "list" ? [h("span", { class: "files-kind" }, kindText), h("span", { class: "files-added" }, e.type === "record" ? added(e.record.created) : "")] : null,
     );
     // Dropped on its edges, things go beside it (arranged by hand); in a folder's middle, into it.
-    const kinds = () => fx.store.kinds();
-    const into = (p: DragPayload) => e.type === "folder" && canMoveInto(shell, p, e.path, kinds());
+    const into = (p: DragPayload) => e.type === "folder" && canMoveInto(shell, p, e.path, kind);
     dropTarget(el, {
-      accepts: (p) => into(p) || canPlaceIn(shell, p, here, kinds()),
+      accepts: (p) => into(p) || canPlaceIn(shell, p, here, kind),
       where: (p, x, y, target) => {
         // Never beside itself.
         if (e.type === "folder" ? p.folders.includes(e.path) : p.records.includes(e.id)) return null;
         const w = zone(target, x, y, { horizontal: view.peek() === "icons", into: into(p) });
-        return w === "into" || canPlaceIn(shell, p, here, kinds()) ? w : null;
+        return w === "into" || canPlaceIn(shell, p, here, kind) ? w : null;
       },
       drop: (p, w) => void (w === "into" && e.type === "folder" ? moveInto(shell, fx.store, p, e.path, fx.rootName()) : w !== "into" && fx.place(here, p, keyOf(e), w)),
     });
@@ -183,7 +201,7 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       // Moved or removed elsewhere: show the nearest folder still there.
       let up = parentOf(here);
       while (up && !c.has(up)) up = parentOf(up);
-      queueMicrotask(() => alive && shell.router.go("files", up ? { folder: up } : {}, { replace: true }));
+      queueMicrotask(() => alive && shell.router.go(page, up ? { folder: up } : {}, { replace: true }));
       return;
     }
     ctx.setTitle(here ? nameOf(here) : fx.rootName());
@@ -215,7 +233,7 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       const folders = all.filter((e) => e.type === "folder").length;
       counts = [folders ? count(folders, "folder") : "", all.length - folders ? count(all.length - folders, "item") : ""].filter(Boolean).join(", ") || "Empty";
       empty.hidden = shown.length > 0;
-      replace(empty, q ? h("p", null, "Nothing in this folder matches.") : h("div", null, h("p", null, here ? "This folder is empty." : "Nothing here yet."), h("p", { class: "muted small" }, "Drag items here, make a new note (⌘N) or a folder (⇧⌘N), or add files and web pages from the File menu: they go into the folder you’re looking at.")));
+      replace(empty, q ? h("p", null, "Nothing in this folder matches.") : h("div", null, h("p", null, here ? "This folder is empty." : fx.space.emptyText ?? "Nothing here yet."), h("p", { class: "muted small" }, "Drag things here, or make a folder (⇧⌘N). What you add while looking at a folder goes into it.")));
       markSelection();
       if (hadFocus || document.activeElement === document.body || !document.activeElement) elOf(focused)?.focus({ preventScroll: true });
     });
@@ -293,20 +311,24 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
         : (["separator", { label: mark(s.dir === 1, "Ascending"), run: () => sort.set({ ...s, dir: 1 }) }, { label: mark(s.dir === -1, "Descending"), run: () => sort.set({ ...s, dir: -1 }) }] as MenuItem[])),
     ], at, "Sort by");
   };
+  /** What can be done with these entries (without Open and Rename, for one). */
+  const menuItems = (ids: string[]): MenuItem[] => {
+    const es = ids.map((i) => entries.get(i)).filter((e): e is Entry => !!e);
+    if (es.length === 1) {
+      const one = es[0]!;
+      return one.type === "folder" ? fx.folderMenu(one.path) : fx.recordMenu([one.record]);
+    }
+    const rs = es.flatMap((e) => (e.type === "record" ? [e.record] : []));
+    const fs = es.flatMap((e) => (e.type === "folder" ? [e.path] : []));
+    return es.length ? fx.manyMenu(rs, fs) : [];
+  };
   const menuFor = (ids: string[], at: { x: number; y: number }) => {
     const es = ids.map((i) => entries.get(i)).filter((e): e is Entry => !!e);
     const one = es.length === 1 ? es[0]! : null;
-    const items: MenuItem[] = [];
     if (one) {
-      items.push({ label: "Open", run: () => open(one) }, { label: "Rename", run: () => rename(one.id) });
-      const more = one.type === "folder" ? fx.folderMenu(one.path) : fx.recordMenu([one.record]);
-      if (more.length) items.push("separator", ...more);
-      contextMenu(items, at, one.name);
-    } else if (es.length) {
-      const rs = es.flatMap((e) => (e.type === "record" ? [e.record] : []));
-      const fs = es.flatMap((e) => (e.type === "folder" ? [e.path] : []));
-      contextMenu(fx.manyMenu(rs, fs), at, `${es.length} items`);
-    }
+      const more = menuItems(ids);
+      contextMenu([{ label: "Open", run: () => open(one) }, { label: "Rename", run: () => rename(one.id) }, ...(more.length ? ["separator" as const, ...more] : [])], at, one.name);
+    } else if (es.length) contextMenu(menuItems(ids), at, `${es.length} items`);
   };
   const backgroundMenu = (at: { x: number; y: number }) => {
     contextMenu([
@@ -494,6 +516,8 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
   };
   window.addEventListener("keydown", onWindowKey);
   const offNew = registerNewFolder(() => void makeFolder());
+  ready = true;
+  paintFoot();
 
   return () => {
     alive = false;
@@ -501,8 +525,8 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
     stopDrag();
     offNew();
     window.removeEventListener("keydown", onWindowKey);
-    if (focused) lastFocus.set(here, focused);
-    if (shell.here.peek() === here) shell.here.set(null);
+    if (focused) lastFocus.set(spot(here), focused);
+    if (shell.here.peek()?.kind === kind && shell.here.peek()?.folder === here) shell.here.set(null);
     host.classList.remove("files-page");
     if (stale) stale = false;
   };

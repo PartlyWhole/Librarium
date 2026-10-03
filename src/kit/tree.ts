@@ -19,6 +19,8 @@ export interface TreeNode {
   icon?: IconNode;
   children?: TreeNode[];
   expanded?: boolean;
+  /** Folded until the user unfolds it (instead of open until folded). */
+  startCollapsed?: boolean;
   /** A calm placeholder line ("No notes yet"), shown but not focusable. */
   placeholder?: boolean;
   current?: boolean;
@@ -67,7 +69,8 @@ export class Tree {
       const sel = this.selection.ids.peek();
       const nodes = sel.has(n.id) && sel.size > 1 ? this.flat.filter((f) => sel.has(f.node.id) && f.node.drag).map((f) => f.node) : [n];
       const ps = nodes.map((x) => x.drag!());
-      return { payload: { records: ps.flatMap((p) => p.records), folders: ps.flatMap((p) => p.folders) }, label: n.label };
+      const kinds = new Set(ps.map((p) => p.kind));
+      return { payload: { records: ps.flatMap((p) => p.records), folders: ps.flatMap((p) => p.folders), kind: kinds.size === 1 ? [...kinds][0]! : "" }, label: n.label };
     });
     this.el.addEventListener("focusin", (e) => {
       const it = (e.target as HTMLElement).closest<HTMLElement>("[role=treeitem]");

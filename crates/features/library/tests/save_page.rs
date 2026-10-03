@@ -298,5 +298,5 @@ fn a_page_saved_into_a_folder_lands_there_and_a_new_snapshot_stays_where_the_ite
     let items = lib.store.list(Some("item"));
     assert_eq!(items.len(), 1);
     assert!(items[0].path.starts_with("items/Reading/Technique/"), "it stays in its folder");
-    assert!(lib.store.folders().iter().all(|f| !f.starts_with("Elsewhere")), "{:?}", lib.store.folders());
+    assert!(lib.store.folders("item").iter().all(|f| !f.starts_with("Elsewhere")), "{:?}", lib.store.folders("item"));
 }

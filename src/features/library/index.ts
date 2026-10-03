@@ -2,14 +2,11 @@
 import { call, onFileDrop, pickFiles, readBytes } from "../../backend";
 import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
-import { effect, signal, untracked } from "../../kit/signal";
+import { effect, signal } from "../../kit/signal";
 import { toast } from "../../kit/toast";
-import { Selection } from "../../kit/selection";
-import { selectList, type SelectListElement } from "../../kit/selectlist";
-import { selectBar } from "../../shell/selectbar";
 import { count } from "../../kit/format";
 import type { ShellApi } from "../../shell/api";
-import { READER_TOOLS, type ReaderTool } from "../../shell/slots";
+import { ITEM_CHILDREN, READER_TOOLS, type ItemChildren, type ReaderTool } from "../../shell/slots";
 import type { StoredText as StoredJoined } from "../../generated/StoredText";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import type { Written } from "../../generated/Written";
@@ -116,11 +113,14 @@ export function library(shell: ShellApi): void {
     detail: (r) => {
       if (formatOf(r) === "web") {
         const src = (r.fields.provenance as { source?: string } | undefined)?.source;
+        let host = "";
         try {
-          return src ? new URL(src).hostname.replace(/^www\./, "") : "";
+          host = src ? new URL(src).hostname.replace(/^www\./, "") : "";
         } catch {
-          return "";
+          /* not an address */
         }
+        const n = snapshotsOf(r).length;
+        return [host, n > 1 ? count(n, "snapshot") : ""].filter(Boolean).join(" · ");
       }
       const n = Number(r.fields["library.pages"]);
       return n > 0 ? count(n, "page") : "";
@@ -128,12 +128,17 @@ export function library(shell: ShellApi): void {
   });
   for (const e of [pdfEngine, epubEngine, imageEngine]) shell.readerEngines.add("library", e.id, e);
 
+  /** The library folder being looked at, if any (where new items go). */
+  const here = () => {
+    const h = shell.here.peek();
+    return h?.kind === KIND && h.folder ? h.folder : undefined;
+  };
   const importPaths = async (paths: string[]) => {
     if (!paths.length) return;
     shell.status.show(`Adding ${count(paths.length, "file")}…`, 0);
     try {
-      // Into the folder being looked at, if any.
-      const folder = shell.here.peek() || undefined;
+      // Into the library folder being looked at, if any.
+      const folder = here();
       const r = await call<ImportResult>("library.import", { paths, folder });
       for (const w of r.imported) shell.records.put(w.info, w.seq);
       shell.status.show(r.imported.length ? `Added ${count(r.imported.length, "item")}.` : "");
@@ -170,8 +175,8 @@ export function library(shell: ShellApi): void {
       };
       input.addEventListener("input", update);
       again.addEventListener("change", update);
-      // New pages go into the folder being looked at, if any.
-      const folder = shell.here.peek() || undefined;
+      // New pages go into the library folder being looked at, if any.
+      const folder = here();
       const go = async () => {
         const { all, todo: urls } = split();
         if (!all.length) return toast("There’s no web address (http or https) there.");
@@ -220,54 +225,26 @@ export function library(shell: ShellApi): void {
   onFileDrop((paths) => void importPaths(paths), (over) => dropping.set(over));
   effect(() => document.body.classList.toggle("dropping", dropping()));
 
+  // Items live in the library's own folders, browsed as in Finder; what an item holds (its
+  // captures) shows under it in the sidebar.
+  const itemChildren = shell.slot<ItemChildren>(ITEM_CHILDREN);
+  shell.folders.add({
+    kind: KIND,
+    page: "library",
+    title: "Library",
+    emptyText: "No library items yet. Add PDFs, images or EPUBs (or drop them on the window), or save web pages.",
+    children: (r) => itemChildren.values().flatMap((c) => c.children(r)),
+    headerActions: () => [
+      h("button", { class: "icon-button", "aria-label": "Save web pages", title: "Save web pages", onclick: () => shell.actions.run("library.savePage") }, icon(Globe)),
+      h("button", { class: "icon-button", "aria-label": "Add to library", title: "Add to library", onclick: () => shell.actions.run("library.add") }, icon(Plus)),
+    ],
+  });
   shell.pages.add("library", "library", {
     id: "library",
     title: "Library",
     icon: LibraryIcon,
     ribbon: 2,
-    render(host, _p, ctx) {
-      ctx.setHeaderActions([h("button", { class: "icon-button", "aria-label": "Add to library", title: "Add to library", onclick: () => shell.actions.run("library.add") }, icon(Plus))]);
-      // The selection and select mode outlive re-renders (a record changing re-renders the list).
-      const selection = new Selection();
-      const mode = signal(false);
-      let list: SelectListElement | null = null;
-      const items = () => shell.records.list(KIND).sort((a, b) => a.title.localeCompare(b.title));
-      const bar = selectBar(shell, { selection, mode, items, sync: () => list?.sync(), noun: ["item", "items"] });
-      const detail = (i: RecordInfo) => {
-        const snaps = Array.isArray(i.fields["library.snapshots"]) ? (i.fields["library.snapshots"] as unknown[]).length : 0;
-        if (snaps > 1) return count(snaps, "snapshot");
-        return i.fields["library.pages"] ? count(Number(i.fields["library.pages"]), formatOf(i) === "epub" ? "chapter" : "page") : "";
-      };
-      const stop = effect(() => {
-        const all = items();
-        untracked(() => {
-          list = all.length
-            ? selectList({
-                label: "Library items",
-                className: "item-list",
-                items: all,
-                selection,
-                mode,
-                id: (i) => i.id,
-                render: (i) => h("span", { class: "item-link" }, icon(iconFor(i), 16), h("span", null, i.title || "Untitled"), h("span", { class: "muted small" }, detail(i))),
-                open: (i) => shell.openRecord(i.id),
-                menu: (rs, at) => shell.showRecordMenu(rs, at),
-              })
-            : null;
-          replace(
-            host,
-            h("h1", { class: "page-title" }, "Library"),
-            all.length ? h("p", { class: "muted small list-hint" }, `${count(all.length, "item")}. To act on several, choose Select (or press ⌘A); right-click for what you can do.`) : null,
-            all.length ? bar.el : null,
-            list ?? h("p", { class: "empty" }, "No library items yet. Add PDFs, images or EPUBs, or drop them on the window."),
-          );
-        });
-      });
-      return () => {
-        stop();
-        bar.dispose();
-      };
-    },
+    render: (host, params, ctx) => shell.folders.render(KIND, host, params, ctx),
   });
 
   shell.pages.add("library", "item", {
@@ -406,7 +383,8 @@ export function library(shell: ShellApi): void {
     id: "library",
     title: "Library",
     emptyText: "No library items yet.",
-    nodes: () => shell.records.list(KIND).sort((a, b) => a.title.localeCompare(b.title)).map((i) => ({ id: i.id, label: i.title || "Untitled", icon: iconFor(i), current: shell.router.current().params.id === i.id, onActivate: () => shell.openRecord(i.id) })),
+    drop: shell.folders.dropOnTop(KIND),
+    nodes: () => shell.folders.tree(KIND),
   }, 1);
 }
 

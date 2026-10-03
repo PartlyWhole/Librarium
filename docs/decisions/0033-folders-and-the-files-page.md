@@ -1,4 +1,4 @@
-# 0033. Folders across notes and library items, and the Files page
+# 0033. Folders for notes and library items, browsed as in Finder
 
 - Status: accepted
 - Date: 2026-10-03
@@ -95,6 +95,38 @@ Option 2.
 - **Keyboard:** ⌥↑/⌥↓ (⌥←/⌥→ in icons) move the selection one place.
 - **Drop targets:** a drop target can say where in itself a drop goes (`where`), or refuse
   and let what is around it take the drop.
+
+## Addendum: each kind has its own folders; no Files page
+
+Having used it, the user preferred a Notes panel with its own folders and a Library panel
+with its own, and no separate Folders or Captures sections. Captures belong to the items they
+come from.
+
+- **Folders belong to one kind.**
+  - A notes folder is only `notes/<path>/`, and a library folder only `items/<path>/`. The same
+    name in each is two folders.
+  - Every folder call takes a `kind`.
+  - The `move-folder` intent carries its kind.
+  - `.librarium/order.json` keeps one arrangement per kind's top folder
+    (`{ "notes": {…}, "items": {…} }`).
+- **The browser lives in the shell** (`src/shell/folders/`), as a service, `shell.folders`.
+  - A feature adds its kind as a folder space: page, title, header buttons, records shown
+    elsewhere, and what a record holds.
+  - The space gets its page (the Finder-like browser) and its sidebar tree.
+  - Notes and Library are such spaces. Their pages ("notes", "library") are now the browser,
+    and the Files page is gone.
+  - Daily notes stay in their own group.
+- **The sidebar has two trees,** Notes and Library: folders and records, arranged as on their
+  pages. A section's heading takes drops onto its top level.
+- **Captures show under their item** through a Library-hosted slot, `library.item-children`.
+  An item's captures start folded: tree rows can start folded (`startCollapsed`), which is
+  remembered once unfolded. A click on the item opens it; its arrow unfolds it.
+- **The Library page's select mode** is replaced by the browser's own selection. A click
+  selects and a double-click opens, ⌘A selects all, and Escape clears. A bar below shows the
+  selection's actions as buttons ("Move 4 items to…", "Archive 4 items"). The Archive page
+  keeps its select mode.
+- **"Move to folder…"** is a shell record action for records of one kind at a time. It is not
+  offered for archived records.
 
 ## Consequences
 

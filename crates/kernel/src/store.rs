@@ -140,9 +140,9 @@ pub enum Intent {
     /// Permanently delete a record: its own file first, then these files and folders
     /// (store-relative), deepest first. Asked for only after the user's two-step confirmation.
     Delete { record: Id, files: Vec<String>, folders: Vec<String> },
-    /// Move one of the user's folders (in every kind's folder that has subfolders), then make
-    /// the records inside follow: their paths, and the field mirroring their subfolder.
-    MoveFolder { from: String, to: String },
+    /// Move one of a kind's folders, then make the records inside follow: their paths, and the
+    /// field mirroring their subfolder.
+    MoveFolder { kind: String, from: String, to: String },
 }
 
 #[derive(Default)]
@@ -1129,7 +1129,7 @@ impl<'a> Tx<'a> {
     /// Redoes an unfinished intent (at startup).
     pub fn redo(&self, intent: &Intent) -> Result<()> {
         match intent {
-            Intent::MoveFolder { from, to } => self.apply_move_folder(from, to).map(|_| ()),
+            Intent::MoveFolder { kind, from, to } => self.apply_move_folder(kind, from, to).map(|_| ()),
             _ => self.apply(intent).map(|_| ()),
         }
     }

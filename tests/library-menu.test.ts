@@ -17,13 +17,13 @@ describe("the Library page", () => {
     await wait(50);
     shell.router.go("library");
     await wait(30);
-    const li = [...document.querySelectorAll(".item-list li")].find((x) => x.textContent?.includes("A saved essay"))!;
+    const li = [...document.querySelectorAll(".files-body [role=option]")].find((x) => x.textContent?.includes("A saved essay"))!;
     li.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 100, clientY: 100 }));
     const items = [...document.querySelectorAll(".context-menu [role=menuitem]")];
-    expect(items.map((b) => b.textContent)).toEqual(["Open", "Archive"]);
-    (items[1] as HTMLElement).click();
+    expect(items.map((b) => b.textContent)).toEqual(["Open", "Rename", "Move to folder…", "Archive"]);
+    (items[3] as HTMLElement).click();
     await wait(30);
-    expect(document.querySelector(".item-list")?.textContent ?? "").not.toContain("A saved essay");
+    expect(document.querySelector(".files-body")?.textContent ?? "").not.toContain("A saved essay");
     expect(shell.records.get(item.id)?.fields["archive.at"]).toBeDefined();
     shell.destroy();
   });

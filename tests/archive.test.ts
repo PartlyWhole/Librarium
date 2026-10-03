@@ -122,7 +122,7 @@ describe("a record's context menu", () => {
   it("archives from a right-click in the sidebar, and restores from the Archive page", async () => {
     const { shell, a } = await boot();
     row("Gravity and grace").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 50, clientY: 60 }));
-    expect(menuItems()).toEqual(["Open", "Archive"]);
+    expect(menuItems()).toEqual(["Open", "Move to folder…", "Archive"]);
     choose("Archive");
     await wait(30);
     expect(document.querySelector(".context-menu")).toBeNull();
@@ -142,8 +142,10 @@ describe("a record's context menu", () => {
     const it = row("Keep");
     it.focus();
     it.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
-    expect(menuItems()).toEqual(["Open", "Archive"]);
+    expect(menuItems()).toEqual(["Open", "Move to folder…", "Archive"]);
     expect(document.activeElement?.textContent).toBe("Open");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+    expect(document.activeElement?.textContent).toBe("Move to folder…");
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
     expect(document.activeElement?.textContent).toBe("Archive");
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));

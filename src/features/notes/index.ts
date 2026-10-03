@@ -1,20 +1,19 @@
 /** Notes: pages, the sidebar section (folders, plus groups other modules contribute). */
-import { h, replace } from "../../kit/dom";
+import { h } from "../../kit/dom";
 import { icon } from "../../kit/icon";
 import { effect } from "../../kit/signal";
 import type { TreeNode } from "../../kit/tree";
-import { count } from "../../kit/format";
 import { call, pickSavePath } from "../../backend";
 import { parseLinks } from "../../editor/links";
 import type { RecordText } from "../../generated/RecordText";
 import { toast } from "../../kit/toast";
-import { renderNote, moveNote } from "./page";
+import { renderNote } from "./page";
 import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
 import type { ShellApi } from "../../shell/api";
 import { NOTE_GROUPS, type NoteGroup } from "../../shell/slots";
 import type { RecordInfo } from "../../generated/RecordInfo";
-import { Files, FileText, FilePlus, Folder } from "lucide";
+import { Files, FileText, FilePlus } from "lucide";
 
 const KIND = "note";
 
@@ -24,63 +23,27 @@ export function folderOf(r: RecordInfo): string {
   return parts.slice(1, -1).join("/");
 }
 
-/** Builds a folder tree of notes. */
-export function folderTree(notes: RecordInfo[], open: (id: string) => void, currentId?: string): TreeNode[] {
-  interface Dir { dirs: Map<string, Dir>; notes: RecordInfo[] }
-  const root: Dir = { dirs: new Map(), notes: [] };
-  for (const n of notes) {
-    let d = root;
-    for (const part of folderOf(n).split("/").filter(Boolean)) {
-      let next = d.dirs.get(part);
-      if (!next) d.dirs.set(part, (next = { dirs: new Map(), notes: [] }));
-      d = next;
-    }
-    d.notes.push(n);
-  }
-  const build = (d: Dir, prefix: string): TreeNode[] => [
-    ...[...d.dirs.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, sub]) => ({ id: `folder:${prefix}${name}`, label: name, icon: Folder, children: build(sub, `${prefix}${name}/`), expanded: true })),
-    ...d.notes.sort((a, b) => (a.title || "").localeCompare(b.title || "")).map((n) => ({ id: n.id, label: n.title || "Untitled", icon: FileText, current: n.id === currentId, onActivate: () => open(n.id) })),
-  ];
-  return build(root, "");
-}
-
 export function notes(shell: ShellApi): void {
   const groups = shell.slot<NoteGroup>(NOTE_GROUPS);
   shell.openers.add("notes", KIND, "note");
   shell.looks.add("notes", KIND, { kind: KIND, icon: () => FileText, kindName: () => "Note" });
 
+  // Notes live in their own folders, browsed as in Finder; daily notes are shown apart.
+  const grouped = (n: RecordInfo) => groups.values().some((g) => g.claims(n));
+  shell.folders.add({
+    kind: KIND,
+    page: "notes",
+    title: "Notes",
+    hide: grouped,
+    emptyText: "No notes yet.",
+    headerActions: () => [h("button", { class: "icon-button", "aria-label": "New note", title: "New note (⌘N)", onclick: () => shell.actions.run("notes.new") }, icon(FilePlus))],
+  });
   shell.pages.add("notes", "notes", {
     id: "notes",
     title: "Notes",
     icon: Files,
     ribbon: 1,
-    render(host, _params, ctx) {
-      ctx.setHeaderActions([h("button", { class: "icon-button", "aria-label": "New note", title: "New note (⌘N)", onclick: () => shell.actions.run("notes.new") }, icon(FilePlus))]);
-      return effect(() => {
-        const all = shell.records.list(KIND);
-        const ungrouped = all.filter((n) => !groups.values().some((g) => g.claims(n)));
-        if (all.length === 0) {
-          replace(host, h("h1", { class: "page-title" }, "Notes"), h("p", { class: "empty" }, "No notes yet."));
-          return;
-        }
-        const byFolder = new Map<string, RecordInfo[]>();
-        for (const n of ungrouped) {
-          const f = folderOf(n);
-          byFolder.set(f, [...(byFolder.get(f) ?? []), n]);
-        }
-        replace(
-          host,
-          h("h1", { class: "page-title" }, "Notes"),
-          h("p", { class: "muted" }, count(all.length, "note")),
-          [...byFolder.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([f, list]) =>
-            h("section", { class: "list-section" },
-              f ? h("h2", { class: "list-heading" }, f) : null,
-              h("ul", { class: "plain-list" }, list.sort((a, b) => a.title.localeCompare(b.title)).map((n) => h("li", null, h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(n.id)) }, n.title || "Untitled")))),
-            ),
-          ),
-        );
-      });
-    },
+    render: (host, params, ctx) => shell.folders.render(KIND, host, params, ctx),
   });
 
   shell.pages.add("notes", "note", {
@@ -101,21 +64,14 @@ export function notes(shell: ShellApi): void {
     run: async () => {
       const r = shell.router.current.peek();
       const cur = r.page === "note" ? shell.records.get(r.params.id ?? "") : undefined;
-      // Beside the note being read, or in the folder being looked at.
-      const folder = cur ? folderOf(cur) : shell.here.peek() || undefined;
+      // Beside the note being read, or in the notes folder being looked at.
+      const here = shell.here.peek();
+      const folder = cur ? folderOf(cur) : here?.kind === KIND ? here.folder || undefined : undefined;
       const w = await call<Written>("notes.create", { folder });
       shell.records.put(w.info, w.seq);
       shell.router.go("note", { id: w.info.id, focus: "title" });
     },
   });
-  shell.actions.add("notes", {
-    id: "notes.move",
-    title: "Move note to folder…",
-    when: () => shell.router.current().page === "note",
-    menu: { name: "file", group: 2 },
-    run: () => moveNote(shell, shell.router.current.peek().params.id ?? ""),
-  });
-
   shell.actions.add("notes", {
     id: "notes.exportWithQuotations",
     title: "Export with quotations…",
@@ -146,6 +102,7 @@ export function notes(shell: ShellApi): void {
     id: "notes",
     title: "Notes",
     emptyText: "No notes yet.",
+    drop: shell.folders.dropOnTop(KIND),
     nodes() {
       const all = shell.records.list(KIND);
       const r = shell.router.current();
@@ -155,8 +112,8 @@ export function notes(shell: ShellApi): void {
         const mine = all.filter((n) => g.claims(n)).sort(g.compare);
         return { id: `group:${g.id}`, label: g.title, children: mine.length ? mine.map((n) => ({ id: n.id, label: g.label(n), icon: FileText, current: n.id === current, onActivate: () => open(n.id) })) : [{ id: `group-empty:${g.id}`, label: "None yet", placeholder: true }] };
       });
-      const rest = all.filter((n) => !groups.values().some((g) => g.claims(n)));
-      return [...grouped, ...folderTree(rest, open, current)];
+      // Then the notes' folders, and the notes in them.
+      return [...grouped, ...shell.folders.tree(KIND)];
     },
   }, 0);
 }

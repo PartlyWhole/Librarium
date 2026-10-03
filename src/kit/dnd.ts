@@ -7,7 +7,10 @@
  */
 export interface DragPayload {
   records: string[];
+  /** Folders (paths), of `kind`'s folders. */
   folders: string[];
+  /** The kind of record (and so of folders) dragged, when it is one kind; else "". */
+  kind: string;
 }
 
 /** Where a drop goes: into the element, or just before or after it (to place things). */

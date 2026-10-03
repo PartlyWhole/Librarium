@@ -3,4 +3,4 @@
 /**
  * Keeps the order a folder's contents were arranged in (`path` "" is the top level).
  */
-export type FolderOrderParams = { path: string, order: Array<string>, };
+export type FolderOrderParams = { kind: string, path: string, order: Array<string>, };

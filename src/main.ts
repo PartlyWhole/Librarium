@@ -9,9 +9,8 @@ import { search } from "./features/search";
 import { archive } from "./features/archive";
 import { links } from "./features/links";
 import { captures } from "./features/captures";
-import { files } from "./features/files";
 
-const shell = createShell(document.getElementById("app")!, [notes, daily, files, library, captures, search, links, archive]);
+const shell = createShell(document.getElementById("app")!, [notes, daily, library, captures, search, links, archive]);
 (window as unknown as { librarium: unknown }).librarium = { timings: shell.timings };
 
 // Interface errors go to the app's log file (nothing is sent anywhere).

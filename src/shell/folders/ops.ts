@@ -4,7 +4,7 @@ import { count } from "../../kit/format";
 import { toast } from "../../kit/toast";
 import { comboboxDialog } from "../../kit/combobox";
 import type { DragPayload } from "../../kit/dnd";
-import type { ShellApi } from "../../shell/api";
+import type { ShellApi } from "../slots";
 import type { FolderMoved } from "../../generated/FolderMoved";
 import type { MovedRecords } from "../../generated/MovedRecords";
 import type { Written } from "../../generated/Written";
@@ -13,10 +13,10 @@ import { folderOf, join, nameOf, parentOf, within } from "./model";
 
 export const message = (e: unknown) => String((e as { message?: string })?.message ?? e);
 
-/** Where the folders' list is kept current. */
+/** One kind's folders, kept current. */
 export interface FolderStore {
+  kind: string;
   list(): string[];
-  kinds(): string[];
   /** The arrangement of one folder (reads a signal). */
   order(folder: string): string[];
   refresh(): Promise<void>;
@@ -25,21 +25,19 @@ export interface FolderStore {
 const quoted = (path: string, root: string) => `“${path ? nameOf(path) : root}”`;
 
 /** Whether a drag (or a choice of folder) can go into `dest`. */
-export function canMoveInto(shell: ShellApi, p: DragPayload, dest: string, kinds: string[]): boolean {
+export function canMoveInto(shell: ShellApi, p: DragPayload, dest: string, kind: string): boolean {
+  if (p.kind !== kind) return false;
   if (p.folders.some((f) => within(dest, f) || parentOf(f) === dest)) return false;
   const rs = p.records.map((id) => shell.records.get(id));
-  if (rs.some((r) => !r || !kinds.includes(r.kind))) return false;
+  if (rs.some((r) => !r || r.kind !== kind)) return false;
   // Something has to actually move.
   return p.folders.length > 0 || rs.some((r) => r && folderOf(r) !== dest);
 }
 
 /** Whether a drag can be placed among the things in `folder` (moving there if it must). */
-export function canPlaceIn(shell: ShellApi, p: DragPayload, folder: string, kinds: string[]): boolean {
-  if (p.folders.some((f) => within(folder, f))) return false;
-  return p.records.every((id) => {
-    const r = shell.records.get(id);
-    return !!r && kinds.includes(r.kind);
-  });
+export function canPlaceIn(shell: ShellApi, p: DragPayload, folder: string, kind: string): boolean {
+  if (p.kind !== kind || p.folders.some((f) => within(folder, f))) return false;
+  return p.records.every((id) => shell.records.get(id)?.kind === kind);
 }
 
 /** Moves records and folders into `dest`, offering Undo. */
@@ -52,7 +50,7 @@ export async function moveInto(shell: ShellApi, store: FolderStore, p: DragPaylo
   try {
     for (const f of folders) {
       try {
-        const r = await call<FolderMoved>("folders.move", { from: f, to: join(dest, nameOf(f)) });
+        const r = await call<FolderMoved>("folders.move", { kind: store.kind, from: f, to: join(dest, nameOf(f)) });
         movedFolders.push({ from: f, to: r.path });
       } catch (e) {
         failures.push(message(e));
@@ -73,7 +71,7 @@ export async function moveInto(shell: ShellApi, store: FolderStore, p: DragPaylo
     shell.undo.done(`Moved ${what} to ${quoted(dest, root)}.`, {
       label: `moving ${what}`,
       undo: async () => {
-        for (const f of [...movedFolders].reverse()) await call("folders.move", { from: f.to, to: f.from });
+        for (const f of [...movedFolders].reverse()) await call("folders.move", { kind: store.kind, from: f.to, to: f.from });
         const back = new Map<string, string[]>();
         for (const w of moved) {
           const f = from.get(w.info.id) ?? "";
@@ -97,12 +95,12 @@ export async function renameFolder(shell: ShellApi, store: FolderStore, path: st
   const to = join(parentOf(path), name.trim());
   if (to === path) return path;
   try {
-    const r = await call<FolderMoved>("folders.move", { from: path, to });
+    const r = await call<FolderMoved>("folders.move", { kind: store.kind, from: path, to });
     await store.refresh();
     shell.undo.done(`Renamed “${nameOf(path)}” to “${nameOf(r.path)}”.`, {
       label: "renaming the folder",
       undo: async () => {
-        await call("folders.move", { from: r.path, to: path });
+        await call("folders.move", { kind: store.kind, from: r.path, to: path });
         await store.refresh();
       },
     });
@@ -137,7 +135,7 @@ export async function renameRecord(shell: ShellApi, id: string, title: string): 
 /** Makes a folder; returns its path. */
 export async function newFolder(store: FolderStore, path: string): Promise<string | null> {
   try {
-    const r = await call<FolderMoved>("folders.create", { path });
+    const r = await call<FolderMoved>("folders.create", { kind: store.kind, path });
     await store.refresh();
     return r.path;
   } catch (e) {
@@ -149,12 +147,12 @@ export async function newFolder(store: FolderStore, path: string): Promise<strin
 /** Removes an empty folder, offering Undo. */
 export async function removeFolder(shell: ShellApi, store: FolderStore, path: string): Promise<boolean> {
   try {
-    await call("folders.remove", { path });
+    await call("folders.remove", { kind: store.kind, path });
     await store.refresh();
     shell.undo.done(`Removed the folder “${nameOf(path)}”.`, {
       label: "removing the folder",
       undo: async () => {
-        await call("folders.create", { path });
+        await call("folders.create", { kind: store.kind, path });
         await store.refresh();
       },
     });

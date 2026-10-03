@@ -226,13 +226,18 @@ pub struct RelocateParams {
     pub subfolder: Option<Option<String>>,
 }
 
-/// The user's folders (`/`-separated paths, sorted), and the record kinds kept in them.
+/// The user's folders, for each kind kept in folders.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct FoldersList {
+    pub spaces: Vec<FolderSpace>,
+}
+
+/// One kind's folders (`/`-separated paths, sorted) and the order the user arranged them in:
+/// `{ folder: [record ID or "folder:<name>", …] }`, the top level as `""`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct FolderSpace {
+    pub kind: String,
     pub folders: Vec<String>,
-    pub kinds: Vec<String>,
-    /// The order the user arranged folders in: `{ folder: [record ID or "folder:<name>", …] }`,
-    /// the top level as `""`.
     #[ts(type = "Record<string, string[]>")]
     pub order: std::collections::BTreeMap<String, Vec<String>>,
 }
@@ -240,18 +245,21 @@ pub struct FoldersList {
 /// Keeps the order a folder's contents were arranged in (`path` "" is the top level).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct FolderOrderParams {
+    pub kind: String,
     pub path: String,
     pub order: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct FolderPathParams {
+    pub kind: String,
     pub path: String,
 }
 
 /// Moves or renames a folder: `from` becomes `to` (a full path).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct FolderMoveParams {
+    pub kind: String,
     pub from: String,
     pub to: String,
 }

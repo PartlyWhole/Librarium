@@ -12,7 +12,7 @@ import { describe, locate, locateSelection, sliceCp, toW3C, type Selector } from
 import { createEditor } from "../../editor/editor";
 import { NoteSession } from "../../editor/session";
 import type { ShellApi } from "../../shell/api";
-import { READER_TOOLS, type ReaderTool } from "../../shell/slots";
+import { ITEM_CHILDREN, READER_TOOLS, type ItemChildren, type ReaderTool } from "../../shell/slots";
 import type { CapturePart } from "../../generated/CapturePart";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import type { RecordText } from "../../generated/RecordText";
@@ -458,12 +458,24 @@ export function captures(shell: ShellApi): void {
     },
   });
 
-  shell.sidebar.add("captures", "captures", {
-    id: "captures",
-    title: "Captures",
-    emptyText: "No captures yet.",
-    nodes: () => shell.records.list(KIND).sort((a, b) => (b.created ?? "").localeCompare(a.created ?? "")).map((c) => ({ id: c.id, label: c.title || "Capture", icon: Quote, current: shell.router.current().params.id === c.id, onActivate: () => shell.openRecord(c.id) })),
-  }, 2);
+  // Captures show under the item they were made from (in the Library's tree).
+  let bySource: { from: unknown; map: Map<string, RecordInfo[]> } | null = null;
+  const capturesOf = (sourceId: string): RecordInfo[] => {
+    const from = shell.records.byId();
+    if (bySource?.from !== from) {
+      const map = new Map<string, RecordInfo[]>();
+      for (const c of shell.records.list(KIND)) {
+        const src = String(c.fields[F.source] ?? "");
+        if (src) map.set(src, [...(map.get(src) ?? []), c]);
+      }
+      for (const list of map.values()) list.sort((a, b) => (a.created ?? "").localeCompare(b.created ?? ""));
+      bySource = { from, map };
+    }
+    return bySource.map.get(sourceId) ?? [];
+  };
+  shell.slot<ItemChildren>(ITEM_CHILDREN).add("captures", "captures", {
+    children: (item) => capturesOf(item.id).map((c) => ({ id: c.id, label: c.title || "Capture", icon: Quote, current: shell.router.current().params.id === c.id, onActivate: () => shell.openRecord(c.id) })),
+  });
 
   shell.settings.add("captures", "orphans", {
     id: "orphans",

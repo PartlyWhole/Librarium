@@ -2,7 +2,6 @@
 import { call, on } from "../../backend";
 import { ask, modal } from "../../kit/dialog";
 import { h, replace } from "../../kit/dom";
-import { comboboxDialog } from "../../kit/combobox";
 import { icon } from "../../kit/icon";
 import { toast } from "../../kit/toast";
 import { createEditor, replaceDoc } from "../../editor/editor";
@@ -138,7 +137,7 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
     titleInput.addEventListener("blur", () => void rename());
 
     ctx.setHeaderActions([
-      h("button", { class: "icon-button", "aria-label": "Move to folder", title: "Move to folder", onclick: () => void moveNote(shell, id) }, icon(FolderInput)),
+      h("button", { class: "icon-button", "aria-label": "Move to folder", title: "Move to folder", onclick: () => { const r = shell.records.get(id); if (r) void shell.folders.moveTo([r]); } }, icon(FolderInput)),
     ]);
 
     // Outside edits: reload when nothing is unsaved; otherwise the next save merges.
@@ -214,37 +213,3 @@ async function compareCopies(paths: string[], body: string) {
 }
 
 /** Moves a note to a folder (new or existing), with undo. */
-export async function moveNote(shell: ShellApi, id: string): Promise<void> {
-  // Every folder (notes and library items share them), empty ones too.
-  const folders = await call<{ folders: string[] }>("folders.list").then((l) => l.folders, () => [] as string[]);
-  const r = shell.records.get(id);
-  const from = r ? r.path.split("/").slice(1, -1).join("/") : "";
-  const choices = [{ id: "", label: "Notes (top level)" }, ...folders.map((f) => ({ id: f, label: f }))];
-  comboboxDialog({
-    label: "Move to folder",
-    placeholder: "Type a folder name (new or existing)",
-    emptyText: "Press Return to create this folder.",
-    choices,
-    filter: (cs, q) => {
-      const t = q.trim().replace(/^\/+|\/+$/g, "");
-      const hits = cs.filter((c) => c.label.toLowerCase().includes(t.toLowerCase()));
-      return t && !cs.some((c) => c.id === t) ? [{ id: t, label: `New folder “${t}”` }, ...hits] : hits;
-    },
-    onPick: async (c) => {
-      if (c.id === from) return;
-      try {
-        const w = await call<Written>("records.relocate", { id, subfolder: c.id || null });
-        shell.records.put(w.info, w.seq);
-        shell.undo.done(`Moved to ${c.id || "Notes"}`, {
-          label: "move",
-          undo: async () => {
-            const back = await call<Written>("records.relocate", { id, subfolder: from || null, base_version: w.info.version });
-            shell.records.put(back.info, back.seq);
-          },
-        });
-      } catch (e) {
-        toast(String((e as { message?: string }).message ?? e));
-      }
-    },
-  });
-}

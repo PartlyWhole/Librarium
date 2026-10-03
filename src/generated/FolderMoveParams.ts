@@ -3,4 +3,4 @@
 /**
  * Moves or renames a folder: `from` becomes `to` (a full path).
  */
-export type FolderMoveParams = { from: string, to: string, };
+export type FolderMoveParams = { kind: string, from: string, to: string, };

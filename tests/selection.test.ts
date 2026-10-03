@@ -43,7 +43,7 @@ describe("several records at once", () => {
     click(row("Alpha"));
     click(row("Gamma"), { metaKey: true });
     row("Gamma").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-    expect(menu()).toEqual(["Archive 2 items"]);
+    expect(menu()).toEqual(["Move 2 items to folder…", "Archive 2 items"]);
     choose("Archive 2 items");
     await wait(40);
     expect(shell.records.list("note").map((r) => r.title).sort()).toEqual(["Beta", "Delta"]);
@@ -66,7 +66,7 @@ describe("several records at once", () => {
     const { shell, pages } = await boot();
     shell.router.go("library");
     await wait(30);
-    const opts = () => [...document.querySelectorAll(".item-list [role=option]")] as HTMLElement[];
+    const opts = () => [...document.querySelectorAll(".files-body [role=option]")] as HTMLElement[];
     const essays = opts().filter((o) => o.textContent?.includes("Essay"));
     expect(essays[0]!.textContent).toContain("3 snapshots");
     essays[0]!.focus();
@@ -74,10 +74,8 @@ describe("several records at once", () => {
     expect(opts().every((o) => o.getAttribute("aria-selected") === "true")).toBe(true);
     // With everything selected, the snapshot action counts only the pages that have older ones.
     essays[0]!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-    expect(menu()).toEqual(["Archive 3 items", "Remove older snapshots of 2 pages…"]);
+    expect(menu()).toEqual(["Move 3 items to…", "Archive 3 items", "Remove older snapshots of 2 pages…"]);
     document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    // ⌘A turned select mode on; leave it, so a click opens and selects one again.
-    [...document.querySelectorAll(".select-bar button")].find((b) => b.textContent === "Done")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await wait(10);
     // Just the two essays.
     click(essays[0]!);
@@ -105,25 +103,22 @@ describe("several records at once", () => {
 });
 
 describe("select mode", () => {
-  it("on the Library page: Select, click to tick (not open), act from the bar, Done", async () => {
+  it("on the Library page: clicks select (never open), the bar below acts on them, Escape clears", async () => {
     const { shell } = await boot();
     shell.router.go("library");
     await wait(30);
-    const bar = () => document.querySelector(".select-bar")!;
-    const opts = () => [...document.querySelectorAll(".item-list [role=option]")] as HTMLElement[];
-    (bar().querySelector("button") as HTMLButtonElement).click();
-    await wait(10);
-    expect(document.querySelector(".item-list")!.classList.contains("selecting")).toBe(true);
+    const bar = () => document.querySelector(".files-foot")!;
+    const opts = () => [...document.querySelectorAll(".files-body [role=option]")] as HTMLElement[];
     click(opts()[0]!);
-    click(opts()[1]!);
+    click(opts()[1]!, { metaKey: true });
     await wait(10);
-    expect(shell.router.current().page).toBe("library"); // ticking doesn't open
-    expect(bar().textContent).toContain("2 items selected");
+    expect(shell.router.current().page).toBe("library"); // selecting doesn't open
+    expect(bar().textContent).toContain("2 selected");
     expect([...bar().querySelectorAll("button")].map((b) => b.textContent)).toContain("Archive 2 items");
-    [...bar().querySelectorAll("button")].find((b) => b.textContent === "Done")!.click();
+    opts()[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await wait(10);
-    expect(document.querySelector(".item-list")!.classList.contains("selecting")).toBe(false);
     expect(opts().some((o) => o.getAttribute("aria-selected") === "true")).toBe(false);
+    expect(bar().querySelectorAll("button")).toHaveLength(0);
   });
 
   it("⌘A anywhere on the Archive page selects every record, and they can be deleted after confirming", async () => {
