@@ -6,7 +6,7 @@ import { notes } from "../src/features/notes";
 import { library } from "../src/features/library";
 import { archive } from "../src/features/archive";
 import { files } from "../src/features/files";
-import { Contents, folderOf, sortEntries, uniqueName, type Entry } from "../src/features/files/model";
+import { Contents, folderOf, placed, sortEntries, uniqueName, type Entry } from "../src/features/files/model";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let last: Shell | null = null;
@@ -34,15 +34,19 @@ const row = (name: string) => rows().find((r) => r.querySelector(".files-name-te
 const key = (el: Element, k: string, o: KeyboardEventInit = {}) => el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...o }));
 const methods = () => mock.state.calls.map((c) => c.method);
 
-/** A pointer drag of `from` released over `to` (jsdom has no layout: the hit test is stubbed). */
-function drag(from: HTMLElement, to: HTMLElement) {
-  const at = { clientX: 10, clientY: 10, bubbles: true, button: 0 };
+/**
+ * A pointer drag of `from` released over `to`: on its top edge, middle or bottom edge (jsdom has
+ * no layout: the hit test and the target's box are stubbed). Returns the mark shown.
+ */
+function drag(from: HTMLElement, to: HTMLElement, where: "before" | "into" | "after" = "into") {
+  const y = { before: 1, into: 10, after: 19 }[where];
   document.elementFromPoint = () => to;
-  from.dispatchEvent(new PointerEvent("pointerdown", at));
-  window.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: 40, clientY: 40 }));
-  const accepted = to.classList.contains("drop-over");
-  window.dispatchEvent(new PointerEvent("pointerup", { ...at, clientX: 40, clientY: 40 }));
-  return accepted;
+  to.getBoundingClientRect = () => ({ top: 0, left: 0, width: 100, height: 20, right: 100, bottom: 20, x: 0, y: 0, toJSON: () => ({}) });
+  from.dispatchEvent(new PointerEvent("pointerdown", { clientX: 50, clientY: 50, bubbles: true, button: 0 }));
+  window.dispatchEvent(new PointerEvent("pointermove", { clientX: 50, clientY: y, bubbles: true }));
+  const mark = ["drop-over", "drop-before", "drop-after"].find((c) => to.classList.contains(c)) ?? null;
+  window.dispatchEvent(new PointerEvent("pointerup", { clientX: 50, clientY: y, bubbles: true }));
+  return mark;
 }
 
 describe("the folder model", () => {
@@ -69,6 +73,16 @@ describe("the folder model", () => {
     const desc = sortEntries([e("a"), e("b"), e("F", "folder")], { key: "name", dir: -1 }, () => "");
     expect(desc.map((x) => x.name)).toEqual(["F", "b", "a"]);
     expect(uniqueName("untitled folder", (n) => ["untitled folder", "untitled folder 2"].includes(n))).toBe("untitled folder 3");
+    // As arranged: listed first, in that order (folders anywhere), then the rest as usual.
+    const manual = sortEntries([e("b"), e("Zeta", "folder"), e("a"), e("c")], { key: "manual", dir: 1 }, () => "", ["c", "folder:Zeta"]);
+    expect(manual.map((x) => x.name)).toEqual(["c", "Zeta", "a", "b"]);
+  });
+
+  it("places things before or after another, keeping their order", () => {
+    expect(placed(["a", "b", "c", "d"], ["d"], "a", "before")).toEqual(["d", "a", "b", "c"]);
+    expect(placed(["a", "b", "c", "d"], ["a", "c"], "d", "after")).toEqual(["b", "d", "a", "c"]);
+    expect(placed(["a", "b"], ["a"], "a", "after")).toEqual(["a", "b"]);
+    expect(placed(["a", "b"], ["x"], "a", "after")).toEqual(["a", "x", "b"]);
   });
 });
 
@@ -122,7 +136,7 @@ describe("the Files page", () => {
     // Several selected travel together.
     row("Reading list").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     row("The Technological Society").dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
-    expect(drag(row("Reading list"), row("Thinkers"))).toBe(true);
+    expect(drag(row("Reading list"), row("Thinkers"))).toBe("drop-over");
     await wait(30);
     expect(names()).toEqual(["Empty", "Thinkers"]);
     expect(folderOf(shell.records.get(book.id)!)).toBe("Thinkers");
@@ -132,8 +146,8 @@ describe("the Files page", () => {
     expect(folderOf(shell.records.get(book.id)!)).toBe("");
     expect(folderOf(shell.records.get(list.id)!)).toBe("");
     // A folder into a folder; never into itself.
-    expect(drag(row("Thinkers"), row("Thinkers"))).toBe(false);
-    expect(drag(row("Thinkers"), row("Empty"))).toBe(true);
+    expect(drag(row("Thinkers"), row("Thinkers"))).toBeNull();
+    expect(drag(row("Thinkers"), row("Empty"))).toBe("drop-over");
     await wait(30);
     expect(shell.records.get(book.id)!.path).toMatch(/^items\//);
     expect(methods()).toContain("folders.move");
@@ -141,7 +155,7 @@ describe("the Files page", () => {
     // Onto the sidebar's tree.
     const tree = () => [...document.querySelectorAll<HTMLElement>(".tree [role=treeitem]")];
     const target = tree().find((t) => t.textContent === "Empty")!;
-    expect(drag(row("Reading list"), target)).toBe(true);
+    expect(drag(row("Reading list"), target)).toBe("drop-over");
     await wait(30);
     expect(folderOf(shell.records.get(list.id)!)).toBe("Empty");
   });
@@ -208,5 +222,39 @@ describe("the Files page", () => {
     const created = mock.state.calls.filter((c) => c.method === "notes.create").pop();
     expect((created?.params as { folder?: string }).folder).toBe("Thinkers/French");
     expect(shell.recordActionsFor([shell.records.get(list.id)!]).map((a) => a.label)).toContain("Move to folder…");
+  });
+
+  it("places dragged things between others, arranging the folder by hand, and undoes it", async () => {
+    const { shell } = await boot();
+    shell.router.go("files", {});
+    await wait(30);
+    expect(names()).toEqual(["Empty", "Thinkers", "Reading list", "The Technological Society"]);
+    // The top edge of a folder places beside it; its middle would move into it.
+    expect(drag(row("The Technological Society"), row("Empty"), "before")).toBe("drop-before");
+    await wait(30);
+    expect(names()).toEqual(["The Technological Society", "Empty", "Thinkers", "Reading list"]);
+    expect(shell.prefs.pref("files.sort", { key: "name", dir: 1 })().key).toBe("manual");
+    expect(mock.state.order[""]).toEqual([expect.any(String), "folder:Empty", "folder:Thinkers", expect.any(String)]);
+    // An item's bottom edge places after it.
+    expect(drag(row("Empty"), row("Reading list"), "after")).toBe("drop-after");
+    await wait(30);
+    expect(names()).toEqual(["The Technological Society", "Thinkers", "Reading list", "Empty"]);
+    // The sidebar shows folders in the same order.
+    const tree = [...document.querySelectorAll(".tree [role=treeitem]")].map((t) => t.textContent);
+    expect(tree.indexOf("Thinkers")).toBeLessThan(tree.indexOf("Empty"));
+    await shell.undo.undoLast();
+    await wait(30);
+    expect(names()).toEqual(["The Technological Society", "Empty", "Thinkers", "Reading list"]);
+    // ⌥↓ moves the selection one place down.
+    row("Empty").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    key(row("Empty"), "ArrowDown", { altKey: true });
+    await wait(30);
+    expect(names()).toEqual(["The Technological Society", "Thinkers", "Empty", "Reading list"]);
+    // Something from another folder is moved here, to that place.
+    shell.router.go("files", { folder: "Thinkers" });
+    await wait(30);
+    expect(drag(row("Jacques Ellul"), row("On attention"), "after")).toBe("drop-after");
+    await wait(30);
+    expect(names()).toEqual(["French", "On attention", "Jacques Ellul"]);
   });
 });

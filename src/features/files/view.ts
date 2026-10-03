@@ -11,13 +11,13 @@ import { effect, signal, untracked } from "../../kit/signal";
 import { count } from "../../kit/format";
 import { contextMenu, isMenuKey, menuPointFor, type MenuItem } from "../../kit/menu";
 import { Selection } from "../../kit/selection";
-import { dragSource, dropTarget, type DragPayload } from "../../kit/dnd";
+import { dragSource, dropTarget, zone, type DragPayload } from "../../kit/dnd";
 import { toast } from "../../kit/toast";
 import type { PageContext } from "../../shell/slots";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import { ArrowDownUp, Folder, FolderPlus, LayoutGrid, List } from "lucide";
-import { Contents, badFolderName, folderId, isFolderId, join, nameOf, parentOf, pathOfId, sortEntries, type Entry, type Sort, type SortKey } from "./model";
-import { canMoveInto, moveInto, newFolder, renameFolder, renameRecord, type FolderStore } from "./ops";
+import { Contents, badFolderName, folderId, isFolderId, join, keyOf, nameOf, parentOf, pathOfId, sortEntries, type Entry, type Sort, type SortKey } from "./model";
+import { canMoveInto, canPlaceIn, moveInto, newFolder, renameFolder, renameRecord, type FolderStore } from "./ops";
 import { uniqueName } from "./model";
 import type { ShellApi } from "../../shell/api";
 
@@ -30,6 +30,8 @@ export interface FilesCtx {
   rootName(): string;
   iconOf(r: RecordInfo): IconNode;
   kindName(r: RecordInfo): string;
+  /** Places dragged things just before or after an entry (its key) of a folder. */
+  place(folder: string, p: DragPayload, anchor: string, where: "before" | "after"): Promise<void>;
   detail(r: RecordInfo): string;
   /** A folder's context menu entries (beyond Open and Rename). */
   folderMenu(path: string): MenuItem[];
@@ -150,7 +152,19 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       nameCell(e),
       view.peek() === "list" ? [h("span", { class: "files-kind" }, kind), h("span", { class: "files-added" }, e.type === "record" ? added(e.record.created) : "")] : null,
     );
-    if (e.type === "folder") dropInto(el, e.path);
+    // Dropped on its edges, things go beside it (arranged by hand); in a folder's middle, into it.
+    const kinds = () => fx.store.kinds();
+    const into = (p: DragPayload) => e.type === "folder" && canMoveInto(shell, p, e.path, kinds());
+    dropTarget(el, {
+      accepts: (p) => into(p) || canPlaceIn(shell, p, here, kinds()),
+      where: (p, x, y, target) => {
+        // Never beside itself.
+        if (e.type === "folder" ? p.folders.includes(e.path) : p.records.includes(e.id)) return null;
+        const w = zone(target, x, y, { horizontal: view.peek() === "icons", into: into(p) });
+        return w === "into" || canPlaceIn(shell, p, here, kinds()) ? w : null;
+      },
+      drop: (p, w) => void (w === "into" && e.type === "folder" ? moveInto(shell, fx.store, p, e.path, fx.rootName()) : w !== "into" && fx.place(here, p, keyOf(e), w)),
+    });
     return el;
   };
 
@@ -160,6 +174,7 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
     const v = view();
     const s = sort();
     const q = filterText().trim().toLowerCase();
+    const arranged = fx.store.order(here);
     if (renaming) {
       stale = true;
       return;
@@ -184,7 +199,7 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       listButton.setAttribute("aria-pressed", String(v === "list"));
       iconsButton.setAttribute("aria-pressed", String(v === "icons"));
       const all = c.entries(here);
-      const shown = sortEntries(q ? all.filter((e) => e.name.toLowerCase().includes(q)) : all, s, fx.kindName);
+      const shown = sortEntries(q ? all.filter((e) => e.name.toLowerCase().includes(q)) : all, s, fx.kindName, arranged);
       entries = new Map(shown.map((e) => [e.id, e]));
       order = shown.map((e) => e.id);
       const kept = selection.inOrder(order);
@@ -272,10 +287,10 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
     const s = sort.peek();
     const mark = (on: boolean, label: string) => `${on ? "✓ " : " "}${label}`;
     contextMenu([
-      ...(["name", "kind", "added"] as SortKey[]).map((key) => ({ label: mark(s.key === key, key === "name" ? "Name" : key === "kind" ? "Kind" : "Date added"), run: () => sort.set({ key, dir: s.dir }) })),
-      "separator",
-      { label: mark(s.dir === 1, "Ascending"), run: () => sort.set({ ...s, dir: 1 }) },
-      { label: mark(s.dir === -1, "Descending"), run: () => sort.set({ ...s, dir: -1 }) },
+      ...(["name", "kind", "added", "manual"] as SortKey[]).map((key) => ({ label: mark(s.key === key, { name: "Name", kind: "Kind", added: "Date added", manual: "As arranged (drag to arrange)" }[key]), run: () => sort.set({ key, dir: key === "manual" ? 1 : s.dir }) })),
+      ...(s.key === "manual"
+        ? []
+        : (["separator", { label: mark(s.dir === 1, "Ascending"), run: () => sort.set({ ...s, dir: 1 }) }, { label: mark(s.dir === -1, "Descending"), run: () => sort.set({ ...s, dir: -1 }) }] as MenuItem[])),
     ], at, "Sort by");
   };
   const menuFor = (ids: string[], at: { x: number; y: number }) => {
@@ -417,6 +432,19 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       const ids = selection.forMenu(focused, order);
       markSelection();
       menuFor(ids, menuPointFor(el));
+    } else if (e.altKey && !mod && (k === "ArrowUp" || k === "ArrowDown" || (cols > 1 && (k === "ArrowLeft" || k === "ArrowRight")))) {
+      // ⌥ and an arrow move what is selected one place along (arranging by hand).
+      const sel = selection.inOrder(order);
+      if (!sel.length && focused) sel.push(focused);
+      if (!sel.length) return;
+      const back = k === "ArrowUp" || k === "ArrowLeft";
+      const step = k === "ArrowUp" || k === "ArrowDown" ? cols : 1;
+      const edge = order.indexOf(back ? sel[0]! : sel[sel.length - 1]!);
+      const anchor = order[back ? edge - step : edge + step] ?? order[back ? 0 : order.length - 1];
+      const a = anchor ? entries.get(anchor) : undefined;
+      if (!a || sel.includes(a.id)) return e.preventDefault();
+      const keep = focused;
+      void fx.place(here, payload(sel), keyOf(a), back ? "before" : "after").then(() => focusEntry(keep ?? undefined));
     } else if (mod && k === "ArrowUp") goUp();
     else if ((mod && k === "ArrowDown") || (k === "Enter" && !mod)) {
       const en = focused ? entries.get(focused) : undefined;

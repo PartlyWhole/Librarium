@@ -50,6 +50,8 @@ const state = {
   snapshotRemovals: new Map<string, [string, string[]][]>(),
   /** The user's folders that exist on disk (empty ones too); records' folders count as well. */
   folders: new Set<string>(),
+  /** Arrangements by hand: folder → keys. */
+  order: {} as Record<string, string[]>,
 };
 
 const FOLDERED = ["note", "item"];
@@ -343,7 +345,12 @@ const api: Record<string, (p: any) => unknown> = {
     }
     return { moved, failed };
   },
-  "folders.list": () => ({ folders: allFolders(), kinds: FOLDERED }),
+  "folders.list": () => ({ folders: allFolders(), kinds: FOLDERED, order: structuredClone(state.order) }),
+  "folders.setOrder": (p) => {
+    if (p.order.length) state.order[p.path] = [...new Set<string>(p.order)];
+    else delete state.order[p.path];
+    return null;
+  },
   "folders.create": (p) => {
     const f = cleanFolder(p.path);
     if (allFolders().includes(f)) fail("conflict", `There’s already a folder called “${f.split("/").pop()}” there.`);
@@ -472,6 +479,7 @@ export const mock = {
     state.confirmations.clear();
     state.snapshotRemovals.clear();
     state.folders.clear();
+    state.order = {};
     state.deleted = [];
     state.inspect = { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false };
   },

@@ -10,7 +10,7 @@ use librarium_contracts::events::{ChangeOp, ChangeOrigin};
 use librarium_contracts::ports::Flush;
 use librarium_contracts::{BackendError, Id, Result};
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::Path;
 
@@ -51,7 +51,28 @@ fn display(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
+/// Where the order the user arranged things in is kept: `{ folder: [entry, …] }`, the top
+/// level as `""`. An entry is a record's ID, or `folder:<name>` for a folder inside. Anything
+/// not listed comes after, in the usual order. Losing it loses only the arrangement.
+pub const ORDER_FILE: &str = ".librarium/order.json";
+
+/// The key a folder has in its parent's order.
+pub fn folder_key(path: &str) -> String {
+    format!("folder:{}", display(path))
+}
+
+pub type FolderOrder = BTreeMap<String, Vec<String>>;
+
+fn parent(path: &str) -> &str {
+    path.rsplit_once('/').map(|(p, _)| p).unwrap_or("")
+}
+
 impl Store {
+    /// The order the user arranged each folder in.
+    pub fn folder_order(&self) -> FolderOrder {
+        self.fs.read(&self.abs(ORDER_FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
     /// The kinds kept in the user's folders.
     pub fn foldered(&self) -> Vec<RecordKindDef> {
         self.kinds.all().filter(|d| d.subfolder_field.is_some()).cloned().collect()
@@ -200,6 +221,7 @@ impl Tx<'_> {
                 s.changes.emit(e.id, &e.kind, ChangeOp::Renamed, ChangeOrigin::App);
             }
         }
+        self.order_follows(from, to)?;
         Ok(moved.len())
     }
 
@@ -253,6 +275,70 @@ impl Tx<'_> {
             if let Some(parent) = Path::new(d).parent() {
                 let _ = s.fs.flush_dir(&s.abs(&rel_str(parent)), Flush::Data);
             }
+        }
+        // Its arrangement goes with it.
+        let mut order = s.folder_order();
+        let before = order.clone();
+        order.retain(|k, _| k != &path && !k.starts_with(&format!("{path}/")));
+        if let Some(list) = order.get_mut(parent(&path)) {
+            list.retain(|e| *e != folder_key(&path));
+        }
+        if order != before {
+            self.write_order(&order)?;
+        }
+        Ok(())
+    }
+
+    /// Keeps the order the user arranged a folder in (`""`: the top level).
+    pub fn set_folder_order(&self, path: &str, entries: Vec<String>) -> Result<()> {
+        let path = if path.trim_matches('/').is_empty() { String::new() } else { clean_folder(path)? };
+        if entries.len() > 100_000 || entries.iter().any(|e| e.len() > 300) {
+            return Err(BackendError::invalid("that order is too long"));
+        }
+        let mut order = self.store.folder_order();
+        let mut seen = BTreeSet::new();
+        let entries: Vec<String> = entries.into_iter().filter(|e| seen.insert(e.clone())).collect();
+        if entries.is_empty() {
+            order.remove(&path);
+        } else {
+            order.insert(path, entries);
+        }
+        self.write_order(&order)
+    }
+
+    fn write_order(&self, order: &FolderOrder) -> Result<()> {
+        let s = self.store;
+        let p = s.abs(ORDER_FILE);
+        s.fs.create_dir_all(p.parent().unwrap()).map_err(|e| io_error(e, "making .librarium"))?;
+        let mut b = serde_json::to_vec_pretty(order).unwrap();
+        b.push(b'\n');
+        s.safe_write(&p, &b, false, self.dur).map_err(|e| io_error(e, "keeping the order"))
+    }
+
+    /// The arrangement follows a folder that moved (idempotent, so a redo changes nothing).
+    fn order_follows(&self, from: &str, to: &str) -> Result<()> {
+        let mut order = self.store.folder_order();
+        let before = order.clone();
+        let under = |k: &str| k == from || k.starts_with(&format!("{from}/"));
+        let moved: Vec<String> = order.keys().filter(|k| under(k)).cloned().collect();
+        for k in moved {
+            if let Some(v) = order.remove(&k) {
+                order.insert(format!("{to}{}", &k[from.len()..]), v);
+            }
+        }
+        // Its place among its siblings: kept when renamed in place, dropped when moved away.
+        let (old, new) = (folder_key(from), folder_key(to));
+        if let Some(list) = order.get_mut(parent(from)) {
+            if let Some(i) = list.iter().position(|e| *e == old) {
+                if parent(from) == parent(to) {
+                    list[i] = new;
+                } else {
+                    list.remove(i);
+                }
+            }
+        }
+        if order != before {
+            self.write_order(&order)?;
         }
         Ok(())
     }

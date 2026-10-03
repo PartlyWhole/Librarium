@@ -10,11 +10,18 @@ export interface DragPayload {
   folders: string[];
 }
 
+/** Where a drop goes: into the element, or just before or after it (to place things). */
+export type Where = "into" | "before" | "after";
+
 export interface DropTarget {
   /** Whether this payload may be dropped here (e.g. not a folder into itself). */
   accepts(p: DragPayload): boolean;
-  drop(p: DragPayload): void;
+  /** Where a drop at this point would go (default: into); null passes it to what is around. */
+  where?(p: DragPayload, x: number, y: number, el: HTMLElement): Where | null;
+  drop(p: DragPayload, where: Where): void;
 }
+
+const MARKS: Record<Where, string> = { into: "drop-over", before: "drop-before", after: "drop-after" };
 
 const targets = new WeakMap<Element, DropTarget>();
 const START = 5;
@@ -24,14 +31,27 @@ export function dropTarget(el: HTMLElement, t: DropTarget): void {
   targets.set(el, t);
 }
 
-/** The innermost drop target at a point that takes this payload. */
-function targetAt(x: number, y: number, p: DragPayload): { el: HTMLElement; t: DropTarget } | null {
+/** The innermost drop target at a point that takes this payload, and where. */
+function targetAt(x: number, y: number, p: DragPayload): { el: HTMLElement; t: DropTarget; where: Where } | null {
   let el = (document.elementFromPoint?.(x, y) ?? null) as HTMLElement | null;
   for (; el; el = el.parentElement) {
     const t = targets.get(el);
-    if (t) return t.accepts(p) ? { el, t } : null;
+    if (!t || !t.accepts(p)) continue;
+    const where = t.where ? t.where(p, x, y, el) : "into";
+    if (where) return { el, t, where };
   }
   return null;
+}
+
+/** Which part of an element a point is over, for lists (top/bottom) or grids (left/right):
+ * the outer `edge` share at each end is before/after, the rest is into (if `into`). */
+export function zone(el: HTMLElement, x: number, y: number, o: { horizontal?: boolean; into: boolean; edge?: number }): Where {
+  const r = el.getBoundingClientRect();
+  const size = o.horizontal ? r.width : r.height;
+  const at = o.horizontal ? x - r.left : y - r.top;
+  if (!o.into || !size) return at < size / 2 ? "before" : "after";
+  const edge = size * (o.edge ?? 0.25);
+  return at < edge ? "before" : at > size - edge ? "after" : "into";
 }
 
 function scrollerAt(el: Element | null): HTMLElement | null {
@@ -54,12 +74,12 @@ export function dragSource(container: HTMLElement, start: (target: HTMLElement) 
     const from = { x: e.clientX, y: e.clientY };
     let drag: { payload: DragPayload; label: string } | null = null;
     let badge: HTMLElement | null = null;
-    let over: HTMLElement | null = null;
-    const mark = (el: HTMLElement | null) => {
-      if (over === el) return;
-      over?.classList.remove("drop-over");
-      over = el;
-      over?.classList.add("drop-over");
+    let over: { el: HTMLElement; where: Where } | null = null;
+    const mark = (hit: { el: HTMLElement; where: Where } | null) => {
+      if (over?.el === hit?.el && over?.where === hit?.where) return;
+      over?.el.classList.remove(MARKS[over.where]);
+      over = hit;
+      over?.el.classList.add(MARKS[over.where]);
     };
     const move = (m: PointerEvent) => {
       if (!drag) {
@@ -76,7 +96,7 @@ export function dragSource(container: HTMLElement, start: (target: HTMLElement) 
       m.preventDefault();
       Object.assign(badge!.style, { left: `${m.clientX + 12}px`, top: `${m.clientY + 10}px` });
       const hit = targetAt(m.clientX, m.clientY, drag.payload);
-      mark(hit?.el ?? null);
+      mark(hit);
       // Near the top or bottom of a scrolling list: scroll it.
       const s = scrollerAt(document.elementFromPoint?.(m.clientX, m.clientY) ?? null);
       if (s) {
@@ -94,7 +114,7 @@ export function dragSource(container: HTMLElement, start: (target: HTMLElement) 
       const swallow = (c: MouseEvent) => (c.stopPropagation(), c.preventDefault());
       window.addEventListener("click", swallow, { capture: true, once: true });
       setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
-      hit?.t.drop(d.payload);
+      hit?.t.drop(d.payload, hit.where);
     };
     const key = (k: KeyboardEvent) => {
       if (k.key !== "Escape" || !drag) return;

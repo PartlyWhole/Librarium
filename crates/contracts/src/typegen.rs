@@ -52,6 +52,7 @@ pub fn export_types(dir: &Path) -> Result<(), String> {
         crate::api::StoredText,
         crate::api::FoldersList,
         crate::api::FolderPathParams,
+        crate::api::FolderOrderParams,
         crate::api::FolderMoveParams,
         crate::api::FolderMoved,
         crate::api::MoveRecordsParams,

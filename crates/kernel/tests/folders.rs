@@ -114,3 +114,30 @@ fn records_move_between_folders_and_only_empty_folders_are_removed() {
     let cid = clip.id;
     assert!(lib.write(Lane::Interactive, move |tx| tx.move_to_folder(cid, Some("Inbox"))).is_err());
 }
+
+#[test]
+fn an_arrangement_follows_renames_and_goes_with_a_removed_folder() {
+    let h = H::new();
+    let lib = h.open();
+    for f in ["B", "A", "A/Inner"] {
+        lib.write(Lane::Interactive, move |tx| tx.create_folder(f)).unwrap();
+    }
+    lib.write(Lane::Interactive, |tx| tx.set_folder_order("", vec!["folder:B".into(), "folder:A".into()])).unwrap();
+    lib.write(Lane::Interactive, |tx| tx.set_folder_order("A", vec!["folder:Inner".into()])).unwrap();
+    // Renamed in place: same spot, new name; what it held keeps its arrangement.
+    lib.write(Lane::Interactive, |tx| tx.move_folder("A", "Alpha")).unwrap();
+    let o = lib.store.folder_order();
+    assert_eq!(o[""], ["folder:B", "folder:Alpha"]);
+    assert_eq!(o["Alpha"], ["folder:Inner"]);
+    assert!(!o.contains_key("A"));
+    // Moved elsewhere: it leaves its old place.
+    lib.write(Lane::Interactive, |tx| tx.move_folder("Alpha", "B/Alpha")).unwrap();
+    let o = lib.store.folder_order();
+    assert_eq!(o[""], ["folder:B"]);
+    assert_eq!(o["B/Alpha"], ["folder:Inner"]);
+    // Removed: so is its arrangement.
+    lib.write(Lane::Interactive, |tx| tx.remove_folder("B/Alpha/Inner")).unwrap();
+    lib.write(Lane::Interactive, |tx| tx.remove_folder("B/Alpha")).unwrap();
+    assert!(!lib.store.folder_order().contains_key("B/Alpha"));
+    assert!(h.read(".librarium/order.json").ends_with("}\n"), "a plain file, readable without the app");
+}

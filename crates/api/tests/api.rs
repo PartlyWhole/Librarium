@@ -230,12 +230,18 @@ fn folders_are_listed_made_moved_and_removed() {
     let id = w["info"]["id"].as_str().unwrap().to_string();
     a.call("folders.create", json!({ "path": "Reading" })).unwrap();
     let l = a.call("folders.list", json!({})).unwrap();
-    assert_eq!(l, json!({ "folders": ["Reading"], "kinds": ["page"] }));
+    assert_eq!(l, json!({ "folders": ["Reading"], "kinds": ["page"], "order": {} }));
+    // An arrangement is kept, and follows the folder when it moves.
+    a.call("folders.setOrder", json!({ "path": "", "order": ["folder:Reading", id] })).unwrap();
+    a.call("folders.setOrder", json!({ "path": "Reading", "order": [id] })).unwrap();
     let m = a.call("records.move", json!({ "ids": [id], "folder": "Reading" })).unwrap();
     assert!(m["moved"][0]["info"]["path"].as_str().unwrap().starts_with("pages/Reading/"), "{m}");
     assert_eq!(m["failed"], json!([]));
     let r = a.call("folders.move", json!({ "from": "Reading", "to": "Done/Reading" })).unwrap();
     assert_eq!(r, json!({ "path": "Done/Reading", "moved": 1 }));
+    let order = &a.call("folders.list", json!({})).unwrap()["order"];
+    assert_eq!(order[""], json!([id]), "moved away: no longer placed at the top level");
+    assert_eq!(order["Done/Reading"], json!([id]), "{order}");
     let e = a.call("folders.remove", json!({ "path": "Done" })).unwrap_err();
     assert!(e.message.contains("isn’t empty"), "{}", e.message);
     a.call("records.move", json!({ "ids": [id], "folder": null })).unwrap();

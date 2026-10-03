@@ -40,6 +40,7 @@ pub mod methods {
     pub const FOLDERS_CREATE: &str = "folders.create";
     pub const FOLDERS_MOVE: &str = "folders.move";
     pub const FOLDERS_REMOVE: &str = "folders.remove";
+    pub const FOLDERS_SET_ORDER: &str = "folders.setOrder";
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -230,6 +231,17 @@ pub struct RelocateParams {
 pub struct FoldersList {
     pub folders: Vec<String>,
     pub kinds: Vec<String>,
+    /// The order the user arranged folders in: `{ folder: [record ID or "folder:<name>", …] }`,
+    /// the top level as `""`.
+    #[ts(type = "Record<string, string[]>")]
+    pub order: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+/// Keeps the order a folder's contents were arranged in (`path` "" is the top level).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct FolderOrderParams {
+    pub path: String,
+    pub order: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]

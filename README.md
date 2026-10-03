@@ -92,4 +92,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-03 | The real-pages check, on 10 pages from the user's list: PDFKit for PDF text, in-memory page saving, soft hyphens, canvas and slow-page checks, fewer false alarms. | [0030](docs/decisions/0030-real-pages-check.md) |
 | 2026-10-03 | Making captures: a button by the selection, a panel beside the document, parts highlighted and in source order, sharp regions. | [0031](docs/decisions/0031-making-captures.md) |
 | 2026-10-03 | Removing snapshots (two steps; never the last, never one a capture uses) and selecting several records. | [0032](docs/decisions/0032-removing-snapshots-and-selecting-several.md) |
-| 2026-10-03 | Folders: real subfolders for notes and library items, one tree to the user; the Files page; pointer dragging. | [0033](docs/decisions/0033-folders-and-the-files-page.md) |
+| 2026-10-03 | Folders: real subfolders for notes and library items, one tree to the user; the Files page; pointer dragging; arranging by hand. | [0033](docs/decisions/0033-folders-and-the-files-page.md) |

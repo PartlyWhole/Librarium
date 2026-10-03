@@ -3,4 +3,9 @@
 /**
  * The user's folders (`/`-separated paths, sorted), and the record kinds kept in them.
  */
-export type FoldersList = { folders: Array<string>, kinds: Array<string>, };
+export type FoldersList = { folders: Array<string>, kinds: Array<string>, 
+/**
+ * The order the user arranged folders in: `{ folder: [record ID or "folder:<name>", …] }`,
+ * the top level as `""`.
+ */
+order: Record<string, string[]>, };

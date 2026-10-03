@@ -108,16 +108,33 @@ export class Contents {
   }
 }
 
-export type SortKey = "name" | "kind" | "added";
+export type SortKey = "name" | "kind" | "added" | "manual";
 export interface Sort {
   key: SortKey;
   dir: 1 | -1;
 }
 
+/** An entry's key in its folder's arrangement: a record's ID, or `folder:<name>`. */
+export const keyOf = (e: Entry): string => (e.type === "folder" ? `folder:${e.name}` : e.id);
+
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
-/** Folders first (as in Drive), then by the sort key, then by name. */
-export function sortEntries(entries: Entry[], sort: Sort, kindName: (r: RecordInfo) => string): Entry[] {
+/**
+ * Folders first (as in Drive), then by the sort key, then by name. "Manual" is the order the
+ * user arranged (`order`, as keys); what it doesn't list comes after, folders first.
+ */
+export function sortEntries(entries: Entry[], sort: Sort, kindName: (r: RecordInfo) => string, order: string[] = []): Entry[] {
+  if (sort.key === "manual") {
+    const at = new Map(order.map((k, i) => [k, i]));
+    const rank = (e: Entry) => at.get(keyOf(e)) ?? Infinity;
+    return [...entries].sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra !== rb) return ra < rb ? -1 : 1;
+      if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+      return byName.compare(a.name, b.name);
+    });
+  }
   const key = (e: Entry): string => {
     if (sort.key === "kind") return e.type === "folder" ? "" : kindName(e.record);
     if (sort.key === "added") return e.type === "folder" ? "" : e.record.created ?? "";
@@ -128,6 +145,19 @@ export function sortEntries(entries: Entry[], sort: Sort, kindName: (r: RecordIn
     const k = sort.key === "name" ? 0 : byName.compare(key(a), key(b));
     return (k || byName.compare(a.name, b.name)) * sort.dir;
   });
+}
+
+/**
+ * The arrangement after placing `moving` (keys) just before or after `anchor`, starting from
+ * `current` (the keys as shown). Unchanged when the anchor is among what moves.
+ */
+export function placed(current: string[], moving: string[], anchor: string, where: "before" | "after"): string[] {
+  if (moving.includes(anchor)) return current;
+  const rest = current.filter((k) => !moving.includes(k));
+  const i = rest.indexOf(anchor);
+  if (i < 0) return [...rest, ...moving];
+  const at = where === "before" ? i : i + 1;
+  return [...rest.slice(0, at), ...moving, ...rest.slice(at)];
 }
 
 /** "untitled folder", then "untitled folder 2", … (as Finder names new folders). */

@@ -513,3 +513,8 @@ body.dragging-items, body.dragging-items * { cursor: grabbing !important; }
   .files-added, .files-col.added { display: none; }
   .files-filter { width: 110px; }
 }
+/* Placing things beside an entry: a line where they will go. */
+.files-body.list .files-entry.drop-before, .tree-item.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.files-body.list .files-entry.drop-after, .tree-item.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.files-body.icons .files-entry.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+.files-body.icons .files-entry.drop-after { box-shadow: inset -3px 0 0 var(--accent); }

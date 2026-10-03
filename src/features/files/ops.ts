@@ -17,6 +17,8 @@ export const message = (e: unknown) => String((e as { message?: string })?.messa
 export interface FolderStore {
   list(): string[];
   kinds(): string[];
+  /** The arrangement of one folder (reads a signal). */
+  order(folder: string): string[];
   refresh(): Promise<void>;
 }
 
@@ -29,6 +31,15 @@ export function canMoveInto(shell: ShellApi, p: DragPayload, dest: string, kinds
   if (rs.some((r) => !r || !kinds.includes(r.kind))) return false;
   // Something has to actually move.
   return p.folders.length > 0 || rs.some((r) => r && folderOf(r) !== dest);
+}
+
+/** Whether a drag can be placed among the things in `folder` (moving there if it must). */
+export function canPlaceIn(shell: ShellApi, p: DragPayload, folder: string, kinds: string[]): boolean {
+  if (p.folders.some((f) => within(folder, f))) return false;
+  return p.records.every((id) => {
+    const r = shell.records.get(id);
+    return !!r && kinds.includes(r.kind);
+  });
 }
 
 /** Moves records and folders into `dest`, offering Undo. */

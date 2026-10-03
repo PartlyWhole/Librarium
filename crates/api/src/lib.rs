@@ -9,7 +9,8 @@ use librarium_contracts::api::{
 };
 use librarium_contracts::api::{Draft, FolderInfo, LogParams};
 use librarium_contracts::api::{
-    FolderMoveParams, FolderMoved, FolderPathParams, FoldersList, MoveFailure, MoveRecordsParams, MovedRecords,
+    FolderMoveParams, FolderMoved, FolderOrderParams, FolderPathParams, FoldersList, MoveFailure, MoveRecordsParams,
+    MovedRecords,
 };
 use librarium_contracts::api::{JobInfo, JobsList};
 use librarium_contracts::events::methods as events;
@@ -70,6 +71,7 @@ pub const METHODS: &[&str] = &[
     methods::FOLDERS_CREATE,
     methods::FOLDERS_MOVE,
     methods::FOLDERS_REMOVE,
+    methods::FOLDERS_SET_ORDER,
 ];
 
 /// The settings key holding the library folder.
@@ -481,7 +483,11 @@ impl Api {
     pub fn folders_list(&self) -> Result<FoldersList> {
         let lib = self.library()?;
         let s = &lib.store;
-        Ok(FoldersList { folders: s.folders(), kinds: s.foldered().into_iter().map(|d| d.kind).collect() })
+        Ok(FoldersList {
+            folders: s.folders(),
+            kinds: s.foldered().into_iter().map(|d| d.kind).collect(),
+            order: s.folder_order(),
+        })
     }
 
     /// What a folder holds, so first run can ask how to treat it.
@@ -582,6 +588,11 @@ impl Api {
                 let t2 = to.clone();
                 let moved = self.library()?.write(Lane::Interactive, move |tx| tx.move_folder(&p.from, &t2))?;
                 to_json(FolderMoved { path: to, moved })
+            }
+            methods::FOLDERS_SET_ORDER => {
+                let p: FolderOrderParams = params(p)?;
+                self.library()?.write(Lane::Interactive, move |tx| tx.set_folder_order(&p.path, p.order))?;
+                Ok(Value::Null)
             }
             methods::FOLDERS_REMOVE => {
                 let p: FolderPathParams = params(p)?;

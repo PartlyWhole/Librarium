@@ -74,6 +74,28 @@ Option 2.
 - **Kinds' looks:** a new shell slot, `shell.record-looks`, gives each kind's icon, kind name
   ("Web page", "PDF", "Note") and detail line (a page's site, a PDF's page count).
 
+## Addendum: arranging by hand (positional dragging)
+
+- **Where the arrangement is kept:** `.librarium/order.json` in the library. It is the
+  user's organisation, so it travels with the library and is not a per-device preference.
+  It holds `{ folder: [entry, …] }`, the top level as `""`. An entry is a record's ID, which
+  survives renames and moves, or `folder:<name>`. Entries not listed come after, in the
+  usual order. Losing the file loses only the arrangement.
+- **It follows folders:** a folder move or rename updates it inside the same intent.
+  Renamed in place, a folder keeps its spot; moved elsewhere, it leaves its old spot.
+  Removing a folder removes its arrangement.
+- **Dropping:**
+  - On the top or bottom edge of a row (left or right in icons), things go before or after
+    it, and a line shows where.
+  - In the middle of a folder, they go into it.
+  - Things from another folder are moved here first, then placed.
+- **The sort:** the first placement switches to "As arranged", taking the order shown as its
+  start. "As arranged" is in the Sort menu, and any other sort goes back. Placing offers
+  Undo. The sidebar's folder tree shows the same order.
+- **Keyboard:** ⌥↑/⌥↓ (⌥←/⌥→ in icons) move the selection one place.
+- **Drop targets:** a drop target can say where in itself a drop goes (`where`), or refuse
+  and let what is around it take the drop.
+
 ## Consequences
 
 - **Finder and Librarium show the same folders.** A folder made in Finder appears when the
