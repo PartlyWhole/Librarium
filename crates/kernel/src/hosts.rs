@@ -30,6 +30,7 @@ pub fn kernel_job_kinds(r: &mut Registry<JobKind>) {
             title: "Rebuilding the index".into(),
             noun: "index rebuilds".into(),
             resumable: false,
+            one_at_a_time: false,
             run: Arc::new(|ctx, _p: &Value| {
                 ctx.views.rebuild_all(&|done, total| {
                     ctx.progress(

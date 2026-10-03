@@ -61,6 +61,9 @@ pub struct JobKind {
     pub noun: String,
     /// Resumes after a restart (page saves, text recognition).
     pub resumable: bool,
+    /// At most one of this kind runs at a time (it waits on a shared resource, such as the one
+    /// window pages are saved in), so the other runners stay free for other work.
+    pub one_at_a_time: bool,
     pub run: JobFn,
     pub trigger: Option<TriggerFn>,
 }
@@ -356,7 +359,13 @@ impl Inner {
 
     fn next(&self) -> Option<JobInfo> {
         let mut jobs = self.jobs.lock().unwrap();
-        let mut queued: Vec<&mut JobInfo> = jobs.values_mut().filter(|j| j.state == JobState::Queued).collect();
+        let busy: std::collections::HashSet<String> = jobs
+            .values()
+            .filter(|j| j.state == JobState::Running && self.kinds.get(&j.kind).is_some_and(|k| k.one_at_a_time))
+            .map(|j| j.kind.clone())
+            .collect();
+        let mut queued: Vec<&mut JobInfo> =
+            jobs.values_mut().filter(|j| j.state == JobState::Queued && !busy.contains(&j.kind)).collect();
         queued.sort_by_key(|j| j.created_ms);
         let j = queued.into_iter().next()?;
         j.state = JobState::Running;

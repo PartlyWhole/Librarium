@@ -25,6 +25,7 @@ fn hosts(lib: Arc<Library>, worker: Arc<FakeWorkerHost>, index: MemIndex, runs: 
             title: "Parsing".into(),
             noun: "parses".into(),
             resumable: true,
+            one_at_a_time: false,
             run: Arc::new(move |ctx, p: &Value| {
                 r2.fetch_add(1, Ordering::SeqCst);
                 ctx.worker.call("ping", p.clone(), Duration::from_secs(1))?;
@@ -118,4 +119,68 @@ fn unfinished_jobs_resume_after_a_restart() {
     let l = hs.jobs.list();
     assert!(l.running.is_empty() && l.failed.is_empty(), "{l:?}");
     hs.stop();
+}
+
+#[test]
+fn a_one_at_a_time_kind_leaves_the_other_runner_free() {
+    let h = H::new();
+    let lib = Arc::new(h.open());
+    let release = Arc::new(std::sync::Mutex::new(false));
+    let mut r = registry();
+    let rel = release.clone();
+    r.add(
+        "test",
+        "test.slow",
+        JobKind {
+            kind: "test.slow".into(),
+            title: "Slow".into(),
+            noun: "slow jobs".into(),
+            resumable: false,
+            one_at_a_time: true,
+            run: Arc::new(move |_ctx, _p: &Value| {
+                while !*rel.lock().unwrap() {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Ok(())
+            }),
+            trigger: None,
+        },
+    )
+    .unwrap();
+    r.add(
+        "test",
+        "test.quick",
+        JobKind {
+            kind: "test.quick".into(),
+            title: "Quick".into(),
+            noun: "quick jobs".into(),
+            resumable: false,
+            one_at_a_time: false,
+            run: Arc::new(|_ctx, _p: &Value| Ok(())),
+            trigger: None,
+        },
+    )
+    .unwrap();
+    let index = MemIndex::new();
+    let hs = Hosts::start(
+        lib,
+        &(Arc::new(move |_p: &Path| Arc::new(index.clone()) as Arc<dyn librarium_contracts::ports::IndexEngine>)
+            as librarium_kernel::library::IndexFactory),
+        Arc::new(FakeWorkerHost::new()),
+        vec![],
+        r,
+        HostEvents { indexed: Box::new(|_| {}), job: Box::new(|_| {}) },
+    )
+    .unwrap();
+    // Two slow jobs first: only one may run, so the second runner takes the quick job.
+    let s1 = hs.jobs.enqueue("test.slow", "1", json!({})).unwrap();
+    let s2 = hs.jobs.enqueue("test.slow", "2", json!({})).unwrap();
+    std::thread::sleep(Duration::from_millis(50));
+    let q = hs.jobs.enqueue("test.quick", "q", json!({})).unwrap();
+    assert_eq!(hs.jobs.wait(q.id, Duration::from_secs(2)).unwrap().state, JobState::Done, "the quick job didn't wait");
+    assert_eq!(hs.jobs.get(s2.id).unwrap().state, JobState::Queued, "the second slow job waits its turn");
+    *release.lock().unwrap() = true;
+    for s in [s1, s2] {
+        assert_eq!(hs.jobs.wait(s.id, Duration::from_secs(5)).unwrap().state, JobState::Done);
+    }
 }

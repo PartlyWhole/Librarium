@@ -265,6 +265,7 @@ pub fn contribute_jobs(r: &mut Registry<JobKind>) -> Result<(), DuplicateId> {
             title: "Refreshing link labels".into(),
             noun: "link repairs".into(),
             resumable: false,
+            one_at_a_time: false,
             run: Arc::new(repair),
             trigger: Some({
                 // Last known titles, to tell when labels need refreshing.
