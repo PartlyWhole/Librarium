@@ -402,3 +402,4 @@ body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6
 .pending-mark { position: absolute; pointer-events: none; z-index: 3; background: rgb(255 196 0 / 35%); mix-blend-mode: multiply; border-radius: 2px; }
 .pending-mark.region { background: rgb(255 196 0 / 12%); border: 2px solid rgb(230 160 0); mix-blend-mode: normal; }
 @media (max-width: 760px) { .reader-aside { width: 260px; } }
+.links-input { width: 100%; box-sizing: border-box; min-height: 96px; max-height: 50vh; resize: vertical; font-family: var(--mono, ui-monospace, monospace); font-size: var(--small); }

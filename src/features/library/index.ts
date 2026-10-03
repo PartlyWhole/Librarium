@@ -63,27 +63,44 @@ export function library(shell: ShellApi): void {
 
   shell.actions.add("library", {
     id: "library.savePage",
-    title: "Save a web page…",
+    title: "Save web pages…",
     when: () => shell.folder()?.state === "open",
     menu: { name: "file", group: 1 },
     icon: Globe,
     run: () => {
-      const input = h("input", { class: "combo-input", type: "url", placeholder: "https://…", "aria-label": "The page’s address", spellcheck: false });
+      const input = h("textarea", { class: "combo-input links-input", rows: 4, placeholder: "https://…\nOne address per line, or paste a whole list.", "aria-label": "Addresses of the pages to save", spellcheck: false }) as HTMLTextAreaElement;
+      const count = h("p", { class: "muted small", "aria-live": "polite" });
+      const update = () => {
+        const n = webAddresses(input.value).length;
+        count.textContent = n > 1 ? `${n} pages` : "";
+      };
+      input.addEventListener("input", update);
       const go = async () => {
-        const url = input.value.trim();
-        if (!url) return;
-        try {
-          await call("library.savePage", { url });
-          m.close();
-          shell.status.show(`Saving ${url}…`);
-        } catch (e) {
-          toast(String((e as { message?: string }).message ?? e));
+        const urls = webAddresses(input.value);
+        if (!urls.length) return toast("There’s no web address (http or https) there.");
+        m.close();
+        let queued = 0;
+        const failed: string[] = [];
+        for (const url of urls) {
+          try {
+            await call("library.savePage", { url });
+            queued++;
+          } catch {
+            failed.push(url);
+          }
         }
+        shell.status.show(queued === 1 ? `Saving ${urls[0]}…` : `Saving ${queued} pages in the background; the jobs list shows how far it has got.`, 8000);
+        if (failed.length) toast(`${failed.length} couldn’t be queued: ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? "…" : ""}`);
       };
       input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.isComposing) void go();
+        // Enter saves a single address; with a list, ⌘↩ saves.
+        if (e.key === "Enter" && !e.isComposing && (e.metaKey || e.ctrlKey || !input.value.includes("\n"))) {
+          e.preventDefault();
+          e.stopPropagation();
+          void go();
+        }
       });
-      const m = modal(h("div", { class: "ask" }, h("h2", { class: "ask-title" }, "Save a web page"), h("p", { class: "muted small" }, "Librarium keeps a faithful PDF of the page and its clean text, with where and when it came from."), input, h("div", { class: "ask-buttons" }, h("button", { class: "button", onclick: () => m.close() }, "Cancel"), h("button", { class: "button primary", onclick: () => void go() }, "Save"))), { label: "Save a web page" });
+      const m = modal(h("div", { class: "ask" }, h("h2", { class: "ask-title" }, "Save web pages"), h("p", { class: "muted small" }, "Librarium keeps a faithful PDF of each page and its clean text, with where and when it came from. Pages are saved one after another in the background."), input, count, h("div", { class: "ask-buttons" }, h("button", { class: "button", onclick: () => m.close() }, "Cancel"), h("button", { class: "button primary", title: "Save (⌘↩)", onclick: () => void go() }, "Save"))), { label: "Save web pages" });
       input.focus();
     },
   });
@@ -259,4 +276,25 @@ export function library(shell: ShellApi): void {
     emptyText: "No library items yet.",
     nodes: () => shell.records.list(KIND).sort((a, b) => a.title.localeCompare(b.title)).map((i) => ({ id: i.id, label: i.title || "Untitled", icon: iconFor(i), current: shell.router.current().params.id === i.id, onActivate: () => shell.openRecord(i.id) })),
   }, 1);
+}
+
+/** The distinct http(s) addresses in some text (one per line, or anywhere in it). */
+export function webAddresses(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/https?:\/\/[^\s<>"'\]]+/gi)) {
+    // Trailing punctuation belongs to the sentence, and ")" too unless it closes a "(" inside.
+    let url = m[0];
+    for (;;) {
+      if (/[.,;:!?]$/.test(url)) url = url.slice(0, -1);
+      else if (url.endsWith(")") && (url.match(/\(/g)?.length ?? 0) < (url.match(/\)/g)?.length ?? 0)) url = url.slice(0, -1);
+      else break;
+    }
+    try {
+      new URL(url);
+    } catch {
+      continue;
+    }
+    if (!out.includes(url)) out.push(url);
+  }
+  return out;
 }

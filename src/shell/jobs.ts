@@ -54,6 +54,8 @@ export function jobsUi(shell: ShellApi): void {
     const parts: string[] = [];
     if (r.length === 1) parts.push(`${r[0]!.title}${r[0]!.progress != null ? ` ${Math.round(r[0]!.progress * 100)}%` : "…"}`);
     else if (r.length > 1) parts.push(`${r.length} jobs running…`);
+    const waiting = jobs().running.length - r.length;
+    if (waiting) parts.push(`${waiting} waiting`);
     if (f) parts.push(`${f} failed`);
     jobsText.set(parts.join(" · "));
   });
