@@ -49,6 +49,8 @@ src/                     the interface (plain TypeScript + Vite)
 tests/                   interface-wide tests, the WebKit check page, and fixtures
 vendor/foliate-js/       the EPUB reader, pinned (see PATCHES.md)
 docs/decisions/          MADR-style decision records
+docs/DEVELOPING.md       the developer guide: architecture, subsystems, lessons learned
+docs/plans/              plans for work in progress
 ```
 
 Dependencies point inward, towards `contracts`. Rust: `src-tauri/tests/direction.rs`.
