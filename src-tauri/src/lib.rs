@@ -16,6 +16,20 @@ fn rpc(app: tauri::State<'_, App>, request: RpcRequest) -> RpcResponse {
     app.transport.handle(request)
 }
 
+/// File bytes (an item's original, for the reader), scoped to the item's folder.
+#[tauri::command]
+fn bytes(
+    app: tauri::State<'_, App>,
+    id: String,
+    name: Option<String>,
+) -> Result<tauri::ipc::Response, librarium_contracts::BackendError> {
+    let lib = app.api.library()?;
+    let id = id.parse().map_err(librarium_contracts::BackendError::invalid)?;
+    let path = librarium_feature_library::file_path(&lib.store, id, name.as_deref())?;
+    let b = lib.store.fs.read(&path).map_err(|e| librarium_contracts::BackendError::io(e.to_string()))?;
+    Ok(tauri::ipc::Response::new(b))
+}
+
 #[tauri::command]
 fn subscribe(app: tauri::State<'_, App>, channel: Channel<RpcNotification>) {
     app.transport.subscribe(channel);
@@ -88,7 +102,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![rpc, subscribe])
+        .invoke_handler(tauri::generate_handler![rpc, subscribe, bytes])
         .run(tauri::generate_context!())
         .expect("error while running Librarium");
 }

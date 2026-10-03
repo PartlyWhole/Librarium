@@ -3,5 +3,5 @@
   "identifier": "main",
   "description": "The main window: the only webview with IPC. Webviews showing captured pages or EPUBs get none.",
   "windows": ["main"],
-  "permissions": ["core:default", "core:menu:default", "core:window:allow-destroy", "dialog:allow-open", "allow-rpc", "allow-subscribe"]
+  "permissions": ["core:default", "core:menu:default", "core:window:allow-destroy", "dialog:allow-open", "allow-rpc", "allow-subscribe", "allow-bytes"]
 }

@@ -1,6 +1,6 @@
 [package]
 name = "librarium-feature-library"
-description = "The library feature."
+description = "The library feature: imports of PDFs, images and EPUBs, their text, and their files."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,10 @@ librarium-contracts.workspace = true
 librarium-kernel.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.10"
+
+[dev-dependencies]
+librarium-testkit.workspace = true
 
 [lints]
 workspace = true

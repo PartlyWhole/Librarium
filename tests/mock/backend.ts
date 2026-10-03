@@ -120,6 +120,8 @@ const api: Record<string, (p: any) => unknown> = {
     const info = seed("note", state.today, "", { "daily.date": state.today });
     return { info, seq: touch(need(info.id), "created") };
   },
+  "library.text": () => null,
+  "library.import": () => ({ imported: [], failed: [] }),
   "jobs.list": () => ({ running: state.jobs.filter((j) => j.state === "running" || j.state === "queued"), failed: state.jobs.filter((j) => j.state === "failed"), recent: state.jobs.filter((j) => j.state === "done"), resumed: null }),
   "index.rebuild": () => ({ id: "0192f3a4-7c1e-7b2a-9f00-0000000000ff", kind: "index.rebuild", key: "all", state: "queued", title: "Rebuilding the index", attempts: 0, error: null, progress: null, message: null, payload: null, created_ms: 0, updated_ms: 0 }),
   "search.query": (p) => {
@@ -203,6 +205,34 @@ export function onCloseRequested(handler: () => Promise<void>): void {
   closeHandlers.push(handler);
 }
 
+/** Bytes of seeded files (tests put them here). */
+export const files = new Map<string, ArrayBuffer>();
+
+/** Fixture URLs for items in the browser preview. */
+const fileUrls = new Map<string, string>();
+
+export async function readBytes(id: string): Promise<ArrayBuffer> {
+  const b = files.get(id);
+  if (b) return b;
+  const url = fileUrls.get(id);
+  if (url) return (await fetch(url)).arrayBuffer();
+  fail("not-found", "no file");
+}
+
+function seedItem(title: string, format: string, fixture: string, pages?: number) {
+  const info = seed("item", title, "", { "library.format": format, "library.original": fixture, ...(pages ? { "library.pages": pages } : {}), provenance: { "original-name": fixture, "saved-at": "2026-10-02T09:14:00Z" }, sha256: "…" });
+  fileUrls.set(info.id, `/tests/fixtures/library/${fixture}`);
+  return info;
+}
+
+export async function pickFiles(): Promise<string[]> {
+  return [];
+}
+
+export function onFileDrop(): () => void {
+  return () => {};
+}
+
 export async function pickFolder(): Promise<string | null> {
   return state.pick;
 }
@@ -219,7 +249,8 @@ export const mock = {
     state.calls = [];
     state.menu = [];
     state.pick = null;
-    state.idn = 1;
+    // IDs keep counting across resets, so nothing from an earlier test can touch a new record.
+    listeners.clear();
     state.drafts.clear();
     state.failSave = null;
     state.jobs = [];
@@ -233,7 +264,13 @@ export const mock = {
     seed("note", "Reading list", "- Ellul\n- Weil\n");
     seed("note", "2026-10-02", "Morning pages.\n", { "daily.date": "2026-10-02" });
     seed("note", "2026-10-01", "Yesterday.\n", { "daily.date": "2026-10-01" });
-    seed("item", "The Technological Society");
+    seedItem("The Technological Society", "pdf", "short.pdf", 2);
+    seedItem("A hundred pages", "pdf", "text-100.pdf", 100);
+    seedItem("A JBIG2 scan", "pdf", "jbig2_symbol_offset.pdf", 1);
+    seedItem("A JPEG 2000 scan", "pdf", "bug_jpx.pdf", 1);
+    seedItem("A JPEG 2000 gradient", "pdf", "gradient-jpx.pdf", 1);
+    seedItem("Notebooks", "epub", "notebooks.epub", 2);
+    seedItem("A gradient", "image", "gradient.png");
   },
 };
 

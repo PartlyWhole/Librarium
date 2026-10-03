@@ -606,6 +606,22 @@ impl Store {
         slugify(title)
     }
 
+    /// A new staging folder in Application Support for an import.
+    pub fn stage_dir(&self, id: Id) -> PathBuf {
+        self.app_dir.join("staging").join(id.to_string())
+    }
+
+    /// Writes a file into a staging folder, durably (staging is not the store).
+    pub fn stage_file(&self, dir: &Path, name: &str, bytes: &[u8]) -> Result<()> {
+        self.fs.create_dir_all(dir).map_err(|e| io_err(e, "staging"))?;
+        self.safe_write(&dir.join(name), bytes, true, Durability::Full).map_err(|e| io_err(e, "staging"))
+    }
+
+    /// The folder of a folder record (library items).
+    pub fn record_dir(&self, e: &Entry) -> PathBuf {
+        self.abs(&e.path).parent().unwrap().to_path_buf()
+    }
+
     /// The subfolder of a record's path inside its kind's folder.
     pub fn subfolder_of(&self, def: &RecordKindDef, rel: &str) -> Option<String> {
         let inner = rel.strip_prefix(&format!("{}/", def.folder))?;
@@ -618,6 +634,38 @@ impl Store {
 pub struct Tx<'a> {
     pub store: &'a Store,
     pub dur: Durability,
+}
+
+fn libc_exdev() -> i32 {
+    18 // EXDEV on macOS: a rename across volumes
+}
+
+/// Copies a folder tree (for staging across volumes).
+pub fn copy_tree(fs: &dyn FileSystem, from: &Path, to: &Path) -> io::Result<()> {
+    fs.create_dir_all(to)?;
+    for e in fs.list(from)? {
+        let (a, b) = (from.join(&e.name), to.join(&e.name));
+        if e.is_dir {
+            copy_tree(fs, &a, &b)?;
+        } else {
+            fs.write_new(&b, &fs.read(&a)?)?;
+            fs.flush_file(&b, Flush::Full)?;
+        }
+    }
+    fs.flush_dir(to, Flush::Full)
+}
+
+/// Removes a staging folder tree (never used on the store).
+pub fn remove_tree(fs: &dyn FileSystem, dir: &Path) -> io::Result<()> {
+    for e in fs.list(dir)? {
+        let p = dir.join(&e.name);
+        if e.is_dir {
+            remove_tree(fs, &p)?;
+        } else {
+            fs.remove_file(&p)?;
+        }
+    }
+    fs.remove_dir(dir)
 }
 
 pub fn clean_title(t: &str) -> String {
@@ -772,6 +820,53 @@ impl<'a> Tx<'a> {
         s.safe_write(&abs, out.as_bytes(), false, self.dur).map_err(|err| io_err(err, "repairing"))?;
         self.indexed(&e.path, out.as_bytes(), ChangeOp::Updated)?;
         Ok(true)
+    }
+
+    /// Moves a staged folder (holding `record.json` and its files) into the store with one
+    /// rename, then indexes it. Staging is in Application Support; when the library is on
+    /// another volume, the folder is first copied to `<library>/.librarium/staging/`, so the
+    /// move into place is still one rename.
+    pub fn import_staged(&self, kind: &str, stage: &Path, title: &str) -> Result<(Entry, u64)> {
+        let s = self.store;
+        let bytes = s.fs.read(&stage.join("record.json")).map_err(|e| io_err(e, "reading the staged record"))?;
+        let folder = s.kind_def(kind)?.folder.clone();
+        let d = s
+            .decode(&format!("{folder}/staged/record.json"), &bytes)
+            .ok_or_else(|| BackendError::internal("that kind can't be imported"))?;
+        let id = d.id.ok_or_else(|| BackendError::invalid("the staged record has no ID"))?;
+        let def = s.kind_def(&d.kind)?.clone();
+        let slug = s.slug_for(&d.kind, title, &d.fields);
+        let rel = s.record_path(&def, id, &slug, None);
+        let target = s.abs(&rel).parent().unwrap().to_path_buf();
+        s.fs.create_dir_all(target.parent().unwrap()).map_err(|e| io_err(e, "creating the folder"))?;
+        let moved = s.fs.rename_exclusive(stage, &target);
+        if let Err(e) = moved {
+            if e.raw_os_error() != Some(libc_exdev()) {
+                return Err(io_err(e, "moving the import into place"));
+            }
+            let near = s.root.join(".librarium/staging").join(id.to_string());
+            copy_tree(&*s.fs, stage, &near).map_err(|e| io_err(e, "staging beside the library"))?;
+            s.fs.rename_exclusive(&near, &target).map_err(|e| io_err(e, "moving the import into place"))?;
+            let _ = remove_tree(&*s.fs, stage);
+        }
+        s.fs.flush_dir(target.parent().unwrap(), self.dur.flush()).map_err(|e| io_err(e, "flushing"))?;
+        let bytes = s.fs.read(&target.join("record.json")).map_err(|e| io_err(e, "reading"))?;
+        self.indexed(&rel, &bytes, ChangeOp::Created)
+    }
+
+    /// Writes a file inside a folder record (e.g. its extracted text), safely. The record's own
+    /// `record.json` is the commit point and should be updated after.
+    pub fn write_record_file(&self, id: Id, name: &str, bytes: &[u8]) -> Result<PathBuf> {
+        let s = self.store;
+        let e = self.writable(id)?;
+        if name.split('/').any(|p| p.is_empty() || p == ".." || p.starts_with('.')) || name == "record.json" {
+            return Err(BackendError::invalid(format!("not a file name for a record: {name:?}")));
+        }
+        let dir = s.abs(&e.path).parent().unwrap().to_path_buf();
+        let target = dir.join(name);
+        s.fs.create_dir_all(target.parent().unwrap()).map_err(|err| io_err(err, "creating the folder"))?;
+        s.safe_write(&target, bytes, false, self.dur).map_err(|err| io_err(err, "writing"))?;
+        Ok(target)
     }
 
     /// Sets or removes module fields (`module.key`), changing only their bytes.

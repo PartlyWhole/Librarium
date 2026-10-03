@@ -235,9 +235,7 @@ impl Library {
                     .collect();
                 {
                     let mut q = pending.q.lock().unwrap();
-                    if !interesting.is_empty() {
-                        store.note_outside_activity();
-                    }
+
                     q.paths.extend(interesting);
                     q.rescan |= b.rescan;
                     q.state = Some(b.state);
@@ -370,7 +368,12 @@ fn process_pending(tx: &Tx, pending: &Pending, changes_json: &Path) {
     }
     let r = if rescan { tx.full_check() } else { tx.check_paths(&paths.into_iter().collect::<Vec<_>>()) };
     match r {
-        Ok(_) => {
+        Ok(report) => {
+            // Only real outside changes restart the quiet clock (our own writes come back as
+            // events too, and are recognised by their hash).
+            if report.changed() > 0 || !report.duplicates.is_empty() || report.unidentified > 0 {
+                tx.store.note_outside_activity();
+            }
             if let Some(st) = state {
                 let _ = save_state(tx.store, changes_json, &st);
             }

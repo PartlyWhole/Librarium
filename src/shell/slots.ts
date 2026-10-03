@@ -14,6 +14,7 @@ import type { Records } from "./records";
 import type { Router } from "./router";
 import type { Undo } from "./undo";
 import type { EditorContribution } from "../editor/editor";
+import type { ReaderEngine } from "../reader/host";
 
 /** shell.pages */
 export interface Page {
@@ -99,6 +100,8 @@ export interface ShellApi {
   indexed: Signal<number>;
   /** shell.editor-extensions */
   editorExtensions: Registry<EditorContribution>;
+  /** shell.reader-engines */
+  readerEngines: Registry<ReaderEngine>;
   undo: Undo;
   /** Work to finish before the window closes (e.g. a last save). */
   beforeClose(fn: () => Promise<void>): () => void;

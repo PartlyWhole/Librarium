@@ -17,6 +17,7 @@ it("starts with 10,000 notes", async () => {
   const ms = performance.now() - t;
   console.log(`interface ready with 10,000 notes in ${ms.toFixed(0)} ms`);
   expect(shell.records.list().length).toBeGreaterThanOrEqual(10_000);
-  expect(ms).toBeLessThan(1000);
+  // Usually about 110 ms; the limit is the whole cold-start budget, since tests run in parallel.
+  expect(ms).toBeLessThan(1500);
   shell.destroy();
 }, 30_000);

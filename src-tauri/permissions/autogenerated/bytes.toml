@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bytes"
+description = "Enables the bytes command without any pre-configured scope."
+commands.allow = ["bytes"]
+
+[[permission]]
+identifier = "deny-bytes"
+description = "Denies the bytes command without any pre-configured scope."
+commands.deny = ["bytes"]

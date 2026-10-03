@@ -21,6 +21,8 @@ pub struct CheckReport {
     pub moved: Vec<Id>,
     pub removed: Vec<Id>,
     pub duplicates: Vec<String>,
+    /// Files without a usable ID (waiting for one, or unreadable).
+    pub unidentified: usize,
     pub temps_removed: usize,
 }
 
@@ -242,6 +244,7 @@ impl Tx<'_> {
                             by_id.entry(id).or_default().push((rel, Some(Seen::Read { meta, bytes, decoded })))
                         }
                         other => {
+                            report.unidentified += 1;
                             let unparsable = matches!(decoded.read_only, Some(ReadOnly::Unparsable(_)));
                             s.with_state(|st| {
                                 if unparsable {

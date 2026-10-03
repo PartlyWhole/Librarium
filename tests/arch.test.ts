@@ -29,8 +29,8 @@ it("records the interface's slot contributors", () => {
     "shell.side-panel-sections": shell.sidePanel.contributors(),
     "shell.settings-sections": shell.settings.contributors(),
     "shell.openers": shell.openers.contributors(),
-    "shell.editor-extensions": [],
-    "shell.reader-engines": [],
+    "shell.editor-extensions": shell.editorExtensions.contributors(),
+    "shell.reader-engines": shell.readerEngines.contributors(),
     [NOTE_GROUPS]: shell.slot(NOTE_GROUPS).contributors(),
   };
   for (const s of Object.keys(slots)) expect([...SHELL_SLOTS, "shell.openers"]).toContain(s);

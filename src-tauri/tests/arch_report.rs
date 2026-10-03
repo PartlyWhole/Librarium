@@ -71,7 +71,7 @@ fn arch_report() {
     );
     println!("  keystroke to paint             logged by the app as you type (\"keystroke to paint\"); 2,000-line note in the preview: median 1.6 ms, p95 3.0 ms   budget 16 ms");
     println!("  palette opens                  checked by tests/shell.test.ts (fails above 50 ms)   budget 50 ms");
-    println!("  interface start, 10,000 notes  checked by tests/perf.test.ts (fails above 1000 ms in jsdom)");
+    println!("  interface start, 10,000 notes  checked by tests/perf.test.ts (fails above 1500 ms in jsdom; about 110 ms alone)");
     println!();
 }
 

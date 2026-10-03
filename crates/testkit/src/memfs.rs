@@ -402,6 +402,23 @@ impl FileSystem for MemFs {
     }
 
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        {
+            // Folders: move the folder and everything under it (folders are durable at once).
+            let mut st = self.s.lock().unwrap();
+            let (f, t) = (norm(from), norm(to));
+            if st.dirs.contains_key(&f) {
+                Self::step(&mut st)?;
+                if st.dirs.contains_key(&t) {
+                    return Err(io::Error::new(ErrorKind::AlreadyExists, format!("{}", t.display())));
+                }
+                let moved: Vec<PathBuf> = st.dirs.keys().filter(|k| k.starts_with(&f)).cloned().collect();
+                for k in moved {
+                    let d = st.dirs.remove(&k).unwrap();
+                    st.dirs.insert(t.join(k.strip_prefix(&f).unwrap()), d);
+                }
+                return Ok(());
+            }
+        }
         let mut s = self.s.lock().unwrap();
         Self::step(&mut s)?;
         Self::check_writable(&s, to)?;

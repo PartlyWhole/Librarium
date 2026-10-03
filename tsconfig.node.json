@@ -9,6 +9,7 @@
   "include": [
     "vite.config.ts",
     "tests",
-    "scripts"
+    "scripts",
+    "src/**/*.d.ts"
   ]
 }

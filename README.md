@@ -17,7 +17,8 @@ npm run dev            # builds the worker, starts Vite and opens the app
 |---|---|
 | `npm run dev` | Run the app in development |
 | `npm run build` | Build an ad-hoc signed `Librarium.app` (with the worker bundled) |
-| `npm test` | All tests: Vitest, then `cargo test --workspace` |
+| `npm test` | All tests: Vitest, the WebKit reader checks, then `cargo test --workspace` |
+| `npm run test:webkit` | End-to-end reader checks in WebKit (the app's engine) |
 | `npm run lint` | ESLint, dependency-cruiser direction rules, clippy and rustfmt |
 | `npm run gen:types` | Regenerate `src/generated/` from the `contracts` crate |
 | `npm run dev:mock` | The interface alone in a browser, on a sample library (port 1421) |
@@ -45,7 +46,8 @@ src/                     the interface (plain TypeScript + Vite)
   generated/             ts-rs types; never edited by hand
   backend.ts             the only file that talks to the Transport
   shell/ kit/ editor/ reader/ features/
-tests/                   interface-wide tests (direction rules) and fixtures
+tests/                   interface-wide tests, the WebKit check page, and fixtures
+vendor/foliate-js/       the EPUB reader, pinned (see PATCHES.md)
 docs/decisions/          MADR-style decision records
 ```
 
@@ -79,3 +81,6 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-02 | The job host: persistent jobs, idempotency keys, triggers, one retry after a worker failure. | [0019](docs/decisions/0019-job-host.md) |
 | 2026-10-02 | When link labels are refreshed and missing IDs restored. | [0020](docs/decisions/0020-link-repair.md) |
 | 2026-10-02 | Feature API message types live in `contracts`. | [0021](docs/decisions/0021-feature-api-types.md) |
+| 2026-10-03 | How files are imported: staging, one rename, text extracted in the worker. | [0022](docs/decisions/0022-imports.md) |
+| 2026-10-03 | The reader uses PDF.js's legacy build and a polyfill; end-to-end checks run in WebKit. | [0023](docs/decisions/0023-reader-and-webkit.md) |
+| 2026-10-03 | foliate-js vendored at a pinned commit, with book scripts disabled. | [0024](docs/decisions/0024-foliate-js.md) |

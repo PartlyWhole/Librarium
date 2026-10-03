@@ -44,6 +44,7 @@ librarium-testkit.workspace = true
 cargo_metadata = "0.23"
 syn = { version = "2", features = ["full", "visit", "parsing"] }
 proc-macro2 = "1"
+sha2 = "0.10"
 uuid.workspace = true
 
 [lints]

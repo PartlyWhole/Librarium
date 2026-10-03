@@ -63,7 +63,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .icon { display: block; flex: none; }
 
 /* Sidebar */
-.sidebar {
+.app-sidebar {
   grid-area: sidebar;
   display: flex;
   flex-direction: column;
@@ -71,7 +71,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
 }
-.sidebar[hidden], .side-panel[hidden] { display: none; }
+.app-sidebar[hidden], .side-panel[hidden] { display: none; }
 .sidebar-top { padding: 8px; height: var(--header); display: flex; align-items: center; }
 .sidebar-filter, .search-input, .combo-input, .field input[type=text], select {
   width: 100%;
@@ -134,7 +134,7 @@ select { width: auto; }
 .ws-title { font-size: var(--small); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50vw; }
 .ws-actions { display: flex; gap: 2px; justify-content: flex-end; }
 .page-scroll { flex: 1; overflow: auto; }
-.page { max-width: var(--column); margin: 0 auto; padding: 32px 24px 40vh; font-size: var(--reading-size); line-height: 1.5; }
+.ws-page { max-width: var(--column); margin: 0 auto; padding: 32px 24px 40vh; font-size: var(--reading-size); line-height: 1.5; }
 .page-title { font-size: calc(var(--reading-size) * 1.618); font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; margin: 0 0 16px; }
 .muted { color: var(--muted); }
 .small { font-size: var(--small); }
@@ -321,3 +321,29 @@ mark { background: var(--selection); color: inherit; border-radius: 2px; padding
 .panel-subtitle { font-size: var(--tiny); color: var(--muted); margin: 12px 0 4px; font-weight: 600; }
 .row.tight { margin: 2px 0 0; gap: 12px; }
 .status-group { display: flex; gap: 16px; min-width: 0; overflow: hidden; }
+
+/* Library and the reader */
+.item-list { list-style: none; padding: 0; margin: 0; }
+.item-link { display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin: 0 -8px; border-radius: var(--r1); color: var(--ink); text-decoration: none; }
+.item-link:hover { background: var(--hover); }
+.item-link .muted { margin-left: auto; }
+.ws-page.reader-page { max-width: none; padding: 0; height: 100%; display: flex; flex-direction: column; }
+.page-scroll:has(.reader-page) { overflow: hidden; }
+.reader-toolbar { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--border); flex: none; }
+.reader-toolbar .spacer { flex: 1; }
+.reader-pos { margin-left: 8px; }
+.find-input { width: 180px; height: 26px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--r1); background: var(--bg); color: var(--ink); font-size: var(--small); }
+.find-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--selection); }
+.find-count { min-width: 64px; text-align: right; }
+.reader-stage { position: relative; flex: 1; min-height: 0; background: var(--bg-alt); }
+.pdf-container, .image-container, .epub-container { position: absolute; inset: 0; overflow: auto; }
+.pdf-container:focus, .image-container:focus, .epub-container:focus { outline: none; }
+.pdfViewer .ws-page { box-shadow: 0 1px 3px rgb(0 0 0 / 12%); border: 0; margin: 12px auto; }
+.image-container { display: grid; place-items: center; padding: 16px; }
+.image-view { max-width: 100%; height: auto; box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
+.epub-container { background: var(--bg); }
+.epub-view { display: block; height: 100%; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6px; }

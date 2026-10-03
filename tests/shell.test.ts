@@ -65,7 +65,7 @@ describe("layout", () => {
   it("has the five regions and opens today's note", async () => {
     const shell = await boot();
     expect(document.querySelector(".ribbon")).toBeTruthy();
-    expect(document.querySelector(".sidebar")).toBeTruthy();
+    expect(document.querySelector(".app-sidebar")).toBeTruthy();
     expect(document.querySelector(".ws-header")).toBeTruthy();
     expect((document.querySelector(".side-panel") as HTMLElement).hidden).toBe(true);
     expect(document.querySelector(".status-bar")).toBeTruthy();
@@ -138,7 +138,7 @@ describe("actions are reachable", () => {
     expect(shell.router.current().page).toBe("search");
     key("\\", "Backslash", { metaKey: true });
     await settle();
-    expect((document.querySelector(".sidebar") as HTMLElement).hidden).toBe(true);
+    expect((document.querySelector(".app-sidebar") as HTMLElement).hidden).toBe(true);
     key("«", "Backslash", { metaKey: true, altKey: true });
     await settle();
     expect((document.querySelector(".side-panel") as HTMLElement).hidden).toBe(false);

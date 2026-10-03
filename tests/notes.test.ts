@@ -96,10 +96,14 @@ describe("links", () => {
     view.focus();
     type(view, "See [[Wei");
     startCompletion(view);
-    await wait(100);
-    expect(completionStatus(view.state)).toBe("active");
-    await wait(150); // CodeMirror ignores an accept within its interaction delay
-    expect(acceptCompletion(view)).toBe(true);
+    // Results arrive asynchronously, and CodeMirror ignores an accept within its interaction
+    // delay: try until it takes.
+    let accepted = false;
+    for (let i = 0; i < 40 && !accepted; i++) {
+      await wait(50);
+      accepted = completionStatus(view.state) === "active" && acceptCompletion(view);
+    }
+    expect(accepted).toBe(true);
     expect(view.state.doc.toString()).toBe(`See [[Simone Weil|${weil.id}]]`);
   });
 

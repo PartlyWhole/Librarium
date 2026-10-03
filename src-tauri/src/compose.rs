@@ -45,6 +45,7 @@ pub fn views() -> Vec<(String, Arc<dyn librarium_kernel::views::DerivedView>)> {
 pub fn job_kinds() -> librarium_kernel::registry::Registry<librarium_kernel::jobs::JobKind> {
     let mut r = librarium_kernel::jobs::registry();
     librarium_feature_links::contribute_jobs(&mut r).expect("links jobs");
+    librarium_feature_library::contribute_jobs(&mut r).expect("library jobs");
     r
 }
 
@@ -55,6 +56,7 @@ pub fn methods() -> librarium_kernel::registry::Registry<librarium_kernel::metho
     librarium_feature_daily::contribute_methods(&mut r).expect("daily methods");
     librarium_feature_search::contribute_methods(&mut r).expect("search methods");
     librarium_feature_links::contribute_methods(&mut r).expect("links methods");
+    librarium_feature_library::contribute_methods(&mut r).expect("library methods");
     r
 }
 

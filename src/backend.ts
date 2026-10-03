@@ -8,6 +8,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { BackendError } from "./generated/BackendError";
 import type { RpcNotification } from "./generated/RpcNotification";
 import type { RpcRequest } from "./generated/RpcRequest";
@@ -123,4 +124,33 @@ export function onCloseRequested(handler: () => Promise<void>): void {
   void getCurrentWindow().onCloseRequested(async () => {
     await handler();
   });
+}
+
+/** A record's file as raw bytes (an item's original, for the reader). */
+export async function readBytes(id: string, name?: string): Promise<ArrayBuffer> {
+  const r = await invoke<ArrayBuffer>("bytes", { id, name: name ?? null });
+  return r instanceof ArrayBuffer ? r : new Uint8Array(r as unknown as number[]).buffer;
+}
+
+/** Asks the user to choose files to add. */
+export async function pickFiles(title: string, extensions: string[]): Promise<string[]> {
+  if (!inTauri()) return [];
+  const r = await openDialog({ multiple: true, title, filters: [{ name: "Library items", extensions }] });
+  return Array.isArray(r) ? r : typeof r === "string" ? [r] : [];
+}
+
+/** Files dropped on the window. */
+export function onFileDrop(handler: (paths: string[]) => void, hover?: (over: boolean) => void): () => void {
+  if (!inTauri()) return () => {};
+  let off: (() => void) | null = null;
+  void getCurrentWebview()
+    .onDragDropEvent((e) => {
+      if (e.payload.type === "drop") {
+        hover?.(false);
+        handler(e.payload.paths);
+      } else if (e.payload.type === "enter" || e.payload.type === "over") hover?.(true);
+      else hover?.(false);
+    })
+    .then((u) => (off = u));
+  return () => off?.();
 }

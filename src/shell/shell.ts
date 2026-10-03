@@ -6,6 +6,7 @@ import { call, on, onCloseRequested, pickFolder } from "../backend";
 import { Undo } from "./undo";
 import { jobsUi } from "./jobs";
 import type { EditorContribution } from "../editor/editor";
+import type { ReaderEngine } from "../reader/host";
 import { ask, modal } from "../kit/dialog";
 import { h, replace } from "../kit/dom";
 import { comboboxDialog } from "../kit/combobox";
@@ -51,6 +52,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const settings = new Registry<SettingsSection>("shell.settings-sections");
   const openers = new Registry<string>("shell.openers");
   const editorExtensions = new Registry<EditorContribution>("shell.editor-extensions");
+  const readerEngines = new Registry<ReaderEngine>("shell.reader-engines");
   const undo = new Undo();
   const closing = new Set<() => Promise<void>>();
   onCloseRequested(async () => {
@@ -101,6 +103,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       else status.show("That record can't be opened here.");
     },
     editorExtensions,
+    readerEngines,
     undo,
     indexed,
     beforeClose(fn) {
@@ -108,10 +111,20 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       return () => closing.delete(fn);
     },
     timings: {},
-    destroy: () => document.removeEventListener("keydown", onKey, true),
+    destroy: () => {
+      document.removeEventListener("keydown", onKey, true);
+      destroyed = true;
+      if (typeof dispose === "function") dispose();
+      dispose = undefined;
+    },
   };
 
+  // The current page's disposer.
+  let dispose: (() => void) | void;
+  let lastPage = "";
+
   // ---- core actions -------------------------------------------------------------------
+  let destroyed = false;
   const sidebarOpen = prefs.pref("ui.sidebar", true);
   const panelOpen = prefs.pref("ui.sidePanel", false);
   const libraryOpen = () => folder()?.state === "open";
@@ -167,13 +180,13 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const filterText = signal("");
   filter.addEventListener("input", () => filterText.set(filter.value));
   const tree = new Tree("Notes and library", (id, expanded) => folded.update((f) => (expanded ? f.filter((x) => x !== id) : [...new Set([...f, id])])));
-  const sidebarEl = h("aside", { class: "sidebar", "aria-label": "Sidebar" }, h("div", { class: "sidebar-top" }, filter), h("div", { class: "sidebar-scroll" }, tree.el));
+  const sidebarEl = h("aside", { class: "app-sidebar", "aria-label": "Sidebar" }, h("div", { class: "sidebar-top" }, filter), h("div", { class: "sidebar-scroll" }, tree.el));
 
   const back = iconButton(ChevronLeft, "Back", () => router.back(), "Mod+Alt+ArrowLeft");
   const fwd = iconButton(ChevronRight, "Forward", () => router.forward(), "Mod+Alt+ArrowRight");
   const titleEl = h("div", { class: "ws-title" });
   const headerActions = h("div", { class: "ws-actions" });
-  const pageHost = h("div", { class: "page" });
+  const pageHost = h("div", { class: "ws-page" });
   const pageScroll = h("div", { class: "page-scroll" }, pageHost);
   const workspace = h("main", { class: "workspace" }, h("header", { class: "ws-header" }, h("div", { class: "ws-nav" }, back, fwd), titleEl, headerActions), pageScroll);
   const panelEl = h("aside", { class: "side-panel", "aria-label": "Side panel" });
@@ -237,10 +250,9 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   });
 
   // Pages: render the current route.
-  let dispose: (() => void) | void;
-  let lastPage = "";
   effect(() => {
     const r = router.current();
+    if (destroyed) return;
     const st = folder();
     let page = r.page;
     if (st && st.state !== "open" && page !== "settings") page = "welcome";
