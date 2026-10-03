@@ -63,7 +63,7 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
       readOnly: !!readOnly,
       label: `${info.title || "Untitled"}, note text`,
       targets: () => shell.records.list().filter((r) => shell.openers.get(r.kind) && r.id !== id).map((r) => ({ id: r.id, title: r.title, detail: r.kind === "note" ? undefined : r.kind, embeddable: !!shell.embeds.get(r.kind) })),
-      open: (target) => shell.openRecord(target),
+      open: (target, opts) => shell.openRecord(target, {}, opts),
       titleOf: (target) => shell.records.get(target)?.title ?? null,
       onChange: () => session.changed(),
       onBlur: () => void session.flush(),

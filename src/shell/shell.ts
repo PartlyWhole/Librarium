@@ -2,7 +2,7 @@
  * The shell: layout, router, action and key registry, native menu, prefs, settings, first run.
  * Features contribute through the registries; the shell never imports a feature.
  */
-import { call, on, onCloseRequested, pickFolder } from "../backend";
+import { call, closeWindow, on, onCloseRequested, pickFolder } from "../backend";
 import { Undo } from "./undo";
 import { jobsUi } from "./jobs";
 import type { EditorContribution } from "../editor/editor";
@@ -24,11 +24,12 @@ import type { ShellApi, StatusBar } from "./api";
 import { refreshMenu } from "./menu";
 import { Prefs } from "./prefs";
 import { Records } from "./records";
-import { Router } from "./router";
+import { Router, sameRoute, type Route, type SavedTabs } from "./router";
+import { renderNewTab, tabBar } from "./tabs";
 import { createFolders } from "./folders";
 import type { EmbedRenderer, Folders, Page, RecordAction, RecordLook, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
 import { contextMenu, type MenuItem } from "../kit/menu";
-import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, Command, Keyboard, Settings, FolderOpen, X } from "lucide";
+import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, Command, Keyboard, Settings, FolderOpen, Plus, X } from "lucide";
 
 export type Feature = (shell: ShellApi) => void;
 
@@ -103,7 +104,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       if (!rs.length) return;
       const items: MenuItem[] = [];
       const one = rs.length === 1 ? rs[0]! : null;
-      if (one && openers.get(one.kind)) items.push({ label: "Open", run: () => shell.openRecord(one.id) });
+      if (one && openers.get(one.kind)) items.push({ label: "Open", run: () => shell.openRecord(one.id) }, { label: "Open in new tab", run: () => shell.openRecord(one.id, {}, { newTab: true }) });
       const extra = shell.recordActionsFor(rs);
       if (items.length && extra.length) items.push("separator");
       items.push(...extra);
@@ -137,10 +138,10 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     records,
     status,
     folder,
-    openRecord(id, params = {}) {
+    openRecord(id, params = {}, opts = {}) {
       const r = records.get(id);
       const page = r ? openers.get(r.kind) : undefined;
-      if (page) router.go(page, { id, ...params });
+      if (page) router.go(page, { id, ...params }, { newTab: opts.newTab });
       else status.show("That record can't be opened here.");
     },
     editorExtensions,
@@ -156,14 +157,32 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     destroy: () => {
       document.removeEventListener("keydown", onKey, true);
       destroyed = true;
-      if (typeof dispose === "function") dispose();
-      dispose = undefined;
+      for (const [id, m] of mounted) unmount(id, m);
     },
   };
 
-  // The current page's disposer.
-  let dispose: (() => void) | void;
-  let lastPage = "";
+  // Each tab's page, alive while the tab is open.
+  interface Mounted {
+    host: HTMLElement;
+    page: string;
+    route: Route;
+    title: string;
+    actions: Node[];
+    scroll: number;
+    here: { kind: string; folder: string } | null;
+    dispose: (() => void) | void;
+  }
+  const mounted = new Map<string, Mounted>();
+  let shownTab = "";
+  const unmount = (id: string, m: Mounted) => {
+    if (typeof m.dispose === "function") m.dispose();
+    m.host.remove();
+    mounted.delete(id);
+  };
+  const showTitle = (t: string) => {
+    titleEl.textContent = t;
+    document.title = t === "Welcome" ? "Librarium" : `${t} — Librarium`;
+  };
 
   // ---- core actions -------------------------------------------------------------------
   let destroyed = false;
@@ -177,6 +196,13 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     { id: "shell.settings", title: "Settings", keys: ["Mod+,"], reserved: true, run: () => router.go("settings"), menu: { name: "app", group: 0, title: "Settings…" }, icon: Settings },
     { id: "shell.toggleSidebar", title: "Toggle sidebar", keys: ["Mod+\\"], reserved: true, run: () => sidebarOpen.update((v) => !v), menu: { name: "view", group: 1 }, icon: PanelLeft },
     { id: "shell.toggleSidePanel", title: "Toggle side panel", keys: ["Mod+Alt+\\"], reserved: true, run: () => panelOpen.update((v) => !v), menu: { name: "view", group: 1 }, icon: PanelRight },
+    { id: "tabs.new", title: "New tab", keys: ["Mod+T"], reserved: true, run: () => router.newTab(), menu: { name: "file", group: 0 }, icon: Plus },
+    { id: "tabs.close", title: "Close tab", keys: ["Mod+W"], reserved: true, run: () => router.close(), menu: { name: "file", group: 9 } },
+    { id: "tabs.closeWindow", title: "Close window", keys: ["Mod+Shift+W"], reserved: true, run: () => void closeWindow(), menu: { name: "file", group: 9 } },
+    { id: "tabs.reopen", title: "Reopen closed tab", keys: ["Mod+Shift+T"], reserved: true, when: () => (router.tabs(), router.canReopen), run: () => void router.reopen(), menu: { name: "file", group: 0 } },
+    { id: "tabs.next", title: "Next tab", keys: ["Ctrl+Tab", "Mod+Shift+]"], reserved: true, when: () => router.tabs().length > 1, run: () => router.cycle(1), menu: { name: "window", group: 2 } },
+    { id: "tabs.previous", title: "Previous tab", keys: ["Ctrl+Shift+Tab", "Mod+Shift+["], reserved: true, when: () => router.tabs().length > 1, run: () => router.cycle(-1), menu: { name: "window", group: 2 } },
+    ...Array.from({ length: 9 }, (_, i): Action => ({ id: `tabs.go${i + 1}`, title: i === 8 ? "Last tab" : `Tab ${i + 1}`, keys: [`Mod+${i + 1}`], reserved: true, palette: false, when: () => router.tabs().length > (i === 8 ? 0 : i), run: () => router.select(i === 8 ? -1 : i), menu: { name: "window", group: 3 } })),
     { id: "shell.back", title: "Back", keys: ["Mod+Alt+ArrowLeft"], reserved: true, when: () => router.canBack(), run: () => router.back(), menu: { name: "go", group: 9 } },
     { id: "shell.forward", title: "Forward", keys: ["Mod+Alt+ArrowRight"], reserved: true, when: () => router.canForward(), run: () => router.forward(), menu: { name: "go", group: 9 } },
     { id: "shell.chooseFolder", title: "Choose library folder…", run: () => void chooseFolder(), menu: { name: "file", group: 8 }, icon: FolderOpen },
@@ -189,6 +215,13 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   ];
   for (const a of core) actions.add("shell", a);
   pages.add("shell", "settings", { id: "settings", title: "Settings", icon: Settings, render: (host) => renderSettings(host) }, 100);
+  // What was opened recently (for the new-tab page).
+  const recent = prefs.pref<string[]>("ui.recent", []);
+  effect(() => {
+    const id = router.current().params.id;
+    if (id && records.get(id)) untracked(() => recent.set([id, ...recent.peek().filter((x) => x !== id)].slice(0, 20)));
+  });
+  pages.add("shell", "newtab", { id: "newtab", title: "New tab", icon: Plus, render: (host) => renderNewTab(shell, host, () => recent()) }, 102);
   pages.add("shell", "welcome", { id: "welcome", title: "Welcome", icon: FolderOpen, render: (host) => renderWelcome(host) }, 101);
 
   // ---- features contribute ------------------------------------------------------------
@@ -239,11 +272,14 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const fwd = iconButton(ChevronRight, "Forward", () => router.forward(), "Mod+Alt+ArrowRight");
   const titleEl = h("div", { class: "ws-title" });
   const headerActions = h("div", { class: "ws-actions" });
-  const pageHost = h("div", { class: "ws-page" });
-  const pageScroll = h("div", { class: "page-scroll" }, pageHost);
+  const pageScroll = h("div", { class: "page-scroll" });
   // The side panel's own button, top right (the sidebar's is top left).
   const panelToggle = iconButton(PanelRight, "Toggle side panel", () => actions.run("shell.toggleSidePanel"), "Mod+Alt+\\");
-  const workspace = h("main", { class: "workspace" }, h("header", { class: "ws-header" }, h("div", { class: "ws-nav" }, back, fwd), titleEl, h("div", { class: "ws-end" }, headerActions, panelToggle)), pageScroll);
+  const tabs = tabBar(router, (r) => pages.get(r.page), (r) => {
+    const rec = r.params.id ? records.get(r.params.id) : undefined;
+    return rec ? looks.get(rec.kind)?.icon(rec) : undefined;
+  });
+  const workspace = h("main", { class: "workspace" }, tabs, h("header", { class: "ws-header" }, h("div", { class: "ws-nav" }, back, fwd), titleEl, h("div", { class: "ws-end" }, headerActions, panelToggle)), pageScroll);
   const panelBody = h("div", { class: "side-panel-body" });
   const panelClose = h("button", { class: "icon-button", type: "button", "aria-label": "Close the side panel", title: `Close the side panel (${display("Mod+Alt+\\")})`, onclick: () => (panelOpen.set(false), panelToggle.focus()) }, icon(X, 15));
   const panelEl = h("aside", { class: "side-panel", "aria-label": "Side panel" }, h("div", { class: "side-panel-head" }, panelClose), panelBody);
@@ -299,9 +335,10 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
         return kids.length || n.label.toLowerCase().includes(q) ? { ...n, children: kids, expanded } : null;
       }
       if (q && !n.label.toLowerCase().includes(q)) return null;
-      // A record's row can be dragged (onto a folder).
+      // A record's row can be dragged (onto a folder), and opened in a new tab.
       const r = records.get(n.id);
-      return !n.drag && r ? { ...n, drag: () => ({ records: [n.id], folders: [], kind: r.kind }) } : n;
+      if (!r) return n;
+      return { ...n, drag: n.drag ?? (() => ({ records: [n.id], folders: [], kind: r.kind })), onOpenNew: n.onOpenNew ?? (() => shell.openRecord(n.id, {}, { newTab: true })) };
     };
     const nodes: TreeNode[] = open
       ? sidebar.values().map((s) => {
@@ -312,37 +349,68 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     tree.render(nodes);
   });
 
-  // Pages: render the current route.
+  // Pages: each tab keeps its page alive (hidden when another tab shows), as in Obsidian, so a
+  // document keeps its place; a tab's page is rendered again only when it goes somewhere else.
   effect(() => {
     const r = router.current();
+    const tab = router.active();
+    const open = router.tabs();
     if (destroyed) return;
     const st = folder();
     let page = r.page;
     if (st && st.state !== "open" && page !== "settings") page = "welcome";
     const p = pages.get(page);
     if (!p) return;
-    if (typeof dispose === "function") dispose();
-    pageHost.replaceChildren();
-    headerActions.replaceChildren();
-    titleEl.textContent = p.title;
-    document.title = p.title === "Welcome" ? "Librarium" : `${p.title} — Librarium`;
-    for (const b of ribbonPageButtons) {
-      const cur = b.dataset.page === page;
-      b.classList.toggle("current", cur);
-      if (cur) b.setAttribute("aria-current", "page");
-      else b.removeAttribute("aria-current");
-    }
-    if (page !== lastPage) pageScroll.scrollTop = 0;
-    lastPage = page;
-    // A page renders untracked: what it reads must not re-render it (it subscribes itself).
-    dispose = untracked(() => p.render(pageHost, r.params, {
-      shell,
-      setTitle: (t) => {
-        titleEl.textContent = t;
-        document.title = `${t} — Librarium`;
-      },
-      setHeaderActions: (nodes) => headerActions.replaceChildren(...nodes),
-    }));
+    untracked(() => {
+      // Tabs that closed take their pages with them.
+      for (const [id, m] of mounted) if (!open.some((t) => t.id === id)) unmount(id, m);
+      const leaving = shownTab && shownTab !== tab ? mounted.get(shownTab) : undefined;
+      if (leaving) {
+        leaving.scroll = pageScroll.scrollTop;
+        leaving.here = here.peek();
+      }
+      let m = mounted.get(tab);
+      if (m && (m.page !== page || !sameRoute(m.route, r))) {
+        unmount(tab, m);
+        m = undefined;
+      }
+      for (const [id, x] of mounted) x.host.hidden = id !== tab;
+      if (!m) {
+        const host = h("div", { class: "ws-page" });
+        pageScroll.appendChild(host);
+        const mine: Mounted = { host, page, route: r, title: p.title, actions: [], scroll: 0, here: null, dispose: undefined };
+        mounted.set(tab, mine);
+        m = mine;
+        if (tab !== shownTab) here.set(null);
+        // A page renders untracked: what it reads must not re-render it (it subscribes itself).
+        mine.dispose = p.render(host, r.params, {
+          shell,
+          setTitle: (t) => {
+            mine.title = t;
+            router.setTitle(t, tab);
+            if (router.active.peek() === tab) showTitle(t);
+          },
+          setHeaderActions: (nodes) => {
+            mine.actions = nodes;
+            if (router.active.peek() === tab) headerActions.replaceChildren(...nodes);
+          },
+        });
+      } else if (tab !== shownTab) here.set(m.here);
+      showTitle(m.title);
+      headerActions.replaceChildren(...m.actions);
+      for (const b of ribbonPageButtons) {
+        const cur = b.dataset.page === page;
+        b.classList.toggle("current", cur);
+        if (cur) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
+      }
+      if (tab !== shownTab) {
+        const back = m.scroll;
+        pageScroll.scrollTop = back;
+        if (back) requestAnimationFrame(() => (pageScroll.scrollTop = back));
+      }
+      shownTab = tab;
+    });
   });
 
   // Side panel sections that apply to the current route.
@@ -550,7 +618,17 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   void (async () => {
     await prefs.load();
     await refreshFolder();
-    if (folder.peek()?.state === "open") router.go(defaultPage(), {}, { replace: true });
+    if (folder.peek()?.state === "open" && !router.restore(prefs.pref<SavedTabs>("ui.tabs", { tabs: [], active: 0 }).peek())) router.go(defaultPage(), {}, { replace: true });
+    // The tabs are kept for next time (once they are what the user left).
+    let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    effect(() => {
+      router.tabs();
+      router.active();
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        if (folder.peek()?.state === "open") prefs.pref<SavedTabs>("ui.tabs", { tabs: [], active: 0 }).set(router.save());
+      }, 500);
+    });
     shell.timings.readyMs = performance.now() - t0;
   })();
   return shell;

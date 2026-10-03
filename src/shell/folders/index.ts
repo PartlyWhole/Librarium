@@ -201,6 +201,7 @@ export function createFolders(shell: ShellApi): Folders {
     const showFolderMenu = (path: string, at: { x: number; y: number }) => {
       contextMenu([
         { label: "Open", run: () => go(sp, path) },
+        { label: "Open in new tab", run: () => shell.router.go(def.page, { folder: path }, { newTab: true }) },
         {
           label: "Rename…",
           run: async () => {
@@ -273,6 +274,7 @@ export function createFolders(shell: ShellApi): Folders {
           current: at === f,
           children: entries(f),
           onActivate: () => go(sp, f),
+          onOpenNew: () => shell.router.go(sp.def.page, { folder: f }, { newTab: true }),
           onContext: (p) => sp.showFolderMenu(f, p),
           drag: () => ({ records: [], folders: [f], kind }),
           drop: {

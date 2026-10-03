@@ -117,11 +117,11 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
     lastFocus.set(spot(parentOf(here)), folderId(here));
     go(parentOf(here));
   };
-  const open = (e: Entry) => {
+  const open = (e: Entry, newTab = false) => {
     if (focused) lastFocus.set(spot(here), focused);
-    if (e.type === "folder") go(e.path);
-    else if (e.type === "group") shell.router.go(page, { group: e.group });
-    else shell.openRecord(e.id);
+    if (e.type === "folder") shell.router.go(page, { folder: e.path }, { newTab });
+    else if (e.type === "group") shell.router.go(page, { group: e.group }, { newTab });
+    else shell.openRecord(e.id, {}, { newTab });
   };
   const payload = (ids: string[]): DragPayload => ({ kind, records: ids.filter((i) => !isFolderId(i) && !isGroupId(i)), folders: ids.filter(isFolderId).map(pathOfId) });
   const dropInto = (el: HTMLElement, dest: string) =>
@@ -347,10 +347,11 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
   const menuFor = (ids: string[], at: { x: number; y: number }) => {
     const es = ids.map((i) => entries.get(i)).filter((e): e is Entry => !!e);
     const one = es.length === 1 ? es[0]! : null;
-    if (one?.type === "group") contextMenu([{ label: "Open", run: () => open(one) }], at, one.name);
+    const opening: MenuItem[] = one ? [{ label: "Open", run: () => open(one) }, { label: "Open in new tab", run: () => open(one, true) }] : [];
+    if (one?.type === "group") contextMenu(opening, at, one.name);
     else if (one) {
       const more = menuItems(ids);
-      contextMenu([{ label: "Open", run: () => open(one) }, { label: "Rename", run: () => rename(one.id) }, ...(more.length ? ["separator" as const, ...more] : [])], at, one.name);
+      contextMenu([...opening, { label: "Rename", run: () => rename(one.id) }, ...(more.length ? ["separator" as const, ...more] : [])], at, one.name);
     } else if (es.length) contextMenu(menuItems(ids), at, `${es.length} items`);
   };
   const backgroundMenu = (at: { x: number; y: number }) => {
@@ -378,6 +379,15 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
     selection.click(id, order, { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey });
     markSelection();
     el.focus({ preventScroll: true });
+  });
+  // A middle-click opens in a new tab.
+  body.addEventListener("mousedown", (e) => e.button === 1 && e.preventDefault());
+  body.addEventListener("auxclick", (e) => {
+    const el = entryAt(e.target);
+    const en = el ? entries.get(el.dataset.id!) : undefined;
+    if (e.button !== 1 || !en) return;
+    e.preventDefault();
+    open(en, true);
   });
   body.addEventListener("dblclick", (e) => {
     const el = entryAt(e.target);
@@ -492,9 +502,10 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       const keep = focused;
       void fx.place(here, payload(sel), keyOf(a), back ? "before" : "after").then(() => focusEntry(keep ?? undefined));
     } else if (mod && k === "ArrowUp") goUp();
-    else if ((mod && k === "ArrowDown") || (k === "Enter" && !mod)) {
+    else if ((mod && k === "ArrowDown") || k === "Enter") {
+      // ⌘↩ opens in a new tab.
       const en = focused ? entries.get(focused) : undefined;
-      if (en) open(en);
+      if (en) open(en, mod && k === "Enter");
     } else if (k === "ArrowDown") moveTo(i < 0 ? 0 : i + cols);
     else if (k === "ArrowUp") moveTo(i < 0 ? 0 : i - cols);
     else if (k === "ArrowRight" && cols > 1) moveTo(i + 1);
@@ -527,7 +538,8 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
   });
   // Keys for the whole page (outside text fields): ⌘↑, ⌘A, ⇧⌘N.
   const onWindowKey = (e: KeyboardEvent) => {
-    if (renaming || document.querySelector("dialog[open], .context-menu")) return;
+    // A page in a hidden tab hears none.
+    if (renaming || document.querySelector("dialog[open], .context-menu") || host.closest("[hidden]")) return;
     const t = e.target as HTMLElement | null;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) || body.contains(t)) return;
     const mod = e.metaKey || e.ctrlKey;

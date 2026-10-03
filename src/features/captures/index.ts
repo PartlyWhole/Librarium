@@ -412,7 +412,7 @@ export function captures(shell: ShellApi): void {
           status: (m, p) => shell.status.show(m, p ? 0 : 4000),
           saved: (seq) => void shell.records.waitFor(seq),
         });
-        const view = createEditor({ parent: editorHost, doc: t.body, label: "Your words", targets: () => [], open: (x) => shell.openRecord(x), titleOf: (x) => shell.records.get(x)?.title ?? null, onChange: () => session.changed(), onBlur: () => void session.flush(), placeholder: "Write why this matters…" });
+        const view = createEditor({ parent: editorHost, doc: t.body, label: "Your words", targets: () => [], open: (x, opts) => shell.openRecord(x, {}, opts), titleOf: (x) => shell.records.get(x)?.title ?? null, onChange: () => session.changed(), onBlur: () => void session.flush(), placeholder: "Write why this matters…" });
         cleanup.push(() => (void session.close(), view.destroy()), shell.beforeClose(() => session.close()));
         ctx.setHeaderActions([h("button", { class: "icon-button", "aria-label": "Export as W3C annotations", title: "Export as W3C annotations", onclick: () => void exportW3C(shell, r, t.body) }, icon(FileDown))]);
       })();

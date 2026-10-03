@@ -23,7 +23,8 @@ export interface EditorContribution {
 }
 
 export interface EditorContext {
-  open(id: string): void;
+  /** Opens a link's target (in a new tab when asked: ⌘-click or a middle-click). */
+  open(id: string, opts?: { newTab?: boolean }): void;
   titleOf(id: string): string | null;
 }
 
@@ -33,7 +34,7 @@ export interface EditorOptions {
   readOnly?: boolean;
   label: string;
   targets: () => LinkTarget[];
-  open: (id: string) => void;
+  open: (id: string, opts?: { newTab?: boolean }) => void;
   titleOf: (id: string) => string | null;
   onChange?: (doc: string) => void;
   onBlur?: () => void;
@@ -66,10 +67,12 @@ export function createEditor(o: EditorOptions): EditorView {
     }),
     EditorView.domEventHandlers({
       click(e, view) {
+        // A link opens here; with ⌘, in a new tab (as in Obsidian).
+        const newTab = e.metaKey;
         const t = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
         if (t?.dataset.id) {
           e.preventDefault();
-          o.open(t.dataset.id);
+          o.open(t.dataset.id, { newTab });
           return true;
         }
         // ⌘-click on a link's source opens it too.
@@ -78,12 +81,20 @@ export function createEditor(o: EditorOptions): EditorView {
           if (pos !== null) {
             const l = parseLinks(view.state.doc.toString()).find((x) => pos >= x.from && pos <= x.to && x.id);
             if (l?.id) {
-              o.open(l.id);
+              o.open(l.id, { newTab: true });
               return true;
             }
           }
         }
         return false;
+      },
+      // A middle-click on a link opens it in a new tab.
+      auxclick(e) {
+        const t = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
+        if (e.button !== 1 || !t?.dataset.id) return false;
+        e.preventDefault();
+        o.open(t.dataset.id, { newTab: true });
+        return true;
       },
     }),
     ...contributions.map((c) => c.extension(ctx)),

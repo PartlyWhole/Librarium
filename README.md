@@ -93,3 +93,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-03 | Making captures: a button by the selection, a panel beside the document, parts highlighted and in source order, sharp regions. | [0031](docs/decisions/0031-making-captures.md) |
 | 2026-10-03 | Removing snapshots (two steps; never the last, never one a capture uses) and selecting several records. | [0032](docs/decisions/0032-removing-snapshots-and-selecting-several.md) |
 | 2026-10-03 | Folders: real subfolders, notes and library items each with their own; their pages browse them as in Finder; captures under their items; pointer dragging; arranging by hand. | [0033](docs/decisions/0033-folders-and-the-files-page.md) |
+| 2026-10-03 | Tabs, as in Obsidian: each with its own history and living page; ⌘T, ⌘W, ⇧⌘T, ⌃Tab, ⌘1–9; Today moves to ⇧⌘D. | [0034](docs/decisions/0034-tabs.md) |

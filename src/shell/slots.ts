@@ -171,8 +171,9 @@ export interface ShellApi {
   records: Records;
   status: StatusBar;
   folder: Signal<LibraryStatus | null>;
-  /** Opens a record on the page registered for its kind (with optional extra params). */
-  openRecord(id: string, params?: Record<string, string>): void;
+  /** Opens a record on the page registered for its kind (with optional extra params), in the
+   * active tab or a new one. */
+  openRecord(id: string, params?: Record<string, string>, opts?: { newTab?: boolean }): void;
   /** The highest change sequence number the index has applied. */
   indexed: Signal<number>;
   /** shell.editor-extensions */

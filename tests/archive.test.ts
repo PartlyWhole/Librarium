@@ -122,7 +122,7 @@ describe("a record's context menu", () => {
   it("archives from a right-click in the sidebar, and restores from the Archive page", async () => {
     const { shell, a } = await boot();
     row("Gravity and grace").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 50, clientY: 60 }));
-    expect(menuItems()).toEqual(["Open", "Move to folder…", "Archive"]);
+    expect(menuItems()).toEqual(["Open", "Open in new tab", "Move to folder…", "Archive"]);
     choose("Archive");
     await wait(30);
     expect(document.querySelector(".context-menu")).toBeNull();
@@ -131,7 +131,7 @@ describe("a record's context menu", () => {
     shell.router.go("archive");
     await wait(30);
     document.querySelector(".archive-row")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 50, clientY: 60 }));
-    expect(menuItems()).toEqual(["Open", "Restore from archive", "Delete permanently…"]);
+    expect(menuItems()).toEqual(["Open", "Open in new tab", "Restore from archive", "Delete permanently…"]);
     choose("Restore from archive");
     await wait(30);
     expect(shell.records.get(a.id)?.fields["archive.at"]).toBeUndefined();
@@ -142,8 +142,10 @@ describe("a record's context menu", () => {
     const it = row("Keep");
     it.focus();
     it.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
-    expect(menuItems()).toEqual(["Open", "Move to folder…", "Archive"]);
+    expect(menuItems()).toEqual(["Open", "Open in new tab", "Move to folder…", "Archive"]);
     expect(document.activeElement?.textContent).toBe("Open");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+    expect(document.activeElement?.textContent).toBe("Open in new tab");
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
     expect(document.activeElement?.textContent).toBe("Move to folder…");
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));

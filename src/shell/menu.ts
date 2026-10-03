@@ -38,7 +38,8 @@ export function menuSpec(actions: Actions): MenuSection[] {
   const withSep = (xs: MenuEntry[]) => (xs.length ? [...xs, sep] : []);
   const sections: Record<MenuName, MenuEntry[]> = {
     app: [{ kind: "predefined", item: "About", text: "About Librarium" }, sep, ...withSep(custom("app")), { kind: "predefined", item: "Services" }, sep, { kind: "predefined", item: "Hide" }, { kind: "predefined", item: "HideOthers" }, { kind: "predefined", item: "ShowAll" }, sep, { kind: "predefined", item: "Quit" }],
-    file: [...withSep(custom("file")), { kind: "predefined", item: "CloseWindow" }],
+    // "Close window" is the app's own (⇧⌘W): ⌘W closes a tab.
+    file: custom("file"),
     // Without these, ⌘C, ⌘V and ⌘Z stop working in a Tauri app.
     edit: [{ kind: "predefined", item: "Undo" }, { kind: "predefined", item: "Redo" }, sep, { kind: "predefined", item: "Cut" }, { kind: "predefined", item: "Copy" }, { kind: "predefined", item: "Paste" }, { kind: "predefined", item: "SelectAll" }, ...(custom("edit").length ? [sep, ...custom("edit")] : [])],
     view: [...withSep(custom("view")), { kind: "predefined", item: "Fullscreen" }],

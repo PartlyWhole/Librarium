@@ -116,6 +116,11 @@ export async function pickFolder(title: string): Promise<string | null> {
 
 
 /** Runs `handler` (e.g. a last save) before the window closes. */
+/** Closes the window (as ⇧⌘W does; the close request still saves first). */
+export async function closeWindow(): Promise<void> {
+  if (inTauri()) await getCurrentWindow().close();
+}
+
 export function onCloseRequested(handler: () => Promise<void>): void {
   if (!inTauri()) {
     window.addEventListener("pagehide", () => void handler());

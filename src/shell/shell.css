@@ -328,7 +328,9 @@ mark { background: var(--selection); color: inherit; border-radius: 2px; padding
 .item-link:hover { background: var(--hover); }
 .item-link .muted { margin-left: auto; }
 .ws-page.reader-page { max-width: none; padding: 0; height: 100%; display: flex; flex-direction: column; }
-.page-scroll:has(.reader-page) { overflow: hidden; }
+.page-scroll:has(> .reader-page:not([hidden])) { overflow: hidden; }
+/* A tab's page while another tab shows. */
+.ws-page[hidden] { display: none !important; }
 .reader-toolbar { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--border); flex: none; }
 .reader-toolbar .spacer { flex: 1; }
 .reader-pos { margin-left: 8px; }
@@ -529,3 +531,26 @@ body.dragging-items, body.dragging-items * { cursor: grabbing !important; }
 .files-empty.drop-over { box-shadow: inset 0 0 0 2px var(--accent); }
 .files-entry.group .files-name svg { color: var(--accent); }
 .files-foot { margin-top: auto; }
+
+/* Tabs, as in Obsidian. */
+.tab-bar { flex: none; display: flex; align-items: flex-end; gap: 2px; height: 34px; padding: 4px 8px 0; background: var(--bg-alt); border-bottom: 1px solid var(--border); }
+.tab-list { display: flex; align-items: flex-end; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tab-list::-webkit-scrollbar { display: none; }
+.tab { position: relative; display: flex; align-items: center; gap: 6px; flex: 0 1 200px; min-width: 72px; height: 29px; padding: 0 6px 0 10px; border-radius: var(--r2) var(--r2) 0 0; color: var(--muted); font-size: var(--small); cursor: default; user-select: none; -webkit-user-select: none; outline: none; }
+.tab:hover { background: var(--hover); color: var(--ink); }
+.tab.active { background: var(--bg); color: var(--ink); box-shadow: 0 0 0 1px var(--border); clip-path: inset(-1px -1px 0 -1px); }
+.tab:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.tab svg { flex: none; }
+.tab-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-close { flex: none; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--r1); background: none; color: var(--muted); opacity: 0; }
+.tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
+.tab-close:hover { background: var(--hover); color: var(--ink); }
+.tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
+.tab-new { flex: none; width: 26px; height: 26px; margin-bottom: 2px; }
+.newtab-list { list-style: none; margin: 0 0 24px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.newtab-link { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--r1); background: none; color: var(--ink); font: inherit; text-align: left; cursor: default; }
+.newtab-link:hover, .newtab-link:focus-visible { background: var(--hover); }
+.newtab-link svg { color: var(--muted); }
+.newtab-link span { flex: 1; }
+.newtab-link kbd { font-family: inherit; }

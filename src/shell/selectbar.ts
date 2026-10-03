@@ -46,8 +46,8 @@ export function selectBar(
     );
   });
   const onKey = (e: KeyboardEvent) => {
-    // A dialog or menu handles its own keys.
-    if (document.querySelector("dialog[open], .context-menu")) return;
+    // A dialog or menu handles its own keys; a page in a hidden tab hears none.
+    if (document.querySelector("dialog[open], .context-menu") || !el.isConnected || el.closest("[hidden]")) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a" && !editable(e.target)) {
       e.preventDefault();
       o.mode.set(true);

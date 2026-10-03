@@ -20,8 +20,8 @@ describe("the Library page", () => {
     const li = [...document.querySelectorAll(".files-body [role=option]")].find((x) => x.textContent?.includes("A saved essay"))!;
     li.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 100, clientY: 100 }));
     const items = [...document.querySelectorAll(".context-menu [role=menuitem]")];
-    expect(items.map((b) => b.textContent)).toEqual(["Open", "Rename", "Move to folder…", "Archive"]);
-    (items[3] as HTMLElement).click();
+    expect(items.map((b) => b.textContent)).toEqual(["Open", "Open in new tab", "Rename", "Move to folder…", "Archive"]);
+    (items[4] as HTMLElement).click();
     await wait(30);
     expect(document.querySelector(".files-body")?.textContent ?? "").not.toContain("A saved essay");
     expect(shell.records.get(item.id)?.fields["archive.at"]).toBeDefined();

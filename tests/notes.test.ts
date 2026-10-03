@@ -151,9 +151,9 @@ describe("renames and ⌘T", () => {
     expect(document.querySelector(".toast")?.textContent).toContain("can’t be undone");
   });
 
-  it("⌘T opens today's note, and pressing it twice makes one note", async () => {
+  it("⇧⌘D opens today's note, and pressing it twice makes one note", async () => {
     const { shell } = await open();
-    const key = () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "t", code: "KeyT", metaKey: true, bubbles: true, cancelable: true }));
+    const key = () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "d", code: "KeyD", metaKey: true, shiftKey: true, bubbles: true, cancelable: true }));
     key();
     await wait(30);
     key();

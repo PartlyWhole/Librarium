@@ -37,7 +37,8 @@ export function daily(shell: ShellApi): void {
     title: "Today",
     icon: CalendarDays,
     ribbon: 0,
-    keys: "Mod+T",
+    // ⌘T is a new tab (as in Obsidian).
+    keys: "Mod+Shift+D",
     render(host) {
       // Today's note is one step away: open it, creating it if missing (one writer operation).
       let alive = true;

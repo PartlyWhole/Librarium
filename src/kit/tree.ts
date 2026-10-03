@@ -26,6 +26,8 @@ export interface TreeNode {
   current?: boolean;
   /** For a row with children too: a click opens it, and only the arrow folds it. */
   onActivate?: () => void;
+  /** Opens it in a new tab (a middle-click). */
+  onOpenNew?: () => void;
   /** The row's own context menu (instead of the tree's). */
   onContext?: (at: { x: number; y: number }) => void;
   /** What dragging this row carries (with others selected, theirs too). */
@@ -152,6 +154,14 @@ export class Tree {
         if (plain) n.onActivate?.();
       });
       if (n.drop) dropTarget(el, n.drop);
+      if (n.onOpenNew) {
+        el.addEventListener("mousedown", (e) => e.button === 1 && e.preventDefault());
+        el.addEventListener("auxclick", (e) => {
+          if (e.button !== 1) return;
+          e.preventDefault();
+          n.onOpenNew!();
+        });
+      }
       el.addEventListener("contextmenu", (e) => {
         if (n.onContext) {
           e.preventDefault();

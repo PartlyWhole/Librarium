@@ -454,6 +454,8 @@ function seedItem(title: string, format: string, fixture: string, pages?: number
   return info;
 }
 
+export async function closeWindow(): Promise<void> {}
+
 export async function pickFiles(): Promise<string[]> {
   return [];
 }
