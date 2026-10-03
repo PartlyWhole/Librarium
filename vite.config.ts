@@ -19,5 +19,6 @@ export default defineConfig(({ mode }) => ({
     environment: "jsdom",
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     alias: [mockBackend],
+    setupFiles: ["tests/setup.ts"],
   },
 }));

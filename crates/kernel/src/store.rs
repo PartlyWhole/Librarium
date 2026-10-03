@@ -620,6 +620,13 @@ impl<'a> Tx<'a> {
         if let Some(ro) = &e.read_only {
             return Err(BackendError::new(ErrorCode::ReadOnly, ro.describe()));
         }
+        // The user's own permissions are respected: a read-only or locked file isn't replaced.
+        if let Ok(Some(m)) = self.store.fs.stat(&self.store.abs(&e.path)) {
+            if !m.writable {
+                return Err(BackendError::io(format!("“{}” is read-only, so it can’t be saved.", e.title))
+                    .with_data(serde_json::json!({ "read_only_file": true })));
+            }
+        }
         Ok(e)
     }
 
@@ -805,8 +812,24 @@ impl<'a> Tx<'a> {
     /// Renames and/or moves a record: the file name follows the title. Written as an intent:
     /// rename first, then rewrite the frontmatter.
     pub fn relocate(&self, id: Id, title: Option<&str>, subfolder: Option<Option<&str>>) -> Result<(Entry, u64)> {
+        self.relocate_from(id, None, title, subfolder)
+    }
+
+    /// Like [`Tx::relocate`], refusing if the record changed since `base_version` (used by undo).
+    pub fn relocate_from(
+        &self,
+        id: Id,
+        base_version: Option<&str>,
+        title: Option<&str>,
+        subfolder: Option<Option<&str>>,
+    ) -> Result<(Entry, u64)> {
         let s = self.store;
         let e = self.writable(id)?;
+        if let Some(v) = base_version {
+            if v != e.hash {
+                return Err(BackendError::conflict(format!("“{}” changed since, so this can’t be undone.", e.title)));
+            }
+        }
         let def = s.kind_def(&e.kind)?.clone();
         let title = title.map(clean_title).unwrap_or_else(|| e.title.clone());
         if title.is_empty() {

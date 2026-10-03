@@ -303,8 +303,17 @@ impl FileSystem for MemFs {
             return Err(crashed());
         }
         if s.dirs.contains_key(&norm(path)) {
-            return Ok(Some(FileMeta { len: 0, mtime_ns: 0, ctime_ns: 0, inode: 0, birth_ns: None, is_dir: true }));
+            return Ok(Some(FileMeta {
+                len: 0,
+                mtime_ns: 0,
+                ctime_ns: 0,
+                inode: 0,
+                birth_ns: None,
+                is_dir: true,
+                writable: true,
+            }));
         }
+        let writable = !s.read_only.contains(&norm(path));
         Ok(Self::lookup(&s, path).map(|ino| {
             let n = &s.nodes[&ino];
             FileMeta {
@@ -314,6 +323,7 @@ impl FileSystem for MemFs {
                 inode: ino,
                 birth_ns: Some(n.birth),
                 is_dir: false,
+                writable,
             }
         }))
     }

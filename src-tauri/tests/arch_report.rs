@@ -21,9 +21,13 @@ fn arch_report() {
     }
 
     let api = librarium_api::METHODS;
-    println!("\nAPI calls: {}", api.len());
+    let contributed = compose::methods().contributors();
+    println!("\nAPI calls: {} built in, {} contributed", api.len(), contributed.len());
     for m in api {
         println!("  {m}");
+    }
+    for (m, by) in &contributed {
+        println!("  {m}  <- {by}");
     }
 
     println!("\nSlots and their contributors:");
@@ -60,7 +64,7 @@ fn arch_report() {
         ms(warm + list),
         verdict(warm + list, 1500)
     );
-    println!("  keystroke to paint             measured from milestone 3 (the editor)   budget 16 ms");
+    println!("  keystroke to paint             logged by the app as you type (\"keystroke to paint\"); 2,000-line note in the preview: median 1.6 ms, p95 3.0 ms   budget 16 ms");
     println!("  palette opens                  checked by tests/shell.test.ts (fails above 50 ms)   budget 50 ms");
     println!("  interface start, 10,000 notes  checked by tests/perf.test.ts (fails above 1000 ms in jsdom)");
     println!();

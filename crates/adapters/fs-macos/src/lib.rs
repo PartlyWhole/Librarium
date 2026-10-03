@@ -67,6 +67,10 @@ impl FileSystem for MacFs {
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                     .map(|d| d.as_nanos() as i64),
                 is_dir: m.is_dir(),
+                writable: m.mode() & 0o200 != 0 && {
+                    use std::os::macos::fs::MetadataExt as _;
+                    m.st_flags() & (libc::UF_IMMUTABLE | libc::SF_IMMUTABLE) == 0
+                },
             })),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(e) => Err(e),

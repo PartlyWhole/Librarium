@@ -12,6 +12,8 @@ import type { Actions } from "./actions";
 import type { Prefs } from "./prefs";
 import type { Records } from "./records";
 import type { Router } from "./router";
+import type { Undo } from "./undo";
+import type { EditorContribution } from "../editor/editor";
 
 /** shell.pages */
 export interface Page {
@@ -93,6 +95,11 @@ export interface ShellApi {
   folder: Signal<LibraryStatus | null>;
   /** Opens a record on the page registered for its kind. */
   openRecord(id: string): void;
+  /** shell.editor-extensions */
+  editorExtensions: Registry<EditorContribution>;
+  undo: Undo;
+  /** Work to finish before the window closes (e.g. a last save). */
+  beforeClose(fn: () => Promise<void>): () => void;
 }
 
 /** Every interface slot, for the architecture report. */

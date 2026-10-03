@@ -47,6 +47,7 @@ fn api_with(fs: Arc<MemFs>) -> Arc<Api> {
         app_support: PathBuf::from("/app"),
         logs_dir: PathBuf::from("/logs"),
         desktop: Arc::new(librarium_testkit::desktop::RecordingDesktop::default()),
+        methods: librarium_kernel::methods::registry(),
         open_options: OpenOptions { tick: Duration::from_secs(3600), ..Default::default() },
     }))
 }
@@ -163,4 +164,58 @@ fn inspects_folders_for_first_run() {
     a.open_library(Path::new("/lib")).unwrap();
     assert!(a.folder_inspect(Path::new("/lib")).is_library);
     assert!(!a.folder_inspect(Path::new("/nope")).exists);
+}
+
+#[test]
+fn a_save_to_a_read_only_file_fails_and_its_draft_survives() {
+    let (a, fs) = api();
+    a.open_library(Path::new("/lib")).unwrap();
+    let w = a.call("records.create", json!({ "kind": "page", "title": "Locked", "body": "v1\n" })).unwrap();
+    let id = w["info"]["id"].as_str().unwrap().to_string();
+    let path = Path::new("/lib").join(w["info"]["path"].as_str().unwrap());
+    let version = w["info"]["version"].as_str().unwrap().to_string();
+    a.call("drafts.put", json!({ "id": id, "base_version": version, "base_body": "v1\n", "body": "v2 typed\n" }))
+        .unwrap();
+    fs.set_read_only(&path, true);
+    let err = a.call("records.save", json!({ "id": id, "base_version": version, "body": "v2 typed\n" })).unwrap_err();
+    assert!(err.data.unwrap()["read_only_file"].as_bool().unwrap());
+    assert!(err.message.contains("read-only"));
+    let drafts = a.call("drafts.list", json!({})).unwrap();
+    assert_eq!(drafts[0]["body"], "v2 typed\n", "the draft survives the failed save");
+    // Writable again: the retry succeeds and settles the draft.
+    fs.set_read_only(&path, false);
+    a.call("records.save", json!({ "id": id, "base_version": version, "body": "v2 typed\n" })).unwrap();
+    assert_eq!(a.call("drafts.list", json!({})).unwrap(), json!([]));
+}
+
+#[test]
+fn undoing_a_rename_refuses_if_the_note_changed() {
+    let (a, _) = api();
+    a.open_library(Path::new("/lib")).unwrap();
+    let w = a.call("records.create", json!({ "kind": "page", "title": "Before", "body": "x\n" })).unwrap();
+    let id = w["info"]["id"].as_str().unwrap().to_string();
+    let renamed = a.call("records.relocate", json!({ "id": id, "title": "After" })).unwrap();
+    let v = renamed["info"]["version"].as_str().unwrap().to_string();
+    a.call("records.save", json!({ "id": id, "base_version": v, "body": "edited\n" })).unwrap();
+    let err = a.call("records.relocate", json!({ "id": id, "title": "Before", "base_version": v })).unwrap_err();
+    assert_eq!(err.code, librarium_contracts::ErrorCode::Conflict);
+}
+
+#[test]
+fn renaming_a_note_keeps_every_link_working() {
+    let (a, _) = api();
+    a.open_library(Path::new("/lib")).unwrap();
+    let b =
+        a.call("records.create", json!({ "kind": "page", "title": "Simone Weil", "subfolder": "Thinkers" })).unwrap();
+    let bid = b["info"]["id"].as_str().unwrap().to_string();
+    let link = librarium_kernel::links::format_link("Simone Weil", bid.parse().unwrap(), false);
+    let a1 = a
+        .call("records.create", json!({ "kind": "page", "title": "Reading", "body": format!("See {link}.\n") }))
+        .unwrap();
+    let aid = a1["info"]["id"].as_str().unwrap().to_string();
+    a.call("records.relocate", json!({ "id": bid, "title": "Weil, Simone", "subfolder": "Elsewhere" })).unwrap();
+    let body = a.call("records.read", json!({ "id": aid })).unwrap()["body"].as_str().unwrap().to_string();
+    let links = librarium_kernel::links::parse_links(&body);
+    let target = a.call("records.get", json!({ "id": links[0].id.unwrap().to_string() })).unwrap();
+    assert_eq!(target["title"], "Weil, Simone", "the link resolves by ID after the rename and move");
 }

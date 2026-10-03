@@ -33,6 +33,14 @@ pub fn kinds() -> Kinds {
     k
 }
 
+/// API calls contributed by features.
+pub fn methods() -> librarium_kernel::registry::Registry<librarium_kernel::methods::ApiMethod> {
+    let mut r = librarium_kernel::methods::registry();
+    librarium_feature_notes::contribute_methods(&mut r).expect("notes methods");
+    librarium_feature_daily::contribute_methods(&mut r).expect("daily methods");
+    r
+}
+
 impl App {
     pub fn compose(worker_binary: PathBuf, app_support: PathBuf, logs_dir: PathBuf) -> App {
         let worker: Arc<dyn WorkerHost> = Arc::new(ProcessWorkerHost::new(worker_binary, WORKER_MEMORY_CEILING));
@@ -49,6 +57,7 @@ impl App {
             logs_dir,
             desktop: Arc::new(librarium_system::MacDesktop),
             open_options: OpenOptions::default(),
+            methods: methods(),
         }));
         let transport = Arc::new(TauriTransport::new(Arc::new(Handler(api.clone()))));
         api.set_sink(transport.clone());
@@ -68,5 +77,6 @@ pub fn slot_contributors() -> Vec<(String, Vec<(String, String)>)> {
     vec![
         (k.kinds.slot().to_string(), k.kinds.contributors()),
         (k.slug_fields.slot().to_string(), k.slug_fields.contributors()),
+        (librarium_contracts::slots::API_METHODS.to_string(), methods().contributors()),
     ]
 }

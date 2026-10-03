@@ -5,11 +5,14 @@
 
 pub mod changes;
 pub mod check;
+pub mod drafts;
 pub mod frontmatter;
 pub mod hash;
 pub mod kinds;
 pub mod library;
+pub mod links;
 pub mod merge;
+pub mod methods;
 pub mod record;
 pub mod registry;
 pub mod settings;

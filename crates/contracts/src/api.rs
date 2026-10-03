@@ -23,6 +23,10 @@ pub mod methods {
     pub const FOLDER_REVEAL: &str = "folder.reveal";
     pub const APP_REVEAL_LOGS: &str = "app.revealLogs";
     pub const APP_LOG: &str = "app.log";
+    pub const DRAFTS_PUT: &str = "drafts.put";
+    pub const DRAFTS_GET: &str = "drafts.get";
+    pub const DRAFTS_LIST: &str = "drafts.list";
+    pub const DRAFTS_DISCARD: &str = "drafts.discard";
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -197,6 +201,9 @@ pub struct SetFieldsParams {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct RelocateParams {
     pub id: crate::Id,
+    /// Refuse if the record changed since this version (undo).
+    #[serde(default)]
+    pub base_version: Option<String>,
     #[serde(default)]
     pub title: Option<String>,
     /// Absent: keep the folder. `null` or "": the kind's top folder.
@@ -242,4 +249,18 @@ pub struct LogParams {
     /// "info", "warn" or "error".
     pub level: String,
     pub message: String,
+}
+
+/// Unsaved editor text, kept by the backend until its save succeeds.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct Draft {
+    pub id: crate::Id,
+    /// The version the edit started from.
+    pub base_version: String,
+    /// The body at that version (for a three-way merge).
+    pub base_body: String,
+    pub body: String,
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub updated_ms: i64,
 }

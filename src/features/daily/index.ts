@@ -1,5 +1,7 @@
 /** Daily: any note can be a day. Today's page, the daily group in Notes, the day's start. */
 import { h, replace } from "../../kit/dom";
+import { call } from "../../backend";
+import type { Written } from "../../generated/Written";
 import { longDate } from "../../kit/format";
 import type { ShellApi } from "../../shell/api";
 import { NOTE_GROUPS, type NoteGroup } from "../../shell/slots";
@@ -37,8 +39,18 @@ export function daily(shell: ShellApi): void {
     ribbon: 0,
     keys: "Mod+T",
     render(host) {
+      // Today's note is one step away: open it, creating it if missing (one writer operation).
+      let alive = true;
       const today = localDate(new Date(), dayStart.peek());
-      replace(host, h("h1", { class: "page-title" }, longDate(today)), h("p", { class: "empty" }, "Today’s note opens here."));
+      replace(host, h("h1", { class: "page-title" }, longDate(today)), h("p", { class: "muted" }, "Opening today’s note…"));
+      void call<Written>("daily.today").then(
+        (w) => {
+          shell.records.put(w.info, w.seq);
+          if (alive && shell.router.current.peek().page === "today") shell.router.go("note", { id: w.info.id }, { replace: true });
+        },
+        (e) => alive && replace(host, h("p", { class: "empty" }, String(e?.message ?? e))),
+      );
+      return () => (alive = false);
     },
   });
 

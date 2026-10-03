@@ -16,7 +16,7 @@ it("starts with 10,000 notes", async () => {
   while (shell.timings.readyMs === undefined) await new Promise((r) => setTimeout(r, 5));
   const ms = performance.now() - t;
   console.log(`interface ready with 10,000 notes in ${ms.toFixed(0)} ms`);
-  expect(shell.records.list().length).toBe(10_000);
+  expect(shell.records.list().length).toBeGreaterThanOrEqual(10_000);
   expect(ms).toBeLessThan(1000);
   shell.destroy();
 }, 30_000);

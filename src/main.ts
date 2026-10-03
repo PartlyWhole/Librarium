@@ -1,6 +1,7 @@
 /** The interface's composition root: the only module that names every feature. */
 import { call } from "./backend";
 import { createShell } from "./shell/shell";
+import { keystrokes } from "./editor/editor";
 import { notes } from "./features/notes";
 import { daily } from "./features/daily";
 import { library } from "./features/library";
@@ -22,3 +23,14 @@ for (const level of ["warn", "error"] as const) {
 window.addEventListener("error", (e) => log("error", `${e.message} at ${e.filename}:${e.lineno}`));
 window.addEventListener("unhandledrejection", (e) => log("error", `unhandled: ${String(e.reason?.stack ?? e.reason)}`));
 setTimeout(() => log("info", `interface timings: ${JSON.stringify(shell.timings)}`), 3000);
+
+// Keystroke-to-paint, logged every 100 keystrokes (budget: 16 ms).
+let reported = 0;
+setInterval(() => {
+  if (keystrokes.length - reported < 100) return;
+  reported = keystrokes.length;
+  const s = [...keystrokes].sort((a, b) => a - b);
+  const p = (q: number) => s[Math.min(s.length - 1, Math.floor(q * s.length))]!.toFixed(1);
+  log("info", `keystroke to paint: median ${p(0.5)} ms, p95 ${p(0.95)} ms over ${s.length}`);
+}, 5000);
+(window as unknown as { librarium: Record<string, unknown> }).librarium.keystrokes = keystrokes;

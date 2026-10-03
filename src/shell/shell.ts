@@ -2,7 +2,9 @@
  * The shell: layout, router, action and key registry, native menu, prefs, settings, first run.
  * Features contribute through the registries; the shell never imports a feature.
  */
-import { call, on, pickFolder } from "../backend";
+import { call, on, onCloseRequested, pickFolder } from "../backend";
+import { Undo } from "./undo";
+import type { EditorContribution } from "../editor/editor";
 import { ask, modal } from "../kit/dialog";
 import { h, replace } from "../kit/dom";
 import { comboboxDialog } from "../kit/combobox";
@@ -47,6 +49,13 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const sidePanel = new Registry<SidePanelSection>("shell.side-panel-sections");
   const settings = new Registry<SettingsSection>("shell.settings-sections");
   const openers = new Registry<string>("shell.openers");
+  const editorExtensions = new Registry<EditorContribution>("shell.editor-extensions");
+  const undo = new Undo();
+  const closing = new Set<() => Promise<void>>();
+  onCloseRequested(async () => {
+    await Promise.allSettled([...closing].map((f) => f()));
+    await prefs.flush();
+  });
   const slots = new Map<string, Registry<unknown>>();
   const router = new Router();
   const prefs = new Prefs();
@@ -88,6 +97,12 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       if (page) router.go(page, { id });
       else status.show("That record can't be opened here.");
     },
+    editorExtensions,
+    undo,
+    beforeClose(fn) {
+      closing.add(fn);
+      return () => closing.delete(fn);
+    },
     timings: {},
     destroy: () => document.removeEventListener("keydown", onKey, true),
   };
@@ -108,6 +123,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     { id: "shell.chooseFolder", title: "Choose library folder…", run: () => void chooseFolder(), menu: { name: "file", group: 8 }, icon: FolderOpen },
     { id: "shell.revealFolder", title: "Show library folder in Finder", when: libraryOpen, run: () => void call("folder.reveal").catch(report), menu: { name: "file", group: 8 } },
     { id: "shell.revealLogs", title: "Reveal logs", run: () => void call("app.revealLogs").catch(report), menu: { name: "help", group: 1 } },
+    { id: "shell.undo", title: "Undo the last rename or move", when: () => undo.last() !== null, run: () => void undo.undoLast(), menu: { name: "edit", group: 1 } },
     { id: "shell.theme.system", title: "Theme: follow the system", run: () => prefs.pref("ui.theme", "system").set("system"), menu: { name: "view", group: 2 } },
     { id: "shell.theme.light", title: "Theme: light", run: () => prefs.pref("ui.theme", "system").set("light"), menu: { name: "view", group: 2 } },
     { id: "shell.theme.dark", title: "Theme: dark", run: () => prefs.pref("ui.theme", "system").set("dark"), menu: { name: "view", group: 2 } },
@@ -273,6 +289,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     router.canBack();
     router.canForward();
     folder();
+    undo.last();
     refreshMenu(actions);
   });
 

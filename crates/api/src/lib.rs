@@ -7,7 +7,7 @@ use librarium_contracts::api::{
     RecordText, RelocateParams, SaveParams, SaveResult, SetFieldsParams, SettingsParams, StoreStatus, WorkerPong,
     Written,
 };
-use librarium_contracts::api::{FolderInfo, LogParams};
+use librarium_contracts::api::{Draft, FolderInfo, LogParams};
 use librarium_contracts::events::methods as events;
 use librarium_contracts::ports::{ChangeSource, Clock, Desktop, FileSystem, IdGenerator, VersionStore, WorkerHost};
 use librarium_contracts::rpc::{NotificationSink, RpcHandler, RpcNotification, RpcRequest, RpcResponse};
@@ -15,6 +15,8 @@ use librarium_contracts::{BackendError, ErrorCode, Id, Result};
 use librarium_kernel::frontmatter::FmValue;
 use librarium_kernel::kinds::Kinds;
 use librarium_kernel::library::{IndexFactory, Library, LibraryPorts, OpenOptions};
+use librarium_kernel::methods::{ApiMethod, MethodCtx};
+use librarium_kernel::registry::Registry;
 use librarium_kernel::settings::Settings;
 use librarium_kernel::writer::Lane;
 use serde::de::DeserializeOwned;
@@ -44,6 +46,10 @@ pub const METHODS: &[&str] = &[
     methods::FOLDER_REVEAL,
     methods::APP_REVEAL_LOGS,
     methods::APP_LOG,
+    methods::DRAFTS_PUT,
+    methods::DRAFTS_GET,
+    methods::DRAFTS_LIST,
+    methods::DRAFTS_DISCARD,
 ];
 
 /// The settings key holding the library folder.
@@ -66,6 +72,8 @@ pub struct Deps {
     pub logs_dir: PathBuf,
     pub desktop: Arc<dyn Desktop>,
     pub open_options: OpenOptions,
+    /// API calls contributed by modules (`kernel.api-methods`).
+    pub methods: Registry<ApiMethod>,
 }
 
 enum Lib {
@@ -110,6 +118,9 @@ pub fn in_icloud(path: &Path) -> bool {
 
 impl Api {
     pub fn new(deps: Deps) -> Self {
+        for e in deps.methods.iter() {
+            assert!(!METHODS.contains(&e.id.as_str()), "{} contributes the built-in API call {}", e.contributor, e.id);
+        }
         let settings = Settings::load(deps.fs.clone(), &deps.app_support);
         Api { deps, settings, library: RwLock::new(Lib::None), sink: RwLock::new(None), open_lock: Mutex::new(()) }
     }
@@ -151,7 +162,7 @@ impl Api {
     }
 
     pub fn method_names(&self) -> Vec<String> {
-        METHODS.iter().map(|s| s.to_string()).collect()
+        METHODS.iter().map(|s| s.to_string()).chain(self.deps.methods.iter().map(|e| e.id.clone())).collect()
     }
 
     // ---- library --------------------------------------------------------------------------
@@ -303,7 +314,34 @@ impl Api {
 
     pub fn records_save(&self, p: SaveParams) -> Result<SaveResult> {
         let lib = self.library()?;
-        lib.write(Lane::Interactive, move |tx| tx.save_body(p.id, &p.base_version, p.base_body.as_deref(), &p.body))
+        let (id, body) = (p.id, p.body.clone());
+        let r = lib
+            .write(Lane::Interactive, move |tx| tx.save_body(p.id, &p.base_version, p.base_body.as_deref(), &p.body))?;
+        // The draft is kept until its save succeeds (and more typing since keeps it).
+        if !matches!(r, SaveResult::Conflict { .. }) {
+            lib.drafts.settle(id, &body);
+        }
+        Ok(r)
+    }
+
+    pub fn drafts_put(&self, mut d: Draft) -> Result<()> {
+        let lib = self.library()?;
+        d.updated_ms = self.deps.clock.now_ms();
+        lib.drafts.put(&d)
+    }
+
+    /// Drafts whose text differs from their record's file (others are dropped).
+    pub fn drafts_list(&self) -> Result<Vec<Draft>> {
+        let lib = self.library()?;
+        let mut out = vec![];
+        for d in lib.drafts.all() {
+            match lib.store.read_text(d.id) {
+                Ok(t) if t.body != d.body => out.push(d),
+                Ok(_) => lib.drafts.remove(d.id),
+                Err(_) => out.push(d),
+            }
+        }
+        Ok(out)
     }
 
     pub fn records_set_fields(&self, p: SetFieldsParams) -> Result<Written> {
@@ -321,7 +359,7 @@ impl Api {
         let lib = self.library()?;
         let (e, seq) = lib.write(Lane::Interactive, move |tx| {
             let sub = p.subfolder.as_ref().map(|s| s.as_deref().filter(|x| !x.is_empty()));
-            tx.relocate(p.id, p.title.as_deref(), sub)
+            tx.relocate_from(p.id, p.base_version.as_deref(), p.title.as_deref(), sub)
         })?;
         Ok(Written { info: e.info(), seq })
     }
@@ -418,6 +456,16 @@ impl Api {
                 self.deps.desktop.reveal(&self.library()?.root)?;
                 Ok(Value::Null)
             }
+            methods::DRAFTS_PUT => {
+                self.drafts_put(params(p)?)?;
+                Ok(Value::Null)
+            }
+            methods::DRAFTS_GET => to_json(self.library()?.drafts.get(params::<IdParams>(p)?.id)),
+            methods::DRAFTS_LIST => to_json(self.drafts_list()?),
+            methods::DRAFTS_DISCARD => {
+                self.library()?.drafts.remove(params::<IdParams>(p)?.id);
+                Ok(Value::Null)
+            }
             methods::APP_LOG => {
                 let p: LogParams = params(p)?;
                 let msg: String = p.message.chars().take(4000).collect();
@@ -433,7 +481,17 @@ impl Api {
                 self.deps.desktop.reveal(&self.deps.logs_dir)?;
                 Ok(Value::Null)
             }
-            _ => Err(BackendError::not_found(format!("no API call {method}")).with_data(json!({ "method": method }))),
+            _ => match self.deps.methods.get(method) {
+                Some(m) => {
+                    let lib = self.library()?;
+                    let settings = &self.settings;
+                    let get = |k: &str| settings.get(k);
+                    m(&MethodCtx { library: &lib, setting: &get }, p)
+                }
+                None => {
+                    Err(BackendError::not_found(format!("no API call {method}")).with_data(json!({ "method": method })))
+                }
+            },
         }
     }
 }

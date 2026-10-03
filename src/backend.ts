@@ -7,6 +7,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { BackendError } from "./generated/BackendError";
 import type { RpcNotification } from "./generated/RpcNotification";
 import type { RpcRequest } from "./generated/RpcRequest";
@@ -110,4 +111,16 @@ export async function pickFolder(title: string): Promise<string | null> {
   if (!inTauri()) return null;
   const r = await openDialog({ directory: true, multiple: false, title });
   return typeof r === "string" ? r : null;
+}
+
+
+/** Runs `handler` (e.g. a last save) before the window closes. */
+export function onCloseRequested(handler: () => Promise<void>): void {
+  if (!inTauri()) {
+    window.addEventListener("pagehide", () => void handler());
+    return;
+  }
+  void getCurrentWindow().onCloseRequested(async () => {
+    await handler();
+  });
 }

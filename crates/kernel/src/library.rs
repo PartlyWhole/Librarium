@@ -87,6 +87,7 @@ pub struct Library {
     pub store: Arc<Store>,
     pub writer: Writer,
     pub startup: StartupReport,
+    pub drafts: crate::drafts::Drafts,
     source: Arc<dyn ChangeSource>,
     closed: AtomicBool,
 }
@@ -325,10 +326,11 @@ impl Library {
         Ok(Library {
             id,
             root: root.to_path_buf(),
-            app_dir,
+            app_dir: app_dir.clone(),
             store,
             writer,
             startup,
+            drafts: crate::drafts::Drafts::new(fs.clone(), app_dir.join("drafts")),
             source: ports.changes,
             closed: AtomicBool::new(false),
         })

@@ -1,14 +1,18 @@
 /** Notes: pages, the sidebar section (folders, plus groups other modules contribute). */
 import { h, replace } from "../../kit/dom";
+import { icon } from "../../kit/icon";
 import { effect } from "../../kit/signal";
 import type { TreeNode } from "../../kit/tree";
 import { count } from "../../kit/format";
 import { call } from "../../backend";
+import { toast } from "../../kit/toast";
+import { renderNote, moveNote } from "./page";
+import type { Draft } from "../../generated/Draft";
+import type { Written } from "../../generated/Written";
 import type { ShellApi } from "../../shell/api";
 import { NOTE_GROUPS, type NoteGroup } from "../../shell/slots";
 import type { RecordInfo } from "../../generated/RecordInfo";
-import type { RecordText } from "../../generated/RecordText";
-import { Files, FileText, Folder } from "lucide";
+import { Files, FileText, FilePlus, Folder } from "lucide";
 
 const KIND = "note";
 
@@ -47,7 +51,8 @@ export function notes(shell: ShellApi): void {
     title: "Notes",
     icon: Files,
     ribbon: 1,
-    render(host) {
+    render(host, _params, ctx) {
+      ctx.setHeaderActions([h("button", { class: "icon-button", "aria-label": "New note", title: "New note (⌘N)", onclick: () => shell.actions.run("notes.new") }, icon(FilePlus))]);
       return effect(() => {
         const all = shell.records.list(KIND);
         const ungrouped = all.filter((n) => !groups.values().some((g) => g.claims(n)));
@@ -75,23 +80,47 @@ export function notes(shell: ShellApi): void {
     },
   });
 
-  // The note page: read-only until the editor arrives (milestone 3).
   shell.pages.add("notes", "note", {
     id: "note",
     title: "Note",
     icon: FileText,
-    render(host, params, ctx) {
-      let alive = true;
-      void call<RecordText>("records.read", { id: params.id }).then(
-        (t) => {
-          if (!alive) return;
-          ctx.setTitle(t.info.title || "Untitled");
-          replace(host, h("h1", { class: "page-title" }, t.info.title || "Untitled"), h("pre", { class: "note-plain" }, t.body));
-        },
-        () => alive && replace(host, h("p", { class: "empty" }, "This note can’t be found any more.")),
-      );
-      return () => (alive = false);
+    render: (host, params, ctx) => renderNote(shell, host, params, ctx),
+  });
+
+  shell.actions.add("notes", {
+    id: "notes.new",
+    title: "New note",
+    keys: ["Mod+N"],
+    reserved: true,
+    when: () => shell.folder()?.state === "open",
+    menu: { name: "file", group: 0 },
+    icon: FilePlus,
+    run: async () => {
+      const r = shell.router.current.peek();
+      const cur = r.page === "note" ? shell.records.get(r.params.id ?? "") : undefined;
+      const folder = cur ? folderOf(cur) : undefined;
+      const w = await call<Written>("notes.create", { folder });
+      shell.records.put(w.info, w.seq);
+      shell.router.go("note", { id: w.info.id, focus: "title" });
     },
+  });
+  shell.actions.add("notes", {
+    id: "notes.move",
+    title: "Move note to folder…",
+    when: () => shell.router.current().page === "note",
+    menu: { name: "file", group: 2 },
+    run: () => moveNote(shell, shell.router.current.peek().params.id ?? ""),
+  });
+
+  // Text recovered from an earlier run is offered back once the library opens.
+  let offered = false;
+  effect(() => {
+    if (shell.folder()?.state !== "open" || offered) return;
+    offered = true;
+    void call<Draft[]>("drafts.list").then((drafts) => {
+      if (!drafts.length) return;
+      toast(drafts.length === 1 ? "Text you hadn’t saved was recovered." : `Text you hadn’t saved was recovered in ${drafts.length} notes.`, { action: { label: "Show", run: () => shell.openRecord(drafts[0]!.id) } });
+    }, () => {});
   });
 
   shell.sidebar.add("notes", "notes", {

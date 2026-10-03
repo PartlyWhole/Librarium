@@ -37,6 +37,8 @@ pub struct FileMeta {
     /// Creation time, when the file system records it.
     pub birth_ns: Option<i64>,
     pub is_dir: bool,
+    /// The user's permissions allow replacing it (no read-only mode, not locked).
+    pub writable: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

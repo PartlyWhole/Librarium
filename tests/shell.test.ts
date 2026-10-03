@@ -62,8 +62,8 @@ describe("registries", () => {
 });
 
 describe("layout", () => {
-  it("has the five regions and opens on the first ribbon page", async () => {
-    await boot();
+  it("has the five regions and opens today's note", async () => {
+    const shell = await boot();
     expect(document.querySelector(".ribbon")).toBeTruthy();
     expect(document.querySelector(".sidebar")).toBeTruthy();
     expect(document.querySelector(".ws-header")).toBeTruthy();
@@ -71,7 +71,8 @@ describe("layout", () => {
     expect(document.querySelector(".status-bar")).toBeTruthy();
     const ribbon = [...document.querySelectorAll(".ribbon .icon-button")].map((b) => b.getAttribute("aria-label"));
     expect(ribbon).toEqual(["Toggle sidebar", "Today", "Notes", "Library", "Search", "Archive", "Command palette", "Keyboard shortcuts", "Settings"]);
-    expect(document.querySelector(".ribbon [aria-current=page]")?.getAttribute("aria-label")).toBe("Today");
+    expect(shell.router.current().page).toBe("note");
+    expect(shell.records.get(shell.router.current().params.id!)?.fields["daily.date"]).toBe("2026-10-02");
   });
 
   it("shows the welcome page on first run, with no silent default", async () => {
@@ -132,7 +133,7 @@ describe("actions are reachable", () => {
     await settle();
     expect(shell.router.current().page).toBe("search");
     key("ArrowLeft", "ArrowLeft", { metaKey: true, altKey: true });
-    expect(shell.router.current().page).toBe("today");
+    expect(shell.router.current().page).toBe("note");
     key("ArrowRight", "ArrowRight", { metaKey: true, altKey: true });
     expect(shell.router.current().page).toBe("search");
     key("\\", "Backslash", { metaKey: true });
@@ -150,7 +151,7 @@ describe("actions are reachable", () => {
   it("key handlers ignore IME composition", async () => {
     const shell = await boot();
     key("f", "KeyF", { metaKey: true, shiftKey: true, isComposing: true });
-    expect(shell.router.current().page).toBe("today");
+    expect(shell.router.current().page).toBe("note");
   });
 
   it("the editor keeps non-reserved keys, but not the app's reserved shortcuts", async () => {

@@ -72,3 +72,6 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-02 | A `Desktop` port shows things in Finder (reveal logs, the library folder). | [0012](docs/decisions/0012-desktop-port.md) |
 | 2026-10-02 | Interface tests and the browser preview use an in-process mock backend; interface errors go to the log. | [0013](docs/decisions/0013-interface-test-backend.md) |
 | 2026-10-02 | The sidebar tree is virtualized (10,000 notes). | [0014](docs/decisions/0014-virtualized-tree.md) |
+| 2026-10-02 | A read-only or locked file is never replaced; saves to it are retried and reported. | [0015](docs/decisions/0015-read-only-files.md) |
+| 2026-10-02 | Features offer API calls through the `kernel.api-methods` slot. | [0016](docs/decisions/0016-feature-api-calls.md) |
+| 2026-10-02 | How notes are edited, saved, recovered and merged; undo for renames and moves. | [0017](docs/decisions/0017-editing-and-conflicts.md) |

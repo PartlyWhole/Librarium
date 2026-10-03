@@ -34,6 +34,10 @@ const state = {
   calls: [] as { method: string; params: unknown }[],
   menu: [] as MenuSection[],
   pick: null as string | null,
+  drafts: new Map<string, { id: string; base_version: string; base_body: string; body: string; updated_ms: number }>(),
+  /** Make records.save fail with this error (e.g. a read-only file). */
+  failSave: null as string | null,
+  today: "2026-10-02",
   inspect: { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false },
   idn: 1,
 };
@@ -100,6 +104,21 @@ const api: Record<string, (p: any) => unknown> = {
     return st;
   },
   "folder.close": () => ((state.folder = null), status()),
+  "drafts.put": (p) => (state.drafts.set(p.id, { ...p, updated_ms: Date.now() }), null),
+  "drafts.get": (p) => state.drafts.get(p.id) ?? null,
+  "drafts.list": () => [...state.drafts.values()].filter((d) => state.records.get(d.id)?.body !== d.body),
+  "drafts.discard": (p) => (state.drafts.delete(p.id), null),
+  "notes.create": (p) => {
+    const info = seed("note", p.title || "Untitled", p.body ?? "", {}, p.folder ?? "");
+    return { info, seq: touch(need(info.id), "created") };
+  },
+  "notes.folders": () => [...new Set([...state.records.values()].filter((r) => r.info.kind === "note").map((r) => r.info.path.split("/").slice(1, -1).join("/")).filter(Boolean))].sort(),
+  "daily.today": () => {
+    const found = [...state.records.values()].find((r) => r.info.fields["daily.date"] === state.today);
+    if (found) return { info: found.info, seq: state.seq };
+    const info = seed("note", state.today, "", { "daily.date": state.today });
+    return { info, seq: touch(need(info.id), "created") };
+  },
   "folder.inspect": (p) => ({ path: p.path, ...state.inspect }),
   "folder.reveal": () => null,
   "app.revealLogs": () => null,
@@ -117,9 +136,11 @@ const api: Record<string, (p: any) => unknown> = {
     return { info, seq };
   },
   "records.save": (p) => {
+    if (state.failSave) fail("io", state.failSave);
     const r = need(p.id);
     if (r.info.version !== p.base_version) return { outcome: "conflict", version: r.info.version, body: r.body };
     r.body = p.body;
+    if (state.drafts.get(p.id)?.body === p.body) state.drafts.delete(p.id);
     const seq = touch(r, "updated");
     return { outcome: "saved", version: r.info.version, seq };
   },
@@ -133,7 +154,12 @@ const api: Record<string, (p: any) => unknown> = {
   },
   "records.relocate": (p) => {
     const r = need(p.id);
-    if (p.title) r.info.title = p.title;
+    if (p.base_version && p.base_version !== r.info.version) fail("conflict", "It changed since, so this can’t be undone.");
+    if (p.subfolder !== undefined) r.info.path = `notes/${p.subfolder ? p.subfolder + "/" : ""}${r.info.id}-${slug(r.info.title)}.md`;
+    if (p.title) {
+      r.info.title = p.title;
+      r.info.path = r.info.path.replace(/[^/]*$/, `${r.info.id}-${slug(p.title)}.md`);
+    }
     return { info: r.info, seq: touch(r, "renamed") };
   },
 };
@@ -160,6 +186,12 @@ export async function setAppMenu(sections: MenuSection[]): Promise<void> {
   state.menu = sections;
 }
 
+export const closeHandlers: (() => Promise<void>)[] = [];
+
+export function onCloseRequested(handler: () => Promise<void>): void {
+  closeHandlers.push(handler);
+}
+
 export async function pickFolder(): Promise<string | null> {
   return state.pick;
 }
@@ -177,6 +209,8 @@ export const mock = {
     state.menu = [];
     state.pick = null;
     state.idn = 1;
+    state.drafts.clear();
+    state.failSave = null;
     state.inspect = { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false };
   },
   /** A sample library for the browser preview. */
