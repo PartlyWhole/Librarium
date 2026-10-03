@@ -16,7 +16,7 @@ npm run dev            # builds the worker, starts Vite and opens the app
 | Command | What it does |
 |---|---|
 | `npm run dev` | Run the app in development |
-| `npm run build` | Build an ad-hoc signed `Librarium.app` (with the worker bundled) |
+| `npm run build` | Build an ad-hoc signed `Librarium.app` (with the worker bundled) in `target/release/bundle/macos/`; not notarized |
 | `npm test` | All tests: Vitest, the WebKit reader checks, then `cargo test --workspace` |
 | `npm run test:webkit` | End-to-end reader checks in WebKit (the app's engine) |
 | `npm run lint` | ESLint, dependency-cruiser direction rules, clippy and rustfmt |

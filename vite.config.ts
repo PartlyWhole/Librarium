@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
   resolve: { alias: mode === "mock" || mode === "test" ? [mockBackend] : [] },
   build: {
     target: "safari18",
-    minify: process.env.TAURI_ENV_DEBUG ? false : "esbuild",
+    minify: !process.env.TAURI_ENV_DEBUG,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },
   test: {
