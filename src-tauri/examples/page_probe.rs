@@ -79,7 +79,18 @@ fn main() {
                     assert!(!p.text.contains("Explaining Wendell Berry"), "not the card: {}", p.text);
                 }));
                 println!("popup page: {popup:?}");
-                if r.is_ok() && long.is_ok() && popup.is_ok() {
+                // Popups that come late (on reaching the end, after a delay) or float over the
+                // text are not in the PDF; the page's own sticky header is.
+                let late = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let p = saver.save(&format!("{base}/late-popup.html"), Duration::from_secs(60)).unwrap();
+                    let text = librarium_pagesaver_webkit::pdf_text(&p.pdf);
+                    assert!(text.contains("Technique integrates everything."), "the essay is in the PDF");
+                    assert!(text.contains("Site navigation"), "the sticky header stays");
+                    assert!(!text.contains("Discover more"), "the late popup is not in the PDF");
+                    assert!(!text.contains("floating offer"), "the floating overlay is not in the PDF");
+                }));
+                println!("late popup page: {late:?}");
+                if r.is_ok() && long.is_ok() && popup.is_ok() && late.is_ok() {
                     0
                 } else {
                     1

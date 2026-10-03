@@ -54,24 +54,47 @@ document.documentElement.appendChild(still);
 await frame();
 const all = () => (document.body ? [...document.body.querySelectorAll("*")] : []);
 // Popups over the page (subscribe prompts, cookie notices, sign-in walls drawn as dialogs):
-// fixed or sticky and covering much of the window, or plainly a dialog or a notice.
+// fixed or sticky and covering much of the window, or plainly a dialog or a notice; or a
+// floating box stacked high above the page and covering much of the window.
 const NOTICE = /cookie|consent|gdpr|subscribe|newsletter|signup|sign-up|modal|popup|pop-up|overlay|backdrop|paywall|interstitial|lightbox/i;
-for (const el of all()) {
-  if (!el.isConnected) continue;
-  const cs = getComputedStyle(el);
-  if (cs.position !== "fixed" && cs.position !== "sticky") continue;
-  const r = el.getBoundingClientRect();
-  const big = r.width * r.height > innerWidth * innerHeight * 0.25;
-  const dialog = el.matches("dialog,[role=dialog],[role=alertdialog],[aria-modal=true]") || NOTICE.test(`${el.id} ${typeof el.className === "string" ? el.className : ""}`);
-  if (big || dialog) el.remove();
-}
-document.querySelectorAll("dialog[open],[aria-modal=true]").forEach((d) => d.remove());
-// A popup may have locked scrolling or dimmed the page; undo that.
-for (const e of [document.documentElement, document.body]) {
-  if (!e) continue;
-  e.style.setProperty("overflow", "visible", "important");
-  if (getComputedStyle(e).position === "fixed") e.style.setProperty("position", "static", "important");
-}
+const unpopup = () => {
+  if (!document.body) return;
+  const win = innerWidth * innerHeight;
+  for (const el of document.body.querySelectorAll("*")) {
+    if (!el.isConnected) continue;
+    const cs = getComputedStyle(el);
+    const pos = cs.position;
+    if (pos !== "fixed" && pos !== "sticky" && pos !== "absolute") continue;
+    // Hidden for now: the watcher below sees it when it is shown.
+    if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) === 0) continue;
+    const r = el.getBoundingClientRect();
+    const area = r.width * r.height;
+    const named = el.matches("dialog,[role=dialog],[role=alertdialog],[aria-modal=true]") || NOTICE.test(`${el.id} ${typeof el.className === "string" ? el.className : ""}`);
+    const z = parseInt(cs.zIndex, 10) || 0;
+    const popup = pos === "absolute" ? z >= 100 && (area > win * 0.15 || named) : area > win * 0.25 || named;
+    if (popup) el.remove();
+  }
+  document.querySelectorAll("dialog[open],[aria-modal=true]").forEach((d) => d.remove());
+  // A popup may have locked scrolling; undo that (only when needed, so the watcher settles).
+  for (const e of [document.documentElement, document.body]) {
+    const cs = getComputedStyle(e);
+    if (cs.overflow !== "visible" && cs.overflowY !== "visible") e.style.setProperty("overflow", "visible", "important");
+    if (cs.position === "fixed") e.style.setProperty("position", "static", "important");
+  }
+};
+unpopup();
+// Popups often come late (after a delay, or on reaching the end of the page): watch until the
+// page has been saved, and remove each as it appears. The saver sweeps once more before printing.
+let sweeping = false;
+new MutationObserver(() => {
+  if (sweeping) return;
+  sweeping = true;
+  queueMicrotask(() => {
+    sweeping = false;
+    unpopup();
+  });
+}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "open", "hidden", "aria-modal"] });
+window.__librariumUnpopup = unpopup;
 // Text that a reveal-on-scroll script left transparent (in the flow of the page, unlike menus).
 for (const el of all()) {
   const cs = getComputedStyle(el);
@@ -268,7 +291,28 @@ impl WebKitPageSaver {
         serde_json::from_str(&json).map_err(|e| err(format!("the page couldn’t be read: {e}")))
     }
 
+    /// Removes popups once more (in the page's script world, where the watcher lives), right
+    /// before printing.
+    fn sweep(&self, label: &str) {
+        let _ = self.on_webview(label, Duration::from_secs(10), |wk, mtm, tx| {
+            let world = unsafe { WKContentWorld::defaultClientWorld(mtm) };
+            let block = block2::RcBlock::new(move |_res: *mut AnyObject, _error: *mut NSError| {
+                let _ = tx.send(());
+            });
+            unsafe {
+                wk.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(
+                    &NSString::from_str("if (window.__librariumUnpopup) window.__librariumUnpopup(); return 1;"),
+                    None,
+                    None,
+                    &world,
+                    Some(&block),
+                )
+            };
+        });
+    }
+
     fn pdf_slice(&self, label: &str, y: f64, w: f64, h: f64, timeout: Duration) -> Result<Vec<u8>> {
+        self.sweep(label);
         let r: std::result::Result<Vec<u8>, String> = self.on_webview(label, timeout, move |wk, mtm, tx| {
             let config = unsafe { WKPDFConfiguration::new(mtm) };
             unsafe { config.setRect(CGRect { origin: CGPoint { x: 0.0, y }, size: CGSize { width: w, height: h } }) };
@@ -367,4 +411,13 @@ impl PageSaver for WebKitPageSaver {
         close();
         result
     }
+}
+
+/// A PDF's text, read with PDFKit (for checks).
+pub fn pdf_text(pdf: &[u8]) -> String {
+    use objc2_pdf_kit::PDFDocument;
+    unsafe { PDFDocument::initWithData(PDFDocument::alloc(), &NSData::with_bytes(pdf)) }
+        .and_then(|d| unsafe { d.string() })
+        .map(|s| s.to_string())
+        .unwrap_or_default()
 }
