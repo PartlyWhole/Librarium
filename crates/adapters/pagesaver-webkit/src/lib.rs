@@ -46,8 +46,48 @@ eager();
 scrollTo(0, 0);
 await sleep(300);
 await Promise.race([Promise.all([...document.images].filter((i) => !i.complete).map((i) => new Promise((r) => { i.addEventListener("load", r); i.addEventListener("error", r); }))), sleep(3000)]);
+// Finish every transition and animation now: pages that fade text in as it is scrolled to
+// would otherwise be printed half-way, or not at all.
+const still = document.createElement("style");
+still.textContent = "*,*::before,*::after{transition:none!important;animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important}";
+document.documentElement.appendChild(still);
+await frame();
+const all = () => (document.body ? [...document.body.querySelectorAll("*")] : []);
+// Popups over the page (subscribe prompts, cookie notices, sign-in walls drawn as dialogs):
+// fixed or sticky and covering much of the window, or plainly a dialog or a notice.
+const NOTICE = /cookie|consent|gdpr|subscribe|newsletter|signup|sign-up|modal|popup|pop-up|overlay|backdrop|paywall|interstitial|lightbox/i;
+for (const el of all()) {
+  if (!el.isConnected) continue;
+  const cs = getComputedStyle(el);
+  if (cs.position !== "fixed" && cs.position !== "sticky") continue;
+  const r = el.getBoundingClientRect();
+  const big = r.width * r.height > innerWidth * innerHeight * 0.25;
+  const dialog = el.matches("dialog,[role=dialog],[role=alertdialog],[aria-modal=true]") || NOTICE.test(`${el.id} ${typeof el.className === "string" ? el.className : ""}`);
+  if (big || dialog) el.remove();
+}
+document.querySelectorAll("dialog[open],[aria-modal=true]").forEach((d) => d.remove());
+// A popup may have locked scrolling or dimmed the page; undo that.
+for (const e of [document.documentElement, document.body]) {
+  if (!e) continue;
+  e.style.setProperty("overflow", "visible", "important");
+  if (getComputedStyle(e).position === "fixed") e.style.setProperty("position", "static", "important");
+}
+// Text that a reveal-on-scroll script left transparent (in the flow of the page, unlike menus).
+for (const el of all()) {
+  const cs = getComputedStyle(el);
+  if ((parseFloat(cs.opacity) < 0.05 || cs.visibility === "hidden") && (cs.position === "static" || cs.position === "relative") && cs.display !== "none" && (el.textContent || "").trim().length > 20) {
+    el.style.setProperty("opacity", "1", "important");
+    el.style.setProperty("visibility", "visible", "important");
+    el.style.setProperty("transform", "none", "important");
+  }
+}
+await frame();
 const meta = (sel) => document.querySelector(sel)?.getAttribute("content") || null;
-const main = document.querySelector("article") || document.querySelector("main") || document.querySelector("[role=main]") || document.body;
+// The main text: the candidate holding the most text (the first <article> may be a card).
+const size = (el) => (el.innerText || "").length;
+const candidates = [...document.querySelectorAll("article, main, [role=main], [itemprop=articleBody], .post-content, .entry-content, .article-body")];
+let main = candidates.sort((a, b) => size(b) - size(a))[0] || document.body;
+if (document.body && size(main) < Math.min(500, size(document.body) * 0.2)) main = document.body;
 // Soft hyphens and zero-width characters would split words in the stored text.
 const tidy = (s) => s.replace(/[\u00AD\u200B\u200C\u200D\u2060\uFEFF]/g, "");
 const clean = (el) => {

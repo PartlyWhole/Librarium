@@ -66,7 +66,20 @@ fn main() {
                     p.pdf.windows(10).filter(|w| w == b"/Type /Pag" || w == b"/Type/Page").count()
                 }));
                 println!("long page: {long:?}");
-                if r.is_ok() && long.is_ok() {
+                // A popup over the page is removed (and scrolling unlocked); the main text is the
+                // essay, not the first <article> (a small card).
+                let popup = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let p = saver.save(&format!("{base}/popup.html"), Duration::from_secs(60)).unwrap();
+                    assert!(!p.visible_text.contains("Discover more"), "the popup is gone: {}", p.visible_text);
+                    assert!(
+                        p.text.contains("Technique integrates everything."),
+                        "the essay is the main text: {}",
+                        p.text
+                    );
+                    assert!(!p.text.contains("Explaining Wendell Berry"), "not the card: {}", p.text);
+                }));
+                println!("popup page: {popup:?}");
+                if r.is_ok() && long.is_ok() && popup.is_ok() {
                     0
                 } else {
                     1
@@ -121,7 +134,7 @@ fn main() {
                             if !ok {
                                 failed += 1;
                             }
-                            println!("{} {url}: text {:.0}% of {} words; images visible {} / in PDF {}; {} pages; drawn {:.0}%; checks {:?}", if ok { "✓" } else { "✗" }, cover * 100.0, seen.len(), p.images, images_pdf, info["pages"], p.drawn * 100.0, checks);
+                            println!("{} {url}: text {:.0}% of {} words; images visible {} / in PDF {}; {} pages; drawn {:.0}%; stored text {} words; checks {:?}", if ok { "✓" } else { "✗" }, cover * 100.0, seen.len(), p.images, images_pdf, info["pages"], p.drawn * 100.0, p.text.split_whitespace().count(), checks);
                         }
                         Err(e) => {
                             failed += 1;
