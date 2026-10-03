@@ -125,7 +125,15 @@ fn main() {
                     assert!(p.text.contains("Technique integrates everything."));
                 }));
                 println!("cancel: {cancel:?}");
-                if r.is_ok() && long.is_ok() && popup.is_ok() && late.is_ok() && cancel.is_ok() {
+                // A page that changes all the time is saved in good time.
+                let busy = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let started = std::time::Instant::now();
+                    let p = saver.save(&format!("{base}/busy.html"), Duration::from_secs(60)).unwrap();
+                    assert!(p.text.contains("Technique integrates everything."));
+                    assert!(started.elapsed() < Duration::from_secs(15), "took {:?}", started.elapsed());
+                }));
+                println!("busy page: {busy:?}");
+                if r.is_ok() && long.is_ok() && popup.is_ok() && late.is_ok() && cancel.is_ok() && busy.is_ok() {
                     0
                 } else {
                     1

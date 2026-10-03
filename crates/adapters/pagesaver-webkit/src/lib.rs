@@ -58,17 +58,21 @@ const all = () => (document.body ? [...document.body.querySelectorAll("*")] : []
 // floating box stacked high above the page and covering much of the window.
 const NOTICE = /cookie|consent|gdpr|subscribe|newsletter|signup|sign-up|modal|popup|pop-up|overlay|backdrop|paywall|interstitial|lightbox/i;
 const DIALOG = "dialog,[role=dialog],[role=alertdialog],[aria-modal=true]";
-const unpopup = () => {
+// `within`: only these elements (and what they contain) are looked at; omitted, the whole page.
+let pageText = 0;
+const unpopup = (within) => {
   if (!document.body) return;
   const win = innerWidth * innerHeight;
-  const pageText = (document.body.textContent || "").length;
+  if (!within) pageText = (document.body.textContent || "").length;
+  const small = (el) => (el.textContent || "").length < pageText * 0.5;
   // Dialogs go whether shown or not: a popup may still be fading in (hidden windows pause the
   // scripts that animate it) and only appear when the page is printed. Never one that holds
   // most of the page's text (a page shown as a dialog).
-  for (const d of document.querySelectorAll(DIALOG)) {
-    if ((d.textContent || "").length < pageText * 0.5) d.remove();
-  }
-  for (const el of document.body.querySelectorAll("*")) {
+  const dialogs = within ? within.flatMap((el) => [...(el.matches(DIALOG) ? [el] : []), ...el.querySelectorAll(DIALOG)]) : [...document.querySelectorAll(DIALOG)];
+  for (const d of dialogs) if (d.isConnected && small(d)) d.remove();
+  // Large subtrees (a page rendering its content) are looked at only at their top.
+  const candidates = within ? within.flatMap((el) => (el.isConnected ? [el, ...(el.getElementsByTagName("*").length < 400 ? el.querySelectorAll("*") : [])] : [])) : document.body.querySelectorAll("*");
+  for (const el of candidates) {
     if (!el.isConnected) continue;
     const cs = getComputedStyle(el);
     const pos = cs.position;
@@ -80,7 +84,7 @@ const unpopup = () => {
     const named = el.matches(DIALOG) || NOTICE.test(`${el.id} ${typeof el.className === "string" ? el.className : ""}`);
     const z = parseInt(cs.zIndex, 10) || 0;
     const popup = pos === "absolute" ? z >= 100 && (area > win * 0.15 || named) : area > win * 0.25 || named;
-    if (popup && (el.textContent || "").length < pageText * 0.5) el.remove();
+    if (popup && small(el)) el.remove();
   }
   // A popup may have locked scrolling; undo that (only when needed, so the watcher settles).
   for (const e of [document.documentElement, document.body]) {
@@ -91,16 +95,22 @@ const unpopup = () => {
 };
 unpopup();
 // Popups often come late (after a delay, or on reaching the end of the page): watch until the
-// page has been saved, and remove each as it appears. The saver sweeps once more before printing.
-let sweeping = false;
-new MutationObserver(() => {
-  if (sweeping) return;
-  sweeping = true;
+// page has been saved, and remove each as it appears. Only what changed is looked at, so busy
+// pages (ads, players) stay fast. The saver sweeps the whole page once more before printing.
+let changed = new Set();
+new MutationObserver((records) => {
+  const first = changed.size === 0;
+  for (const m of records) {
+    if (m.type === "childList") m.addedNodes.forEach((n) => n.nodeType === 1 && changed.add(n));
+    else if (m.target.nodeType === 1) changed.add(m.target);
+  }
+  if (!first || changed.size === 0) return;
   queueMicrotask(() => {
-    sweeping = false;
-    unpopup();
+    const els = [...changed];
+    changed = new Set();
+    unpopup(els);
   });
-}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "open", "hidden", "aria-modal"] });
+}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "open", "hidden", "aria-modal", "role"] });
 window.__librariumUnpopup = unpopup;
 // Text that a reveal-on-scroll script left transparent (in the flow of the page, unlike menus).
 for (const el of all()) {
