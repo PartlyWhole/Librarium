@@ -57,24 +57,31 @@ const all = () => (document.body ? [...document.body.querySelectorAll("*")] : []
 // fixed or sticky and covering much of the window, or plainly a dialog or a notice; or a
 // floating box stacked high above the page and covering much of the window.
 const NOTICE = /cookie|consent|gdpr|subscribe|newsletter|signup|sign-up|modal|popup|pop-up|overlay|backdrop|paywall|interstitial|lightbox/i;
+const DIALOG = "dialog,[role=dialog],[role=alertdialog],[aria-modal=true]";
 const unpopup = () => {
   if (!document.body) return;
   const win = innerWidth * innerHeight;
+  const pageText = (document.body.textContent || "").length;
+  // Dialogs go whether shown or not: a popup may still be fading in (hidden windows pause the
+  // scripts that animate it) and only appear when the page is printed. Never one that holds
+  // most of the page's text (a page shown as a dialog).
+  for (const d of document.querySelectorAll(DIALOG)) {
+    if ((d.textContent || "").length < pageText * 0.5) d.remove();
+  }
   for (const el of document.body.querySelectorAll("*")) {
     if (!el.isConnected) continue;
     const cs = getComputedStyle(el);
     const pos = cs.position;
     if (pos !== "fixed" && pos !== "sticky" && pos !== "absolute") continue;
-    // Hidden for now: the watcher below sees it when it is shown.
-    if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) === 0) continue;
+    // Not laid out at all: the watcher below sees it when it is.
+    if (cs.display === "none") continue;
     const r = el.getBoundingClientRect();
     const area = r.width * r.height;
-    const named = el.matches("dialog,[role=dialog],[role=alertdialog],[aria-modal=true]") || NOTICE.test(`${el.id} ${typeof el.className === "string" ? el.className : ""}`);
+    const named = el.matches(DIALOG) || NOTICE.test(`${el.id} ${typeof el.className === "string" ? el.className : ""}`);
     const z = parseInt(cs.zIndex, 10) || 0;
     const popup = pos === "absolute" ? z >= 100 && (area > win * 0.15 || named) : area > win * 0.25 || named;
-    if (popup) el.remove();
+    if (popup && (el.textContent || "").length < pageText * 0.5) el.remove();
   }
-  document.querySelectorAll("dialog[open],[aria-modal=true]").forEach((d) => d.remove());
   // A popup may have locked scrolling; undo that (only when needed, so the watcher settles).
   for (const e of [document.documentElement, document.body]) {
     const cs = getComputedStyle(e);

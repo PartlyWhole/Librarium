@@ -88,6 +88,10 @@ fn main() {
                     assert!(text.contains("Site navigation"), "the sticky header stays");
                     assert!(!text.contains("Discover more"), "the late popup is not in the PDF");
                     assert!(!text.contains("floating offer"), "the floating overlay is not in the PDF");
+                    assert!(!text.contains("fading popup"), "the popup still fading in is not in the PDF");
+                    // Transparent elements still count in the page's text: the dialog was removed,
+                    // not just left invisible.
+                    assert!(!p.visible_text.contains("fading popup"), "the fading popup was removed from the page");
                 }));
                 println!("late popup page: {late:?}");
                 if r.is_ok() && long.is_ok() && popup.is_ok() && late.is_ok() {

@@ -19,6 +19,11 @@
   <p>Technique integrates everything. It avoids shock and sensational events.</p>
   <p class="fade" style="opacity: 0">This last paragraph fades in, and showing it brings up a second popup, as late as popups come.</p>
 </article>
+<!-- Fades in frame by frame, as Substack's does: a hidden window never runs those frames. -->
+<div role="dialog" id="fading" style="position: fixed; top: 20%; left: 25%; width: 50%; padding: 40px; background: #fff; opacity: 0">Discover more, said the fading popup.</div>
+<script>
+  (function fade(t) { const d = document.getElementById("fading"); d.style.opacity = String(Math.min(1, (parseFloat(d.style.opacity) || 0) + 0.05)); if (d.style.opacity !== "1") requestAnimationFrame(fade); })();
+</script>
 <div class="modal-wrap" id="later"><div role="dialog" style="background:#fff;padding:40px">Discover more, said the latest popup.</div></div>
 <!-- Shown when the reader reaches the end, a little later, as Substack does. -->
 <div class="modal-wrap" id="late"><div role="dialog" style="background:#fff;padding:40px">Discover more from the late newsletter. Subscribe.</div></div>
