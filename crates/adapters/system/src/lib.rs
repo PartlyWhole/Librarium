@@ -32,6 +32,24 @@ impl IdGenerator for UuidV7 {
     }
 }
 
+/// Desktop port: Finder, through `open`.
+pub struct MacDesktop;
+
+impl librarium_contracts::ports::Desktop for MacDesktop {
+    fn reveal(&self, path: &std::path::Path) -> librarium_contracts::Result<()> {
+        let status = std::process::Command::new("/usr/bin/open")
+            .arg("-R")
+            .arg(path)
+            .status()
+            .map_err(|e| librarium_contracts::BackendError::io(e.to_string()))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(librarium_contracts::BackendError::io(format!("Finder could not show {}", path.display())))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

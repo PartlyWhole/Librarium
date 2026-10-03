@@ -5,6 +5,8 @@
  * Tauri channel as JSON-RPC notifications. Errors become `BackendError {code, message, data}`.
  */
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type { BackendError } from "./generated/BackendError";
 import type { RpcNotification } from "./generated/RpcNotification";
 import type { RpcRequest } from "./generated/RpcRequest";
@@ -64,4 +66,48 @@ async function subscribe(): Promise<void> {
 /** True inside the Tauri webview; false in plain browsers and tests. */
 export function inTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+// ---- Native menu and dialogs: still the one door to Tauri. ----------------------------------
+
+
+export type PredefinedItem = "Undo" | "Redo" | "Cut" | "Copy" | "Paste" | "SelectAll" | "Minimize" | "Maximize" | "Fullscreen" | "CloseWindow" | "Hide" | "HideOthers" | "ShowAll" | "Quit" | "Services" | "About";
+
+export type MenuEntry =
+  | { kind: "item"; id: string; text: string; accelerator?: string; enabled: boolean; run: () => void }
+  | { kind: "separator" }
+  | { kind: "predefined"; item: PredefinedItem; text?: string };
+
+export interface MenuSection {
+  title: string;
+  entries: MenuEntry[];
+}
+
+/** Installs the macOS menu bar. The first section is the App menu. */
+export async function setAppMenu(sections: MenuSection[]): Promise<void> {
+  if (!inTauri()) return;
+  const subs = await Promise.all(
+    sections.map(async (s) => {
+      const items = await Promise.all(
+        s.entries.map((e) => {
+          if (e.kind === "separator") return PredefinedMenuItem.new({ item: "Separator" });
+          if (e.kind === "predefined") {
+            if (e.item === "About") return PredefinedMenuItem.new({ item: { About: null }, text: e.text });
+            return PredefinedMenuItem.new({ item: e.item, text: e.text });
+          }
+          return MenuItem.new({ id: e.id, text: e.text, accelerator: e.accelerator, enabled: e.enabled, action: () => e.run() });
+        }),
+      );
+      return Submenu.new({ text: s.title, items });
+    }),
+  );
+  const menu = await Menu.new({ items: subs });
+  await menu.setAsAppMenu();
+}
+
+/** Asks the user to choose a folder. Resolves with its path, or null. */
+export async function pickFolder(title: string): Promise<string | null> {
+  if (!inTauri()) return null;
+  const r = await openDialog({ directory: true, multiple: false, title });
+  return typeof r === "string" ? r : null;
 }

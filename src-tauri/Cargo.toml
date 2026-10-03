@@ -35,6 +35,7 @@ tauri = { workspace = true, features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-single-instance = "2"
 log = "0.4"
+tauri-plugin-dialog = "2"
 
 [dev-dependencies]
 librarium-testkit.workspace = true

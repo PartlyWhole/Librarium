@@ -280,3 +280,12 @@ pub trait WorkerHost: Send + Sync {
     /// memory ceiling, and reports a `Worker` error.
     fn call(&self, method: &str, params: Value, timeout: Duration) -> Result<Value>;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Desktop
+
+/// Asks the desktop to show things to the user (Finder). Nothing here changes files.
+pub trait Desktop: Send + Sync {
+    /// Shows a file or folder in Finder.
+    fn reveal(&self, path: &Path) -> Result<()>;
+}

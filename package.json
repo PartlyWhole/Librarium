@@ -18,20 +18,24 @@
     "test": "npm run test:web && npm run test:rust",
     "test:web": "vitest run",
     "test:rust": "cargo test --workspace",
-    "arch-report": "cargo test -q -p librarium-app --test arch_report -- --nocapture",
+    "arch-report": "vitest run tests/arch.test.ts && cargo test -q -p librarium-app --test arch_report -- --nocapture",
     "lint": "npm run lint:web && npm run lint:deps && npm run lint:rust",
     "lint:web": "eslint .",
     "lint:deps": "depcruise src --config .dependency-cruiser.cjs",
     "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all --check",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "dev:mock": "vite --mode mock"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.12.1"
+    "@tauri-apps/api": "2.12.1",
+    "@tauri-apps/plugin-dialog": "2.8.1",
+    "lucide": "1.50.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@tauri-apps/cli": "2.12.1",
     "@types/node": "24.19.1",
+    "axe-core": "4.13.0",
     "dependency-cruiser": "18.5.0",
     "eslint": "10.12.0",
     "globals": "17.13.0",

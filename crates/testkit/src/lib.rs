@@ -3,6 +3,7 @@
 pub mod binaries;
 pub mod changes;
 pub mod clock;
+pub mod desktop;
 pub mod faultfs;
 pub mod ids;
 pub mod memfs;

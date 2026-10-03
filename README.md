@@ -20,6 +20,7 @@ npm run dev            # builds the worker, starts Vite and opens the app
 | `npm test` | All tests: Vitest, then `cargo test --workspace` |
 | `npm run lint` | ESLint, dependency-cruiser direction rules, clippy and rustfmt |
 | `npm run gen:types` | Regenerate `src/generated/` from the `contracts` crate |
+| `npm run dev:mock` | The interface alone in a browser, on a sample library (port 1421) |
 | `npm run arch-report` | Print the architecture report (edges, API calls, slots, timings) |
 
 ## Layout
@@ -68,3 +69,6 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-02 | How two files with one ID are classified, and when IDs are rewritten. | [0009](docs/decisions/0009-duplicate-ids.md) |
 | 2026-10-02 | API calls about the user's folder are `folder.*`; the name guard checks strings and feature crates. | [0010](docs/decisions/0010-folder-vocabulary.md) |
 | 2026-10-02 | A record's path is the truth for its folder; renames and moves are intents. | [0011](docs/decisions/0011-folders-and-renames.md) |
+| 2026-10-02 | A `Desktop` port shows things in Finder (reveal logs, the library folder). | [0012](docs/decisions/0012-desktop-port.md) |
+| 2026-10-02 | Interface tests and the browser preview use an in-process mock backend; interface errors go to the log. | [0013](docs/decisions/0013-interface-test-backend.md) |
+| 2026-10-02 | The sidebar tree is virtualized (10,000 notes). | [0014](docs/decisions/0014-virtualized-tree.md) |

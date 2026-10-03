@@ -7,8 +7,9 @@ use librarium_contracts::api::{
     RecordText, RelocateParams, SaveParams, SaveResult, SetFieldsParams, SettingsParams, StoreStatus, WorkerPong,
     Written,
 };
+use librarium_contracts::api::{FolderInfo, LogParams};
 use librarium_contracts::events::methods as events;
-use librarium_contracts::ports::{ChangeSource, Clock, FileSystem, IdGenerator, VersionStore, WorkerHost};
+use librarium_contracts::ports::{ChangeSource, Clock, Desktop, FileSystem, IdGenerator, VersionStore, WorkerHost};
 use librarium_contracts::rpc::{NotificationSink, RpcHandler, RpcNotification, RpcRequest, RpcResponse};
 use librarium_contracts::{BackendError, ErrorCode, Id, Result};
 use librarium_kernel::frontmatter::FmValue;
@@ -39,6 +40,10 @@ pub const METHODS: &[&str] = &[
     methods::RECORDS_RELOCATE,
     methods::SETTINGS_GET,
     methods::SETTINGS_SET,
+    methods::FOLDER_INSPECT,
+    methods::FOLDER_REVEAL,
+    methods::APP_REVEAL_LOGS,
+    methods::APP_LOG,
 ];
 
 /// The settings key holding the library folder.
@@ -57,6 +62,9 @@ pub struct Deps {
     pub kinds: Arc<dyn Fn() -> Kinds + Send + Sync>,
     /// `~/Library/Application Support/<identifier>/`
     pub app_support: PathBuf,
+    /// `~/Library/Logs/<identifier>/`
+    pub logs_dir: PathBuf,
+    pub desktop: Arc<dyn Desktop>,
     pub open_options: OpenOptions,
 }
 
@@ -318,10 +326,59 @@ impl Api {
         Ok(Written { info: e.info(), seq })
     }
 
+    /// What a folder holds, so first run can ask how to treat it.
+    pub fn folder_inspect(&self, path: &Path) -> FolderInfo {
+        let fs = &self.deps.fs;
+        let mut info = FolderInfo {
+            path: path.display().to_string(),
+            exists: false,
+            empty: true,
+            is_library: false,
+            markdown_files: 0,
+            in_icloud: in_icloud(path),
+        };
+        match fs.stat(path) {
+            Ok(Some(m)) if m.is_dir => info.exists = true,
+            _ => return info,
+        }
+        info.is_library = fs.stat(&path.join(".librarium/library.json")).ok().flatten().is_some();
+        let mut stack = vec![path.to_path_buf()];
+        let mut first = true;
+        while let Some(d) = stack.pop() {
+            for e in fs.list(&d).unwrap_or_default() {
+                if e.name.starts_with('.') {
+                    continue;
+                }
+                if first {
+                    info.empty = false;
+                }
+                if e.is_dir {
+                    stack.push(d.join(&e.name));
+                } else if e.name.ends_with(".md") {
+                    info.markdown_files += 1;
+                    if info.markdown_files >= 10_000 {
+                        return info;
+                    }
+                }
+            }
+            first = false;
+        }
+        info
+    }
+
     // ---- settings -------------------------------------------------------------------------
 
     pub fn settings_get(&self) -> Map<String, Value> {
         self.settings.all()
+    }
+
+    /// Sets settings the backend itself owns (e.g. the window's frame), bypassing the guard.
+    pub fn settings_set_internal(&self, key: &str, value: Value) -> Result<()> {
+        self.settings.set(&[(key.to_string(), Some(value))])
+    }
+
+    pub fn settings_value(&self, key: &str) -> Option<Value> {
+        self.settings.get(key)
     }
 
     pub fn settings_set(&self, values: Map<String, Value>) -> Result<Map<String, Value>> {
@@ -356,6 +413,26 @@ impl Api {
             methods::RECORDS_RELOCATE => to_json(self.records_relocate(params(p)?)?),
             methods::SETTINGS_GET => to_json(self.settings_get()),
             methods::SETTINGS_SET => to_json(self.settings_set(params::<SettingsParams>(p)?.values)?),
+            methods::FOLDER_INSPECT => to_json(self.folder_inspect(Path::new(&params::<OpenLibraryParams>(p)?.path))),
+            methods::FOLDER_REVEAL => {
+                self.deps.desktop.reveal(&self.library()?.root)?;
+                Ok(Value::Null)
+            }
+            methods::APP_LOG => {
+                let p: LogParams = params(p)?;
+                let msg: String = p.message.chars().take(4000).collect();
+                match p.level.as_str() {
+                    "error" => log::error!(target: "interface", "{msg}"),
+                    "warn" => log::warn!(target: "interface", "{msg}"),
+                    _ => log::info!(target: "interface", "{msg}"),
+                }
+                Ok(Value::Null)
+            }
+            methods::APP_REVEAL_LOGS => {
+                self.deps.fs.create_dir_all(&self.deps.logs_dir).map_err(|e| BackendError::io(e.to_string()))?;
+                self.deps.desktop.reveal(&self.deps.logs_dir)?;
+                Ok(Value::Null)
+            }
             _ => Err(BackendError::not_found(format!("no API call {method}")).with_data(json!({ "method": method }))),
         }
     }

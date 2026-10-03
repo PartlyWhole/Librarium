@@ -45,6 +45,8 @@ fn api_with(fs: Arc<MemFs>) -> Arc<Api> {
             k
         }),
         app_support: PathBuf::from("/app"),
+        logs_dir: PathBuf::from("/logs"),
+        desktop: Arc::new(librarium_testkit::desktop::RecordingDesktop::default()),
         open_options: OpenOptions { tick: Duration::from_secs(3600), ..Default::default() },
     }))
 }
@@ -145,4 +147,20 @@ fn a_missing_folder_is_reported_calmly() {
 fn icloud_is_recognised() {
     assert!(librarium_api::in_icloud(Path::new("/Users/me/Library/Mobile Documents/com~apple~CloudDocs/Notes")));
     assert!(!librarium_api::in_icloud(Path::new("/Users/me/Documents/Notes")));
+}
+
+#[test]
+fn inspects_folders_for_first_run() {
+    let (a, fs) = api();
+    let info = a.folder_inspect(Path::new("/lib"));
+    assert!(info.exists && info.empty && !info.is_library);
+    fs.write_outside(Path::new("/lib/Notes/a.md"), b"# a");
+    fs.write_outside(Path::new("/lib/b.md"), b"# b");
+    fs.write_outside(Path::new("/lib/.hidden"), b"");
+    let info = a.folder_inspect(Path::new("/lib"));
+    assert!(!info.empty);
+    assert_eq!(info.markdown_files, 2);
+    a.open_library(Path::new("/lib")).unwrap();
+    assert!(a.folder_inspect(Path::new("/lib")).is_library);
+    assert!(!a.folder_inspect(Path::new("/nope")).exists);
 }

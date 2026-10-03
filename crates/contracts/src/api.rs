@@ -19,6 +19,10 @@ pub mod methods {
     pub const RECORDS_RELOCATE: &str = "records.relocate";
     pub const SETTINGS_GET: &str = "settings.get";
     pub const SETTINGS_SET: &str = "settings.set";
+    pub const FOLDER_INSPECT: &str = "folder.inspect";
+    pub const FOLDER_REVEAL: &str = "folder.reveal";
+    pub const APP_REVEAL_LOGS: &str = "app.revealLogs";
+    pub const APP_LOG: &str = "app.log";
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -217,4 +221,25 @@ pub struct Written {
 pub struct SettingsParams {
     #[ts(type = "Record<string, unknown>")]
     pub values: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct FolderInfo {
+    pub path: String,
+    pub exists: bool,
+    /// Nothing in it but hidden files.
+    pub empty: bool,
+    /// It already holds a Librarium library (`.librarium/library.json`).
+    pub is_library: bool,
+    /// Markdown files found (counting stops at 10,000).
+    #[ts(type = "number")]
+    pub markdown_files: u64,
+    pub in_icloud: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct LogParams {
+    /// "info", "warn" or "error".
+    pub level: String,
+    pub message: String,
 }

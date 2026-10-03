@@ -34,7 +34,7 @@ pub fn kinds() -> Kinds {
 }
 
 impl App {
-    pub fn compose(worker_binary: PathBuf, app_support: PathBuf) -> App {
+    pub fn compose(worker_binary: PathBuf, app_support: PathBuf, logs_dir: PathBuf) -> App {
         let worker: Arc<dyn WorkerHost> = Arc::new(ProcessWorkerHost::new(worker_binary, WORKER_MEMORY_CEILING));
         let api = Arc::new(Api::new(Deps {
             worker,
@@ -46,6 +46,8 @@ impl App {
             changes: Arc::new(|| Arc::new(FsEvents::default()) as Arc<dyn ChangeSource>),
             kinds: Arc::new(kinds),
             app_support,
+            logs_dir,
+            desktop: Arc::new(librarium_system::MacDesktop),
             open_options: OpenOptions::default(),
         }));
         let transport = Arc::new(TauriTransport::new(Arc::new(Handler(api.clone()))));
