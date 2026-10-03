@@ -117,3 +117,63 @@ fn saving_again_adds_a_snapshot_with_its_checks() {
     assert!(lib.store.stored_text(item).unwrap().text.contains("City Life"));
     hosts.stop();
 }
+
+/// A saver whose pages all end at about:blank, as when a load was lost.
+struct BlankPages(FixturePages);
+
+impl librarium_contracts::ports::PageSaver for BlankPages {
+    fn save(&self, url: &str, timeout: Duration) -> librarium_contracts::Result<librarium_contracts::ports::SavedPage> {
+        let mut p = self.0.save(url, timeout)?;
+        p.final_url = "about:blank".into();
+        Ok(p)
+    }
+}
+
+#[test]
+fn a_page_that_never_loaded_is_not_kept_and_matches_nothing() {
+    let fs = Arc::new(MemFs::new());
+    fs.create_dir_all(Path::new("/lib")).unwrap();
+    let mut k = Kinds::new();
+    librarium_feature_library::contribute_kinds(&mut k).unwrap();
+    let index = MemIndex::new();
+    let factory: IndexFactory = Arc::new(move |_p: &Path| Arc::new(index.clone()) as Arc<dyn IndexEngine>);
+    let lib = Arc::new(
+        Library::open(
+            Path::new("/lib"),
+            Path::new("/app"),
+            LibraryPorts {
+                fs: fs.clone() as Arc<dyn FileSystem>,
+                clock: Arc::new(FixedClock::new()),
+                ids: Arc::new(SequenceIds::new()),
+                versions: Arc::new(RecordingVersions::default()),
+                index: factory.clone(),
+                changes: Arc::new(ScriptedChanges::new()) as Arc<dyn ChangeSource>,
+            },
+            k,
+            OpenOptions { tick: Duration::from_secs(3600), ..Default::default() },
+        )
+        .unwrap(),
+    );
+    let (a, b) = ("https://one.example/a", "https://two.example/b");
+    let pages = FixturePages::default().with(a, 200, &fixture("article.html")).with(b, 200, &fixture("article.html"));
+    let mut jobs = librarium_kernel::jobs::registry();
+    librarium_feature_library::contribute_page_jobs(&mut jobs, Arc::new(BlankPages(pages))).unwrap();
+    let hosts = Hosts::start(
+        lib.clone(),
+        &factory,
+        Arc::new(FakeWorkerHost::new()),
+        vec![],
+        jobs,
+        HostEvents { indexed: Box::new(|_| {}), job: Box::new(|_| {}) },
+    )
+    .unwrap();
+    for url in [a, b] {
+        let j = hosts.jobs.enqueue("library.savePage", url, json!({ "url": url })).unwrap();
+        let j = hosts.jobs.wait(j.id, Duration::from_secs(10)).unwrap();
+        assert_eq!(j.state, JobState::Failed, "{j:?}");
+        assert!(j.error.as_deref().unwrap_or("").contains("didn’t load"), "{j:?}");
+    }
+    assert!(lib.store.list(Some("item")).is_empty(), "nothing is kept, so nothing can collect other pages");
+    assert!(librarium_feature_library::item_for_url(&lib.store, "about:blank").is_none());
+    hosts.stop();
+}

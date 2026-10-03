@@ -380,9 +380,20 @@ pub fn snapshot_text(store: &Store, e: &Entry, part: Option<&str>) -> Option<lib
     })
 }
 
+/// An http(s) address with a host: the only kind a saved page can come from.
+pub fn is_web_address(u: &str) -> bool {
+    let lower = u.to_ascii_lowercase();
+    let rest = lower.strip_prefix("https://").or_else(|| lower.strip_prefix("http://"));
+    rest.and_then(|r| r.split(['/', '?', '#']).next()).is_some_and(|host| !host.is_empty())
+}
+
 /// The item already saved from this address, if any (saving again adds a snapshot to it).
 pub fn item_for_url(store: &Store, url: &str) -> Option<Entry> {
-    let norm = |u: &str| u.trim_end_matches('/').split('#').next().unwrap_or("").to_string();
+    // As the interface compares: no #fragment, then no trailing slash.
+    let norm = |u: &str| u.split('#').next().unwrap_or("").trim_end_matches('/').to_string();
+    if !is_web_address(url) {
+        return None;
+    }
     let want = norm(url);
     store.list(Some(KIND)).into_iter().find(|e| {
         let p = e.fields.get("provenance");
@@ -400,6 +411,11 @@ fn save_page(saver: &dyn librarium_contracts::ports::PageSaver, ctx: &JobCtx, p:
     ctx.progress(None, Some("Loading the page"));
     let page = saver.save(&url, Duration::from_secs(90))?;
     ctx.check_cancelled()?;
+    // A page that ends anywhere but on the web (about:blank, an error page of the browser…)
+    // wasn't loaded: never keep it, and never let it match another item.
+    if !is_web_address(&page.final_url) {
+        return Err(BackendError::io(format!("the page didn’t load (it ended at {})", page.final_url)));
+    }
     let checks = checks::check(&page);
     let now_ms = store.clock.now_ms();
     let at = librarium_kernel::time::iso_compact(now_ms);
@@ -504,6 +520,16 @@ pub fn contribute_page_methods(m: &mut Registry<ApiMethod>) -> Result<(), Duplic
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_web_addresses_count() {
+        for good in ["https://a.example/x", "http://a.example", "HTTPS://A.example/?q"] {
+            assert!(super::is_web_address(good), "{good}");
+        }
+        for bad in ["about:blank", "https://", "file:///etc/passwd", "", "data:text/html,x"] {
+            assert!(!super::is_web_address(bad), "{bad}");
+        }
+    }
+
     use super::*;
 
     #[test]
