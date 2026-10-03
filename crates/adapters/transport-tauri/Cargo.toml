@@ -1,0 +1,15 @@
+[package]
+name = "librarium-transport-tauri"
+description = "Transport port: Tauri commands, events and channels."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+librarium-contracts.workspace = true
+serde_json.workspace = true
+tauri.workspace = true
+
+[lints]
+workspace = true

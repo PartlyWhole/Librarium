@@ -1,0 +1,16 @@
+[package]
+name = "librarium-kernel"
+description = "The writer, safe writes, intents, records and codecs, identity, numbered changes, the derived-view and job hosts, registries and the link parser."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+librarium-contracts.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

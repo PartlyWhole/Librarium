@@ -1,0 +1,60 @@
+/* Values from BRIEF §7.3. */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --bg-alt: #fafafa;
+  --bg-sidebar: #f6f6f6;
+  --border: #e4e4e4;
+  --border-strong: #dadada;
+  --ink: #222222;
+  --muted: #5c5c5c;
+  --faint: #6e6e6e;
+  --accent: hsl(258 88% 66%);
+  --accent-text: #6d3ff0;
+  --accent-solid: #6d3ff0;
+  --hover: rgb(0 0 0 / 6.7%);
+  --active: rgb(0 0 0 / 9%);
+  --selection: hsl(258 88% 66% / 22%);
+  --font-ui: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1e1e1e;
+    --bg-alt: #242424;
+    --bg-sidebar: #262626;
+    --border: #333333;
+    --border-strong: #3f3f3f;
+    --ink: #dadada;
+    --muted: #b3b3b3;
+    --faint: #949494;
+    --accent-text: #a68bfa;
+    --hover: rgb(255 255 255 / 7%);
+    --active: rgb(255 255 255 / 11%);
+    --selection: hsl(258 88% 66% / 33%);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1e1e1e;
+  --bg-alt: #242424;
+  --bg-sidebar: #262626;
+  --border: #333333;
+  --border-strong: #3f3f3f;
+  --ink: #dadada;
+  --muted: #b3b3b3;
+  --faint: #949494;
+  --accent-text: #a68bfa;
+  --hover: rgb(255 255 255 / 7%);
+  --active: rgb(255 255 255 / 11%);
+  --selection: hsl(258 88% 66% / 33%);
+}
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.3 var(--font-ui);
+}
+#app { height: 100%; }
+::selection { background: var(--selection); }

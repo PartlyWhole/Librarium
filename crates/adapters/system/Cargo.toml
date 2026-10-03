@@ -1,0 +1,15 @@
+[package]
+name = "librarium-system"
+description = "Clock and IdGenerator ports: the system clock and UUID v7."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+librarium-contracts.workspace = true
+uuid.workspace = true
+libc = "0.2"
+
+[lints]
+workspace = true
