@@ -40,11 +40,14 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            let composed = App::compose(compose::worker_binary()?);
+            let app_support = app.path().app_data_dir()?;
+            let composed = App::compose(compose::worker_binary()?, app_support);
             match composed.api.worker_ping() {
                 Ok(p) => log::info!("worker {} answered (pid {}) in {} µs", p.worker_version, p.pid, p.round_trip_us),
                 Err(e) => log::error!("worker did not answer: {e}"),
             }
+            let api = composed.api.clone();
+            std::thread::spawn(move || api.open_saved_library());
             app.manage(composed);
             Ok(())
         })

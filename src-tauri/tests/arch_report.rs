@@ -50,7 +50,7 @@ fn arch_report() {
 fn worker_round_trip() -> Duration {
     let bin = librarium_testkit::binaries::worker_binary();
     let t = Instant::now();
-    let app = compose::App::compose(bin);
+    let app = compose::App::compose(bin, std::env::temp_dir().join(format!("librarium-arch-{}", std::process::id())));
     app.api.worker_ping().expect("worker answers");
     t.elapsed()
 }

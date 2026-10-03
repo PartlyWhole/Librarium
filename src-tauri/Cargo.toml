@@ -21,6 +21,14 @@ librarium-api.workspace = true
 librarium-system = { path = "../crates/adapters/system" }
 librarium-worker-process = { path = "../crates/adapters/worker-process" }
 librarium-transport-tauri = { path = "../crates/adapters/transport-tauri" }
+librarium-fs-macos = { path = "../crates/adapters/fs-macos" }
+librarium-changes-fsevents = { path = "../crates/adapters/changes-fsevents" }
+librarium-index-sqlite = { path = "../crates/adapters/index-sqlite" }
+librarium-versions-none = { path = "../crates/adapters/versions-none" }
+librarium-feature-notes = { path = "../crates/features/notes" }
+librarium-feature-daily = { path = "../crates/features/daily" }
+librarium-feature-captures = { path = "../crates/features/captures" }
+librarium-feature-library = { path = "../crates/features/library" }
 serde.workspace = true
 serde_json.workspace = true
 tauri = { workspace = true, features = [] }
@@ -33,6 +41,7 @@ librarium-testkit.workspace = true
 cargo_metadata = "0.23"
 syn = { version = "2", features = ["full", "visit", "parsing"] }
 proc-macro2 = "1"
+uuid.workspace = true
 
 [lints]
 workspace = true

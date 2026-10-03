@@ -12,8 +12,8 @@ librarium-kernel.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
-[lints]
-workspace = true
-
 [dev-dependencies]
 librarium-testkit.workspace = true
+
+[lints]
+workspace = true

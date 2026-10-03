@@ -23,6 +23,20 @@ pub fn export_types(dir: &Path) -> Result<(), String> {
         crate::slots::SlotDef,
         crate::api::AppInfo,
         crate::api::WorkerPong,
+        crate::api::RecordInfo,
+        crate::api::RecordText,
+        crate::api::SaveResult,
+        crate::api::StoreStatus,
+        crate::api::LibraryStatus,
+        crate::api::OpenLibraryParams,
+        crate::api::IdParams,
+        crate::api::ListParams,
+        crate::api::CreateParams,
+        crate::api::SaveParams,
+        crate::api::SetFieldsParams,
+        crate::api::RelocateParams,
+        crate::api::Written,
+        crate::api::SettingsParams,
     );
     Ok(())
 }

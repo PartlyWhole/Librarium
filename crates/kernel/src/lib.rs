@@ -3,4 +3,17 @@
 //!
 //! The kernel knows nothing feature-specific: features contribute through slots.
 
+pub mod changes;
+pub mod check;
+pub mod frontmatter;
+pub mod hash;
+pub mod kinds;
+pub mod library;
+pub mod merge;
+pub mod record;
 pub mod registry;
+pub mod settings;
+pub mod slug;
+pub mod store;
+pub mod time;
+pub mod writer;

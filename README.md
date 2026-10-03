@@ -63,3 +63,8 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-02 | A `WorkerHost` port and an `adapters/system` crate for Clock and IdGenerator. | [0005](docs/decisions/0005-ports-beyond-the-table.md) |
 | 2026-10-02 | The worker is bundled with `externalBin` only when packaging. | [0006](docs/decisions/0006-packaging-the-worker.md) |
 | 2026-10-02 | TypeScript held at 6.0 until typescript-eslint supports 7. | — |
+| 2026-10-02 | The test file system models APFS: renames commit as one transaction. | [0007](docs/decisions/0007-durability-model.md) |
+| 2026-10-02 | A full startup check after an unclean shutdown (the lock file was left behind). | [0008](docs/decisions/0008-full-check-after-unclean-shutdown.md) |
+| 2026-10-02 | How two files with one ID are classified, and when IDs are rewritten. | [0009](docs/decisions/0009-duplicate-ids.md) |
+| 2026-10-02 | API calls about the user's folder are `folder.*`; the name guard checks strings and feature crates. | [0010](docs/decisions/0010-folder-vocabulary.md) |
+| 2026-10-02 | A record's path is the truth for its folder; renames and moves are intents. | [0011](docs/decisions/0011-folders-and-renames.md) |

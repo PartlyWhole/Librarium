@@ -95,8 +95,14 @@ struct Names<'a> {
     hits: Vec<String>,
 }
 
+/// File names the brief itself gives the store (§5.1), which happen to start with a feature ID.
+const STORE_FILE_NAMES: &[&str] = &["library.json"];
+
 impl<'a> Names<'a> {
     fn check(&mut self, s: &str, what: &str) {
+        if STORE_FILE_NAMES.contains(&s) {
+            return;
+        }
         for f in self.features {
             let crate_name = format!("librarium_feature_{f}");
             let crate_dash = format!("librarium-feature-{f}");
@@ -112,7 +118,12 @@ impl<'ast> Visit<'ast> for Names<'_> {
         self.check(&l.value(), "string");
     }
     fn visit_ident(&mut self, i: &'ast proc_macro2::Ident) {
-        self.check(&i.to_string(), "identifier");
+        // Bare identifiers name kernel concepts ("library" is also the user's folder); only a
+        // reference to a feature crate counts.
+        let s = i.to_string();
+        if s.starts_with("librarium_feature_") {
+            self.check(&s, "identifier");
+        }
     }
 }
 
@@ -151,6 +162,7 @@ fn the_name_guard_catches_strings_and_paths() {
     assert_eq!(names_in(r#"fn f() { let _ = "notes"; }"#, &f).len(), 1);
     assert_eq!(names_in("use librarium_feature_notes::X;", &f).len(), 1);
     assert!(names_in(r#"const K: &str = "notebook"; const L: &str = "kind";"#, &f).is_empty());
+    assert!(names_in("fn notes() { let daily = 1; }", &f).is_empty(), "bare identifiers are kernel concepts");
 }
 
 fn rust_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {

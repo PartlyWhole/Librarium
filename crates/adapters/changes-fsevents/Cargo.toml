@@ -8,8 +8,10 @@ publish.workspace = true
 
 [dependencies]
 librarium-contracts.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+libc = "0.2"
+
+[dev-dependencies]
+librarium-testkit.workspace = true
 
 [lints]
 workspace = true
