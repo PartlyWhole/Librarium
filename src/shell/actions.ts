@@ -7,7 +7,7 @@ import { DuplicateError, Registry } from "../kit/registry";
 import { normalize } from "../kit/keys";
 import type { IconNode } from "../kit/icon";
 
-export type MenuName = "app" | "file" | "edit" | "view" | "go" | "window" | "help";
+export type MenuName = "app" | "file" | "edit" | "format" | "view" | "go" | "window" | "help";
 
 export interface Action {
   id: string;

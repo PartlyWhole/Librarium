@@ -7,6 +7,7 @@ const TITLES: [MenuName, string][] = [
   ["app", "Librarium"],
   ["file", "File"],
   ["edit", "Edit"],
+  ["format", "Format"],
   ["view", "View"],
   ["go", "Go"],
   ["window", "Window"],
@@ -42,6 +43,7 @@ export function menuSpec(actions: Actions): MenuSection[] {
     file: custom("file"),
     // Without these, ⌘C, ⌘V and ⌘Z stop working in a Tauri app.
     edit: [{ kind: "predefined", item: "Undo" }, { kind: "predefined", item: "Redo" }, sep, { kind: "predefined", item: "Cut" }, { kind: "predefined", item: "Copy" }, { kind: "predefined", item: "Paste" }, { kind: "predefined", item: "SelectAll" }, ...(custom("edit").length ? [sep, ...custom("edit")] : [])],
+    format: custom("format"),
     view: [...withSep(custom("view")), { kind: "predefined", item: "Fullscreen" }],
     go: custom("go"),
     window: [{ kind: "predefined", item: "Minimize" }, { kind: "predefined", item: "Maximize" }, ...(custom("window").length ? [sep, ...custom("window")] : [])],

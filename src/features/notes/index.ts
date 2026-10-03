@@ -7,6 +7,8 @@ import { parseLinks } from "../../editor/links";
 import type { RecordText } from "../../generated/RecordText";
 import { toast } from "../../kit/toast";
 import { renderNote } from "./page";
+import { FORMATS } from "../../editor/format";
+import { activeEditor } from "../../editor/editor";
 import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
 import type { ShellApi } from "../../shell/api";
@@ -67,6 +69,23 @@ export function notes(shell: ShellApi): void {
       shell.router.go("note", { id: w.info.id, focus: "title" });
     },
   });
+  // The Format menu: what the formatting keys do, for the editor last used.
+  FORMATS.forEach((f, i) =>
+    shell.actions.add("notes", {
+      id: `format.${f.id}`,
+      title: f.title,
+      keys: [f.keys],
+      when: () => (shell.router.current(), !!activeEditor()),
+      menu: { name: "format", group: i < 5 ? 0 : i < 7 ? 1 : 2 },
+      run: () => {
+        const v = activeEditor();
+        if (!v) return;
+        f.run(v);
+        v.focus();
+      },
+    }),
+  );
+
   shell.actions.add("notes", {
     id: "notes.exportWithQuotations",
     title: "Export with quotations…",

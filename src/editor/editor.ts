@@ -4,7 +4,7 @@
  * except for the app's reserved shortcuts (handled by the shell before CodeMirror sees them).
  */
 import { EditorState, type Extension } from "@codemirror/state";
-import { EditorView, keymap, drawSelection, highlightActiveLine, placeholder as placeholderExt } from "@codemirror/view";
+import { EditorView, keymap, drawSelection, placeholder as placeholderExt, rectangularSelection, crosshairCursor } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { indentOnInput, bracketMatching } from "@codemirror/language";
@@ -13,6 +13,14 @@ import { markdownSupport } from "./markdown";
 import { livePreview } from "./livepreview";
 import { linkCompletion, type LinkTarget } from "./complete";
 import { parseLinks } from "./links";
+import { formatKeymap, wrapOnType } from "./format";
+
+let active: EditorView | null = null;
+
+/** The editor last focused, if it is still on the page (the Format menu acts on it). */
+export function activeEditor(): EditorView | null {
+  return active && active.dom.isConnected && !active.dom.closest("[hidden]") ? active : null;
+}
 
 /** shell.editor-extensions: a module adds behaviour to every editor. */
 export interface EditorContribution {
@@ -48,7 +56,12 @@ export function createEditor(o: EditorOptions): EditorView {
   const extensions: Extension[] = [
     history(),
     drawSelection(),
-    highlightActiveLine(),
+    // Several cursors: ⌘D adds the next match, ⌥-click adds a cursor, ⌥-drag selects a block.
+    EditorState.allowMultipleSelections.of(true),
+    EditorView.clickAddsSelectionRange.of((e) => e.altKey),
+    rectangularSelection(),
+    crosshairCursor(),
+    wrapOnType,
     indentOnInput(),
     bracketMatching(),
     closeBrackets(),
@@ -57,12 +70,13 @@ export function createEditor(o: EditorOptions): EditorView {
     markdownSupport(),
     livePreview({ titleOf: o.titleOf, embedsHandled: contributions.some((c) => c.handlesEmbeds) }),
     linkCompletion(o.targets),
-    keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, indentWithTab]),
+    keymap.of([...formatKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, indentWithTab]),
     EditorView.contentAttributes.of({ "aria-label": o.label, "aria-multiline": "true", spellcheck: "true", autocorrect: "on" }),
     EditorState.readOnly.of(!!o.readOnly),
     EditorView.editable.of(!o.readOnly),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) o.onChange?.(u.state.doc.toString());
+      if (u.focusChanged && u.view.hasFocus) active = u.view;
       if (u.focusChanged && !u.view.hasFocus) o.onBlur?.();
     }),
     EditorView.domEventHandlers({

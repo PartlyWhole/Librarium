@@ -38,7 +38,7 @@ Markdown syntax, `links.ts` parses `[[label|id]]` (shared fixture with the Rust 
 - **Dim revealed marks** (faint colour), so the text stays the focus.
 - Tests: decorations computed on fixture documents (jsdom), per construct.
 
-### E2. Formatting and selection ✅ when done
+### E2. Formatting and selection ✅
 
 - Commands, in the editor keymap and in a new **Format** menu (native menu and palette):
   bold ⌘B, italic ⌘I, strikethrough ⇧⌘X, highlight ⇧⌘H, inline code ⌘E, link ⌘K (wraps the
