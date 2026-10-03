@@ -389,6 +389,12 @@ pub fn is_web_address(u: &str) -> bool {
 
 /// The item already saved from this address, if any (saving again adds a snapshot to it).
 pub fn item_for_url(store: &Store, url: &str) -> Option<Entry> {
+    item_for_url_visible(store, url, &[])
+}
+
+/// Like [`item_for_url`], passing over items with any of the `hide` fields set (e.g. archived
+/// ones): a page saved again while its item is hidden becomes a new item.
+pub fn item_for_url_visible(store: &Store, url: &str, hide: &[String]) -> Option<Entry> {
     // As the interface compares: no #fragment, then no trailing slash.
     let norm = |u: &str| u.split('#').next().unwrap_or("").trim_end_matches('/').to_string();
     if !is_web_address(url) {
@@ -396,6 +402,9 @@ pub fn item_for_url(store: &Store, url: &str) -> Option<Entry> {
     }
     let want = norm(url);
     store.list(Some(KIND)).into_iter().find(|e| {
+        if hide.iter().any(|f| e.fields.get(f).is_some_and(|v| !v.is_null())) {
+            return false;
+        }
         let p = e.fields.get("provenance");
         [p.and_then(|p| p["source"].as_str()), p.and_then(|p| p["final-url"].as_str())]
             .iter()
@@ -424,7 +433,12 @@ fn save_page(saver: &dyn librarium_contracts::ports::PageSaver, ctx: &JobCtx, p:
     let snapshot =
         json!({ "at": at, "sha256": sha, "final-url": page.final_url, "status": page.status, "checks": checks });
     let text = json!({ "extractor": PAGE_EXTRACTOR, "version": 1, "title": page.title, "final_url": page.final_url, "status": page.status, "language": page.language, "images": page.images, "checks": checks, "text": page.text });
-    let existing = item_for_url(store, &url).or_else(|| item_for_url(store, &page.final_url));
+    let hide: Vec<String> = p["hide"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .unwrap_or_default();
+    let existing =
+        item_for_url_visible(store, &url, &hide).or_else(|| item_for_url_visible(store, &page.final_url, &hide));
     // Idempotent: the job's own snapshot (same key, same PDF) is not added twice.
     if let Some(e) = &existing {
         if e.fields.get(SNAPSHOTS).and_then(|v| v.as_array()).is_some_and(|a| a.iter().any(|s| s["sha256"] == sha)) {
@@ -501,7 +515,7 @@ pub fn contribute_page_jobs(
     )
 }
 
-/// `library.savePage {url}`: queues a save (one job per address at a time).
+/// `library.savePage {url, hide?}`: queues a save (one job per address at a time).
 pub fn contribute_page_methods(m: &mut Registry<ApiMethod>) -> Result<(), DuplicateId> {
     m.add(
         ID,
@@ -513,7 +527,10 @@ pub fn contribute_page_methods(m: &mut Registry<ApiMethod>) -> Result<(), Duplic
                 .filter(|u| u.starts_with("http://") || u.starts_with("https://"))
                 .ok_or_else(|| BackendError::invalid("That isn’t a web address (it should start with https://)."))?;
             let jobs = ctx.jobs.ok_or_else(|| BackendError::new(ErrorCode::NotReady, "Jobs are starting."))?;
-            Ok(serde_json::to_value(jobs.enqueue("library.savePage", url, json!({ "url": url }))?).unwrap())
+            // Records hidden in the interface (e.g. archived) never receive the snapshot.
+            let hide = p.get("hide").cloned().unwrap_or(json!([]));
+            Ok(serde_json::to_value(jobs.enqueue("library.savePage", url, json!({ "url": url, "hide": hide }))?)
+                .unwrap())
         }),
     )
 }

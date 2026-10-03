@@ -177,3 +177,66 @@ fn a_page_that_never_loaded_is_not_kept_and_matches_nothing() {
     assert!(librarium_feature_library::item_for_url(&lib.store, "about:blank").is_none());
     hosts.stop();
 }
+
+#[test]
+fn saving_a_page_whose_item_is_archived_makes_a_new_item() {
+    let fs = Arc::new(MemFs::new());
+    fs.create_dir_all(Path::new("/lib")).unwrap();
+    let mut k = Kinds::new();
+    librarium_feature_library::contribute_kinds(&mut k).unwrap();
+    let index = MemIndex::new();
+    let factory: IndexFactory = Arc::new(move |_p: &Path| Arc::new(index.clone()) as Arc<dyn IndexEngine>);
+    let clock = Arc::new(FixedClock::new());
+    let lib = Arc::new(
+        Library::open(
+            Path::new("/lib"),
+            Path::new("/app"),
+            LibraryPorts {
+                fs: fs.clone() as Arc<dyn FileSystem>,
+                clock: clock.clone(),
+                ids: Arc::new(SequenceIds::new()),
+                versions: Arc::new(RecordingVersions::default()),
+                index: factory.clone(),
+                changes: Arc::new(ScriptedChanges::new()) as Arc<dyn ChangeSource>,
+            },
+            k,
+            OpenOptions { tick: Duration::from_secs(3600), ..Default::default() },
+        )
+        .unwrap(),
+    );
+    let url = "https://quarterly.example/on-technique";
+    let mut jobs = librarium_kernel::jobs::registry();
+    let pages = FixturePages::default().with(url, 200, &fixture("article.html"));
+    librarium_feature_library::contribute_page_jobs(&mut jobs, Arc::new(pages)).unwrap();
+    let hosts = Hosts::start(
+        lib.clone(),
+        &factory,
+        Arc::new(FakeWorkerHost::new()),
+        vec![],
+        jobs,
+        HostEvents { indexed: Box::new(|_| {}), job: Box::new(|_| {}) },
+    )
+    .unwrap();
+    let save = || {
+        let j = hosts.jobs.enqueue("library.savePage", url, json!({ "url": url, "hide": ["archive.at"] })).unwrap();
+        assert_eq!(hosts.jobs.wait(j.id, Duration::from_secs(10)).unwrap().state, JobState::Done);
+    };
+    save();
+    let first = lib.store.list(Some("item"))[0].id;
+    // The item is archived (a field the interface hides records by).
+    lib.write(librarium_kernel::writer::Lane::Interactive, move |tx| {
+        tx.set_fields(
+            first,
+            None,
+            &[("archive.at".into(), Some(librarium_kernel::frontmatter::FmValue::Str("2026-10-03T18:00:00Z".into())))],
+        )
+    })
+    .unwrap();
+    clock.advance_ms(60_000);
+    save();
+    let items = lib.store.list(Some("item"));
+    assert_eq!(items.len(), 2, "a new item, not a snapshot hidden in the archived one");
+    let archived = items.iter().find(|e| e.id == first).unwrap();
+    assert_eq!(archived.fields["library.snapshots"].as_array().unwrap().len(), 1, "the archived item is untouched");
+    hosts.stop();
+}

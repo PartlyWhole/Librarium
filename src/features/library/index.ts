@@ -99,7 +99,7 @@ export function library(shell: ShellApi): void {
         const failed: string[] = [];
         for (const url of urls) {
           try {
-            await call("library.savePage", { url });
+            await call("library.savePage", { url, hide: shell.hidingFields.values() });
             queued++;
           } catch {
             failed.push(url);
