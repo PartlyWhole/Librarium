@@ -405,3 +405,13 @@ body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6
 .links-input { width: 100%; box-sizing: border-box; min-height: 96px; max-height: 50vh; resize: vertical; font-family: var(--mono, ui-monospace, monospace); font-size: var(--small); }
 .check-row { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; color: var(--ink); }
 .check-row[hidden] { display: none; }
+
+/* Context menus */
+.context-menu { position: fixed; z-index: 100; min-width: 180px; padding: 4px; border-radius: var(--r2); background: var(--bg); border: 1px solid var(--border-strong); box-shadow: 0 8px 24px rgb(0 0 0 / 22%); font-size: var(--small); }
+.context-item { padding: 5px 10px; border-radius: var(--r1); color: var(--ink); cursor: default; outline: none; }
+.context-item:focus, .context-item:hover { background: var(--accent); color: #fff; }
+.context-item.destructive { color: #b42318; }
+.context-item.destructive:focus, .context-item.destructive:hover { background: #b42318; color: #fff; }
+:root[data-theme="dark"] .context-item.destructive { color: #ff8a80; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .context-item.destructive { color: #ff8a80; } }
+.context-sep { height: 1px; margin: 4px 6px; background: var(--border); }

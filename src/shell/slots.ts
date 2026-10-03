@@ -60,6 +60,15 @@ export interface SettingsSection {
   render(host: HTMLElement): (() => void) | void;
 }
 
+/** shell.record-actions: an entry in a record's context menu. */
+export interface RecordAction {
+  label: string;
+  /** Whether it is offered for this record. */
+  applies(r: RecordInfo): boolean;
+  run(r: RecordInfo): void | Promise<void>;
+  destructive?: boolean;
+}
+
 /** Feature-hosted slot, offered by Notes: groups of notes shown apart in the sidebar. */
 export const NOTE_GROUPS = "notes.groups";
 export interface NoteGroup {
@@ -90,6 +99,10 @@ export interface ShellApi {
   /** shell.hiding-fields: records with any of these fields set (e.g. archived ones) are left
    * out of lists and search unless asked for. */
   hidingFields: Registry<string>;
+  /** shell.record-actions: what a record's context menu offers (Archive, Restore…). */
+  recordActions: Registry<RecordAction>;
+  /** Opens a record's context menu at a point (right-click, the menu key or ⇧F10). */
+  showRecordMenu(r: RecordInfo, at: { x: number; y: number }): void;
   /** A feature-hosted slot by its ID (defined in slots.ts). */
   slot<T>(id: string): Registry<T>;
   router: Router;
@@ -140,4 +153,4 @@ export interface EmbedRenderer {
 }
 
 /** Every interface slot, for the architecture report. */
-export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", "shell.embeds", "shell.hiding-fields", NOTE_GROUPS, READER_TOOLS] as const;
+export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", "shell.embeds", "shell.hiding-fields", "shell.record-actions", NOTE_GROUPS, READER_TOOLS] as const;

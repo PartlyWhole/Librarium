@@ -4,6 +4,7 @@ import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
 import { effect, signal } from "../../kit/signal";
 import { toast } from "../../kit/toast";
+import { isMenuKey, menuPointFor } from "../../kit/menu";
 import { count } from "../../kit/format";
 import type { ShellApi } from "../../shell/api";
 import { READER_TOOLS, type ReaderTool } from "../../shell/slots";
@@ -147,7 +148,7 @@ export function library(shell: ShellApi): void {
           host,
           h("h1", { class: "page-title" }, "Library"),
           items.length
-            ? h("ul", { class: "item-list" }, items.map((i) => h("li", null, h("a", { href: "#", class: "item-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(i.id)) }, icon(iconFor(i), 16), h("span", null, i.title || "Untitled"), h("span", { class: "muted small" }, i.fields["library.pages"] ? count(Number(i.fields["library.pages"]), formatOf(i) === "epub" ? "chapter" : "page") : "")))))
+            ? h("ul", { class: "item-list" }, items.map((i) => h("li", { oncontextmenu: (e: MouseEvent) => (e.preventDefault(), shell.showRecordMenu(i, { x: e.clientX, y: e.clientY })) }, h("a", { href: "#", class: "item-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(i.id)), onkeydown: (e: KeyboardEvent) => isMenuKey(e) && (e.preventDefault(), shell.showRecordMenu(i, menuPointFor(e.target as Element))) }, icon(iconFor(i), 16), h("span", null, i.title || "Untitled"), h("span", { class: "muted small" }, i.fields["library.pages"] ? count(Number(i.fields["library.pages"]), formatOf(i) === "epub" ? "chapter" : "page") : "")))))
             : h("p", { class: "empty" }, "No library items yet. Add PDFs, images or EPUBs, or drop them on the window."),
         );
       });

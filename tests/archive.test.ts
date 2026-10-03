@@ -113,3 +113,61 @@ describe("archive", () => {
     expect(mock.state.deleted).toEqual([]);
   });
 });
+
+describe("a record's context menu", () => {
+  const menuItems = () => [...document.querySelectorAll(".context-menu [role=menuitem]")].map((b) => b.textContent);
+  const choose = (label: string) => ([...document.querySelectorAll(".context-menu [role=menuitem]")].find((b) => b.textContent === label) as HTMLElement).click();
+  const row = (title: string) => [...document.querySelectorAll(".tree [role=treeitem]")].find((x) => x.textContent?.includes(title)) as HTMLElement;
+
+  it("archives from a right-click in the sidebar, and restores from the Archive page", async () => {
+    const { shell, a } = await boot();
+    row("Gravity and grace").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 50, clientY: 60 }));
+    expect(menuItems()).toEqual(["Open", "Archive"]);
+    choose("Archive");
+    await wait(30);
+    expect(document.querySelector(".context-menu")).toBeNull();
+    expect(shell.records.list("note").map((r) => r.id)).not.toContain(a.id);
+    expect(row("Gravity and grace")).toBeUndefined();
+    shell.router.go("archive");
+    await wait(30);
+    document.querySelector(".archive-row")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 50, clientY: 60 }));
+    expect(menuItems()).toEqual(["Open", "Restore from archive", "Delete permanently…"]);
+    choose("Restore from archive");
+    await wait(30);
+    expect(shell.records.get(a.id)?.fields["archive.at"]).toBeUndefined();
+  });
+
+  it("opens from the keyboard (⇧F10), moves with the arrows and closes with Escape", async () => {
+    await boot();
+    const it = row("Keep");
+    it.focus();
+    it.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+    expect(menuItems()).toEqual(["Open", "Archive"]);
+    expect(document.activeElement?.textContent).toBe("Open");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+    expect(document.activeElement?.textContent).toBe("Archive");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(document.querySelector(".context-menu")).toBeNull();
+    expect(document.activeElement).toBe(it);
+  });
+
+  it("deleting from the menu still asks first, and only for archived records", async () => {
+    const { a } = await boot();
+    row("Gravity and grace").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    expect(menuItems()).not.toContain("Delete permanently…");
+    choose("Archive");
+    await wait(30);
+    const { shell } = { shell: last! };
+    shell.router.go("archive");
+    await wait(30);
+    document.querySelector(".archive-row")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    choose("Delete permanently…");
+    await wait(30);
+    const dialog = document.querySelector("dialog")!;
+    expect(dialog.textContent).toContain("can’t be undone");
+    buttons(dialog, "Cancel")[0]!.click();
+    await wait(30);
+    expect(mock.state.deleted).toEqual([]);
+    expect(last!.records.get(a.id)).toBeDefined();
+  });
+});

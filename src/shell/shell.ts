@@ -25,7 +25,8 @@ import { refreshMenu } from "./menu";
 import { Prefs } from "./prefs";
 import { Records } from "./records";
 import { Router } from "./router";
-import type { EmbedRenderer, Page, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
+import type { EmbedRenderer, Page, RecordAction, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
+import { contextMenu, type MenuItem } from "../kit/menu";
 import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, Command, Keyboard, Settings, FolderOpen } from "lucide";
 
 export type Feature = (shell: ShellApi) => void;
@@ -64,6 +65,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const router = new Router();
   const prefs = new Prefs();
   const hidingFields = new Registry<string>("shell.hiding-fields");
+  const recordActions = new Registry<RecordAction>("shell.record-actions");
   const records = new Records(() => hidingFields.values());
   const folder = signal<LibraryStatus | null>(null);
   const indexed = signal(0);
@@ -89,6 +91,15 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     settings,
     openers,
     hidingFields,
+    recordActions,
+    showRecordMenu(r, at) {
+      const items: MenuItem[] = [];
+      if (openers.get(r.kind)) items.push({ label: "Open", run: () => shell.openRecord(r.id) });
+      const extra = recordActions.values().filter((a) => a.applies(r));
+      if (items.length && extra.length) items.push("separator");
+      for (const a of extra) items.push({ label: a.label, destructive: a.destructive, run: () => void a.run(r) });
+      if (items.length) contextMenu(items, at, r.title || "Untitled");
+    },
     slot<T>(id: string) {
       let r = slots.get(id);
       if (!r) slots.set(id, (r = new Registry<unknown>(id)));
@@ -184,6 +195,11 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const filterText = signal("");
   filter.addEventListener("input", () => filterText.set(filter.value));
   const tree = new Tree("Notes and library", (id, expanded) => folded.update((f) => (expanded ? f.filter((x) => x !== id) : [...new Set([...f, id])])));
+  // A record's row in the sidebar has the record's menu.
+  tree.onContext = (id, at) => {
+    const r = records.get(id);
+    if (r) shell.showRecordMenu(r, at);
+  };
   const sidebarEl = h("aside", { class: "app-sidebar", "aria-label": "Sidebar" }, h("div", { class: "sidebar-top" }, filter), h("div", { class: "sidebar-scroll" }, tree.el));
 
   const back = iconButton(ChevronLeft, "Back", () => router.back(), "Mod+Alt+ArrowLeft");

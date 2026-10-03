@@ -47,3 +47,11 @@ Option 2.
 - Known limit, found while testing: if FSEvents splits an outside move across two batches,
   the move is seen as a removal and then a creation, not a rename. The record keeps its ID
   either way. Tests now deliver a move's paths in one batch, as FSEvents coalesces them.
+
+## Later (2026-10-03): a context menu
+
+The user found no way to archive from the lists. Every record now has a context menu
+(right-click, the menu key or ⇧F10) in the sidebar, on the Library page and on the Archive
+page. It is built from a new interface slot, `shell.record-actions`. Archive contributes
+"Archive", "Restore from archive" and "Delete permanently…". The last is offered only for
+archived records and still opens the confirmation, so deleting remains two steps.

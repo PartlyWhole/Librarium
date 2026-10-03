@@ -6,6 +6,7 @@
  */
 import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
+import { isMenuKey, menuPointFor } from "../../kit/menu";
 import { ask } from "../../kit/dialog";
 import { toast } from "../../kit/toast";
 import { effect } from "../../kit/signal";
@@ -107,6 +108,11 @@ export function archive(shell: ShellApi): void {
     }
   }
 
+  // Right-click (or the menu key) on a record, anywhere it is listed.
+  shell.recordActions.add("archive", "archive", { label: "Archive", applies: (r) => !isArchived(r) && !r.read_only, run: (r) => archiveRecord(r.id) });
+  shell.recordActions.add("archive", "restore", { label: "Restore from archive", applies: (r) => isArchived(r), run: (r) => restoreRecord(r.id) });
+  shell.recordActions.add("archive", "delete", { label: "Delete permanently…", destructive: true, applies: (r) => isArchived(r), run: (r) => deletePermanently([r.id]) });
+
   const currentId = () => shell.router.current().params.id ?? "";
 
   shell.actions.add("archive", {
@@ -153,8 +159,8 @@ export function archive(shell: ShellApi): void {
             list.map((r) =>
               h(
                 "li",
-                { class: "archive-row" },
-                h("a", { href: "#", class: "item-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(r.id)) }, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, `${r.kind} · archived ${new Date(String(r.fields[AT])).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`)),
+                { class: "archive-row", oncontextmenu: (e: MouseEvent) => (e.preventDefault(), shell.showRecordMenu(r, { x: e.clientX, y: e.clientY })) },
+                h("a", { href: "#", class: "item-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(r.id)), onkeydown: (e: KeyboardEvent) => isMenuKey(e) && (e.preventDefault(), shell.showRecordMenu(r, menuPointFor(e.target as Element))) }, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, `${r.kind} · archived ${new Date(String(r.fields[AT])).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`)),
                 h("button", { class: "button", type: "button", onclick: () => void restoreRecord(r.id) }, icon(ArchiveRestore, 14), "Restore"),
                 h("button", { class: "button destructive", type: "button", onclick: () => void deletePermanently([r.id]) }, icon(Trash2, 14), "Delete permanently…"),
               ),

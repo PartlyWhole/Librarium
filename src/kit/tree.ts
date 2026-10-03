@@ -5,6 +5,7 @@
  * Virtualized: rows are flat `treeitem`s carrying aria-level/setsize/posinset (a form the APG
  * allows), and only the rows in view are in the DOM, so 10,000 notes stay fast.
  */
+import { isMenuKey, menuPointFor } from "./menu";
 import { h } from "./dom";
 import { icon, type IconNode } from "./icon";
 
@@ -39,6 +40,8 @@ export class Tree {
   private typeaheadTimer: ReturnType<typeof setTimeout> | undefined;
   private scroller: HTMLElement | null = null;
   private onScroll = () => this.paint();
+  /** Asked for a node's context menu (right-click, the menu key or ⇧F10). */
+  onContext: ((id: string, at: { x: number; y: number }) => void) | null = null;
 
   constructor(label: string, private onToggle: (id: string, expanded: boolean) => void) {
     this.el = h("div", { class: "tree", role: "tree", "aria-label": label });
@@ -112,6 +115,12 @@ export class Tree {
         if (hasChildren) this.onToggle(n.id, !n.expanded);
         else n.onActivate?.();
       });
+      el.addEventListener("contextmenu", (e) => {
+        if (!this.onContext) return;
+        e.preventDefault();
+        this.focus(i);
+        this.onContext(n.id, { x: e.clientX, y: e.clientY });
+      });
     }
     return el;
   }
@@ -131,6 +140,14 @@ export class Tree {
 
   private key(e: KeyboardEvent): void {
     if (e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (isMenuKey(e) && this.onContext && this.focusedId) {
+      const it = [...this.el.querySelectorAll<HTMLElement>("[role=treeitem]")].find((x) => x.dataset.id === this.focusedId);
+      if (it) {
+        e.preventDefault();
+        this.onContext(this.focusedId, menuPointFor(it));
+        return;
+      }
+    }
     const vis = this.flat.map((f, i) => ({ f, i })).filter((x) => !x.f.node.placeholder);
     const k = vis.findIndex((x) => x.f.node.id === this.focusedId);
     const cur = vis[k];
