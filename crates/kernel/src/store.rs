@@ -348,6 +348,11 @@ impl Store {
 
     /// A record's text for derived views: a Markdown body, or its kind's text source.
     pub fn record_text(&self, e: &Entry) -> Option<String> {
+        self.stored_text(e).map(|t| t.text)
+    }
+
+    /// A record's text with its segments (pages, chapters); Markdown is one segment.
+    pub fn stored_text(&self, e: &Entry) -> Option<librarium_contracts::api::StoredText> {
         if let Some(src) = self.kinds.text_sources.get(&e.kind) {
             return src(self, e);
         }
@@ -357,7 +362,13 @@ impl Store {
         }
         let bytes = self.fs.read(&self.abs(&e.path)).ok()?;
         let text = String::from_utf8_lossy(&bytes).into_owned();
-        Some(frontmatter::split(&text).1.to_string())
+        let body = frontmatter::split(&text).1.to_string();
+        let end = body.chars().count() as u64;
+        Some(librarium_contracts::api::StoredText {
+            text: body,
+            segments: vec![librarium_contracts::api::TextSegment { label: String::new(), start: 0, end }],
+            origin: None,
+        })
     }
 
     pub fn read_bytes(&self, rel: &str) -> Result<Vec<u8>> {
@@ -636,6 +647,13 @@ pub struct Tx<'a> {
     pub dur: Durability,
 }
 
+fn check_suffix(suffix: &str) -> Result<()> {
+    if !suffix.starts_with('.') || suffix.contains(['/', '\\']) || suffix.ends_with(".md") || suffix.len() > 64 {
+        return Err(BackendError::invalid(format!("not a sidecar suffix: {suffix:?}")));
+    }
+    Ok(())
+}
+
 fn libc_exdev() -> i32 {
     18 // EXDEV on macOS: a rename across volumes
 }
@@ -719,6 +737,19 @@ impl<'a> Tx<'a> {
         body: &str,
         subfolder: Option<&str>,
     ) -> Result<(Entry, u64)> {
+        let id = self.store.ids.next_id();
+        self.create_with_id(id, kind, title, fields, body, subfolder)
+    }
+
+    fn create_with_id(
+        &self,
+        id: Id,
+        kind: &str,
+        title: &str,
+        fields: Vec<(String, FmValue)>,
+        body: &str,
+        subfolder: Option<&str>,
+    ) -> Result<(Entry, u64)> {
         let s = self.store;
         let def = s.kind_def(kind)?.clone();
         if def.format != Format::Markdown {
@@ -730,7 +761,7 @@ impl<'a> Tx<'a> {
             }
         }
         let title = clean_title(title);
-        let id = s.ids.next_id();
+
         let created = iso_utc(s.clock.now_ms());
         let mut fields = fields;
         if let (Some(f), Some(sub)) = (&def.subfolder_field, subfolder) {
@@ -746,6 +777,57 @@ impl<'a> Tx<'a> {
         let bytes = frontmatter::join(&fm, body, "\n").into_bytes();
         s.safe_write(&abs, &bytes, true, self.dur).map_err(|e| io_err(e, "writing the new record"))?;
         self.indexed(&rel, &bytes, ChangeOp::Created)
+    }
+
+    /// Creates a Markdown record with sidecar files (`<id><suffix>`, e.g. `.anchor.json`)
+    /// written first: the record's own file is the commit point.
+    pub fn create_with_sidecars(
+        &self,
+        kind: &str,
+        title: &str,
+        fields: Vec<(String, FmValue)>,
+        body: &str,
+        sidecars: Vec<(String, Vec<u8>)>,
+    ) -> Result<(Entry, u64)> {
+        let id = self.store.ids.next_id();
+        self.create_with_sidecars_id(id, kind, title, fields, body, sidecars)
+    }
+
+    /// Like [`Tx::create_with_sidecars`], with an ID chosen by the caller (whose sidecars
+    /// already hold it).
+    pub fn create_with_sidecars_id(
+        &self,
+        id: Id,
+        kind: &str,
+        title: &str,
+        fields: Vec<(String, FmValue)>,
+        body: &str,
+        sidecars: Vec<(String, Vec<u8>)>,
+    ) -> Result<(Entry, u64)> {
+        let s = self.store;
+        let def = s.kind_def(kind)?.clone();
+        if s.get(id).is_some() {
+            return Err(BackendError::invalid("that ID is taken"));
+        }
+        let dir = s.root.join(&def.folder);
+        s.fs.create_dir_all(&dir).map_err(|e| io_err(e, "creating the folder"))?;
+        for (suffix, bytes) in &sidecars {
+            check_suffix(suffix)?;
+            s.safe_write(&dir.join(format!("{id}{suffix}")), bytes, false, self.dur)
+                .map_err(|e| io_err(e, "writing a sidecar"))?;
+        }
+        self.create_with_id(id, kind, title, fields, body, None)
+    }
+
+    /// Replaces a Markdown record's sidecar (paired by the ID inside it; the name follows the ID).
+    pub fn write_sidecar(&self, id: Id, suffix: &str, bytes: &[u8]) -> Result<u64> {
+        let s = self.store;
+        let e = self.writable(id)?;
+        check_suffix(suffix)?;
+        let dir = s.abs(&e.path).parent().unwrap().to_path_buf();
+        s.safe_write(&dir.join(format!("{id}{suffix}")), bytes, false, self.dur)
+            .map_err(|err| io_err(err, "writing a sidecar"))?;
+        Ok(s.changes.emit(id, &e.kind, ChangeOp::Updated, ChangeOrigin::App))
     }
 
     /// Saves a new body. The save carries the version it was based on (and, for a merge, the

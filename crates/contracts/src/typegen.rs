@@ -45,6 +45,11 @@ pub fn export_types(dir: &Path) -> Result<(), String> {
         crate::api::SearchHit,
         crate::api::Backlink,
         crate::api::Unresolved,
+        crate::api::CapturePart,
+        crate::api::CaptureParams,
+        crate::api::OrphanSidecar,
+        crate::api::ExportParams,
+        crate::api::StoredText,
     );
     Ok(())
 }

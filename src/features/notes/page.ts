@@ -12,7 +12,7 @@ import type { Change } from "../../generated/Change";
 import type { Draft } from "../../generated/Draft";
 import type { RecordText } from "../../generated/RecordText";
 import type { Written } from "../../generated/Written";
-import { NoteSession } from "./session";
+import { NoteSession } from "../../editor/session";
 import { FolderInput } from "lucide";
 
 export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<string, string>, ctx: PageContext): () => void {
@@ -63,7 +63,7 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
       doc: startBody,
       readOnly: !!readOnly,
       label: `${info.title || "Untitled"}, note text`,
-      targets: () => shell.records.list().filter((r) => shell.openers.get(r.kind) && r.id !== id).map((r) => ({ id: r.id, title: r.title, detail: r.kind === "note" ? undefined : r.kind })),
+      targets: () => shell.records.list().filter((r) => shell.openers.get(r.kind) && r.id !== id).map((r) => ({ id: r.id, title: r.title, detail: r.kind === "note" ? undefined : r.kind, embeddable: !!shell.embeds.get(r.kind) })),
       open: (target) => shell.openRecord(target),
       titleOf: (target) => shell.records.get(target)?.title ?? null,
       onChange: () => session.changed(),

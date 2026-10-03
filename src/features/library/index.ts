@@ -6,6 +6,8 @@ import { effect, signal } from "../../kit/signal";
 import { toast } from "../../kit/toast";
 import { count } from "../../kit/format";
 import type { ShellApi } from "../../shell/api";
+import { READER_TOOLS, type ReaderTool } from "../../shell/slots";
+import type { StoredText as StoredJoined } from "../../generated/StoredText";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import type { Written } from "../../generated/Written";
 import type { ReaderView, StoredText } from "../../reader/host";
@@ -126,9 +128,11 @@ export function library(shell: ShellApi): void {
         }
       });
       findInput.addEventListener("input", () => void find());
+      const tools = h("span", { class: "reader-tools" });
       const toolbar = h("div", { class: "reader-toolbar", role: "toolbar", "aria-label": "Reader" },
         btn(ZoomOut, "Zoom out", () => view?.zoomOut()), btn(Maximize, "Fit to width", () => view?.zoomReset()), btn(ZoomIn, "Zoom in", () => view?.zoomIn()),
-        pos, h("span", { class: "spacer" }), findInput, findCount, btn(ChevronUp, "Previous match", () => void find(true, true)), btn(ChevronDown, "Next match", () => void find(true)));
+        pos, tools, h("span", { class: "spacer" }), findInput, findCount, btn(ChevronUp, "Previous match", () => void find(true, true)), btn(ChevronDown, "Next match", () => void find(true)));
+      const toolDisposers: (() => void)[] = [];
       replace(host, toolbar, stage);
       if (!engine) {
         replace(stage, h("p", { class: "empty" }, "This kind of item can’t be shown here yet."));
@@ -144,7 +148,20 @@ export function library(shell: ShellApi): void {
             if (!alive) return v.destroy();
             view = v;
             pos.textContent = v.position();
-            if (params.at) v.goToTextOffset?.(Number(params.at));
+            // Tools from other modules (capturing…), given this item and its stored text.
+            let joined: Promise<string> | null = null;
+            const text = () => (joined ??= call<StoredJoined | null>("records.text", { id }).then((t) => t?.text ?? ""));
+            for (const t of shell.slot<ReaderTool>(READER_TOOLS).values()) {
+              const d = t.mount(tools, { source: r, view: v, text });
+              if (typeof d === "function") toolDisposers.push(d);
+            }
+            if (params.place) {
+              try {
+                void v.showPlace?.(JSON.parse(params.place));
+              } catch {
+                /* not a place */
+              }
+            } else if (params.at) v.goToTextOffset?.(Number(params.at));
           },
           (e) => alive && replace(stage, h("p", { class: "empty" }, `This item couldn’t be opened: ${String(e?.message ?? e)}`)),
         );
@@ -154,6 +171,7 @@ export function library(shell: ShellApi): void {
       };
       return () => {
         alive = false;
+        toolDisposers.forEach((d) => d());
         view?.destroy();
         host.classList.remove("reader-page");
       };

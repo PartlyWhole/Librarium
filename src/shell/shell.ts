@@ -14,7 +14,7 @@ import { count } from "../kit/format";
 import { icon, type IconNode } from "../kit/icon";
 import { display, fromEvent } from "../kit/keys";
 import { Registry } from "../kit/registry";
-import { batch, effect, signal } from "../kit/signal";
+import { batch, effect, signal, untracked } from "../kit/signal";
 import { Tree, type TreeNode } from "../kit/tree";
 import { toast } from "../kit/toast";
 import type { FolderInfo } from "../generated/FolderInfo";
@@ -25,7 +25,7 @@ import { refreshMenu } from "./menu";
 import { Prefs } from "./prefs";
 import { Records } from "./records";
 import { Router } from "./router";
-import type { Page, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
+import type { EmbedRenderer, Page, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
 import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, Command, Keyboard, Settings, FolderOpen } from "lucide";
 
 export type Feature = (shell: ShellApi) => void;
@@ -53,6 +53,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const openers = new Registry<string>("shell.openers");
   const editorExtensions = new Registry<EditorContribution>("shell.editor-extensions");
   const readerEngines = new Registry<ReaderEngine>("shell.reader-engines");
+  const embeds = new Registry<EmbedRenderer>("shell.embeds");
   const undo = new Undo();
   const closing = new Set<() => Promise<void>>();
   onCloseRequested(async () => {
@@ -104,6 +105,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     },
     editorExtensions,
     readerEngines,
+    embeds,
     undo,
     indexed,
     beforeClose(fn) {
@@ -271,14 +273,15 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     }
     if (page !== lastPage) pageScroll.scrollTop = 0;
     lastPage = page;
-    dispose = p.render(pageHost, r.params, {
+    // A page renders untracked: what it reads must not re-render it (it subscribes itself).
+    dispose = untracked(() => p.render(pageHost, r.params, {
       shell,
       setTitle: (t) => {
         titleEl.textContent = t;
         document.title = `${t} — Librarium`;
       },
       setHeaderActions: (nodes) => headerActions.replaceChildren(...nodes),
-    });
+    }));
   });
 
   // Side panel sections that apply to the current route.
@@ -293,7 +296,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       ...(sections.length
         ? sections.map((s) => {
             const body = h("div", { class: "panel-body" });
-            const d = s.render(body, r);
+            const d = untracked(() => s.render(body, r));
             if (typeof d === "function") panelDisposers.push(d);
             return h("section", { class: "panel-section", "aria-label": s.title }, h("h2", { class: "panel-title" }, s.title), body);
           })

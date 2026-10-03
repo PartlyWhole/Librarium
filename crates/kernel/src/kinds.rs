@@ -34,8 +34,9 @@ pub struct SlugField {
 }
 
 /// Gives a non-Markdown kind's text to derived views (from stored files only).
-pub type TextSource =
-    std::sync::Arc<dyn Fn(&crate::store::Store, &crate::store::Entry) -> Option<String> + Send + Sync>;
+pub type TextSource = std::sync::Arc<
+    dyn Fn(&crate::store::Store, &crate::store::Entry) -> Option<librarium_contracts::api::StoredText> + Send + Sync,
+>;
 
 pub struct Kinds {
     pub kinds: Registry<RecordKindDef>,

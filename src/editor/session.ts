@@ -8,8 +8,8 @@
  *   merges three ways when it can, and otherwise both versions are shown.
  * - A failed save is retried, and reported calmly in the status bar.
  */
-import { call } from "../../backend";
-import type { SaveResult } from "../../generated/SaveResult";
+import { call } from "../backend";
+import type { SaveResult } from "../generated/SaveResult";
 
 export const DRAFT_MS = 300;
 export const IDLE_MS = 1000;

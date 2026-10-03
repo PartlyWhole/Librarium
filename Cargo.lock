@@ -2237,8 +2237,10 @@ dependencies = [
 name = "librarium-feature-captures"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "librarium-contracts",
  "librarium-kernel",
+ "librarium-testkit",
  "serde",
  "serde_json",
 ]

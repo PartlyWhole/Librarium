@@ -25,6 +25,7 @@ const checks = [
   ["first page of a 100-page PDF in under 500 ms", r.pdfFirstPageMs >= 0 && r.pdfFirstPageMs < 500],
   ["PDF zooms", r.pdfZoomed === true],
   ["PDF finds", r.pdfFind?.count >= 1],
+  ["PDF shows a captured region in place", r.pdfPlace === true && r.pdfPlaceMarked === true],
   ["EPUB opens", r.epubPainted === true && r.epubDocs >= 1],
   ["EPUB scripts never run", r.epubScriptRan === false],
   ["EPUB finds", r.epubFind?.count >= 1],

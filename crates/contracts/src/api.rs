@@ -33,6 +33,8 @@ pub mod methods {
     pub const JOBS_DISMISS: &str = "jobs.dismiss";
     pub const INDEX_REBUILD: &str = "index.rebuild";
     pub const INDEX_STATUS: &str = "index.status";
+    pub const EXPORT_WRITE: &str = "export.write";
+    pub const RECORDS_TEXT: &str = "records.text";
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -345,4 +347,72 @@ pub struct Unresolved {
     pub source: crate::Id,
     pub title: String,
     pub label: String,
+}
+
+/// One part of a capture: its W3C selectors, and an image of a region when it is one.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct CapturePart {
+    /// W3C Web Annotation selectors (TextQuoteSelector, TextPositionSelector, FragmentSelector…).
+    #[ts(type = "unknown[]")]
+    pub selector: Vec<serde_json::Value>,
+    /// The quoted text of this part (empty for an image region).
+    #[serde(default)]
+    pub quote: String,
+    /// "p. 3", a chapter's title…, for the citation.
+    #[serde(default)]
+    pub locator: Option<String>,
+    /// A PNG of the region, base64-encoded.
+    #[serde(default)]
+    pub region_png: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct CaptureParams {
+    pub source: crate::Id,
+    #[serde(default)]
+    pub snapshot: Option<String>,
+    /// The stored text the positions refer to.
+    #[ts(type = "{ file: string, extractor: string, version: number } | null")]
+    #[serde(default)]
+    pub text: Option<serde_json::Value>,
+    pub parts: Vec<CapturePart>,
+    /// The user's own words.
+    #[serde(default)]
+    pub words: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct OrphanSidecar {
+    pub path: String,
+    pub id: Option<crate::Id>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct ExportParams {
+    /// A path the user chose.
+    pub path: String,
+    pub text: String,
+}
+
+/// A record's stored text, as derived views and anchors see it, with its segments (pages,
+/// chapters). Offsets are code points.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+pub struct StoredText {
+    pub text: String,
+    pub segments: Vec<TextSegment>,
+    /// Where the text is stored and what made it: `{file, extractor, version}` (absent for
+    /// Markdown, whose text is the record itself).
+    #[ts(type = "{ file: string, extractor: string, version: number } | null")]
+    #[serde(default)]
+    pub origin: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct TextSegment {
+    /// "p. 3", or a chapter's title.
+    pub label: String,
+    #[ts(type = "number")]
+    pub start: u64,
+    #[ts(type = "number")]
+    pub end: u64,
 }

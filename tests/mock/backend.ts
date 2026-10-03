@@ -38,6 +38,7 @@ const state = {
   /** Make records.save fail with this error (e.g. a read-only file). */
   failSave: null as string | null,
   today: "2026-10-02",
+  savePath: null as string | null,
   jobs: [] as { state: string; [k: string]: unknown }[],
   inspect: { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false },
   idn: 1,
@@ -122,6 +123,26 @@ const api: Record<string, (p: any) => unknown> = {
   },
   "library.text": () => null,
   "library.import": () => ({ imported: [], failed: [] }),
+  "records.text": (p) => {
+    const r = need(p.id);
+    const text = mockTexts.get(p.id) ?? r.body;
+    return { text, segments: mockSegments.get(p.id) ?? [{ label: "", start: 0, end: [...text].length }], origin: null };
+  },
+  "captures.create": (p) => {
+    const quote = p.parts.map((x: { quote: string }) => x.quote).filter(Boolean).join(" … ");
+    const info = seed("capture", quote.split(/\s+/).slice(0, 8).join(" ") || "A region", p.words ?? "", { "captures.source": p.source, "captures.quote": quote, "captures.parts": p.parts.length, ...(p.parts[0]?.locator ? { "captures.locator": p.parts[0].locator } : {}) });
+    anchors.set(info.id, { id: info.id, source: p.source, snapshot: null, text: p.text, parts: p.parts.map((x: { selector: unknown }) => ({ selector: x.selector })) });
+    return { info, seq: touch(need(info.id), "created") };
+  },
+  "captures.anchor": (p) => anchors.get(p.id) ?? fail("not-found", "no anchor"),
+  "captures.updateAnchor": (p) => {
+    const a = anchors.get(p.id);
+    if (a) a.parts = p.parts;
+    return { seq: state.seq };
+  },
+  "captures.orphans": () => [],
+  "captures.region": () => "data:image/png;base64,",
+  "export.write": (p) => (exports.set(p.path, p.text), null),
   "jobs.list": () => ({ running: state.jobs.filter((j) => j.state === "running" || j.state === "queued"), failed: state.jobs.filter((j) => j.state === "failed"), recent: state.jobs.filter((j) => j.state === "done"), resumed: null }),
   "index.rebuild": () => ({ id: "0192f3a4-7c1e-7b2a-9f00-0000000000ff", kind: "index.rebuild", key: "all", state: "queued", title: "Rebuilding the index", attempts: 0, error: null, progress: null, message: null, payload: null, created_ms: 0, updated_ms: 0 }),
   "search.query": (p) => {
@@ -208,6 +229,13 @@ export function onCloseRequested(handler: () => Promise<void>): void {
 /** Bytes of seeded files (tests put them here). */
 export const files = new Map<string, ArrayBuffer>();
 
+/** Stored texts and segments for sources (tests set them), anchors and exports. */
+export const mockTexts = new Map<string, string>();
+export const mockSegments = new Map<string, { label: string; start: number; end: number }[]>();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const anchors = new Map<string, any>();
+export const exports = new Map<string, string>();
+
 /** Fixture URLs for items in the browser preview. */
 const fileUrls = new Map<string, string>();
 
@@ -231,6 +259,10 @@ export async function pickFiles(): Promise<string[]> {
 
 export function onFileDrop(): () => void {
   return () => {};
+}
+
+export async function pickSavePath(): Promise<string | null> {
+  return state.savePath;
 }
 
 export async function pickFolder(): Promise<string | null> {

@@ -57,6 +57,23 @@ export const epubEngine: ReaderEngine = {
       },
       findClear: () => view.clearSearch?.(),
       position: () => location,
+      selection() {
+        for (const c of view.renderer?.getContents?.() ?? []) {
+          const sel = c.doc?.getSelection?.();
+          const text = sel?.toString().trim();
+          if (sel && text && sel.rangeCount) {
+            const cfi = view.getCFI?.(c.index, sel.getRangeAt(0));
+            return { text, chapter: c.index, cfi };
+          }
+        }
+        return null;
+      },
+      async showPlace(selectors) {
+        const cfi = selectors.find((s) => s.type === "FragmentSelector" && (s.value ?? "").startsWith("epubcfi("))?.value;
+        if (!cfi) return false;
+        await view.goTo(cfi);
+        return true;
+      },
       destroy() {
         view.close?.();
         frame.remove();

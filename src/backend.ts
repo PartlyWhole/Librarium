@@ -6,7 +6,7 @@
  */
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { BackendError } from "./generated/BackendError";
@@ -153,4 +153,10 @@ export function onFileDrop(handler: (paths: string[]) => void, hover?: (over: bo
     })
     .then((u) => (off = u));
   return () => off?.();
+}
+
+/** Asks where to save an export. */
+export async function pickSavePath(defaultName: string, title: string): Promise<string | null> {
+  if (!inTauri()) return null;
+  return (await saveDialog({ title, defaultPath: defaultName })) ?? null;
 }

@@ -102,10 +102,35 @@ export interface ShellApi {
   editorExtensions: Registry<EditorContribution>;
   /** shell.reader-engines */
   readerEngines: Registry<ReaderEngine>;
+  /** shell.embeds, by record kind */
+  embeds: Registry<EmbedRenderer>;
   undo: Undo;
   /** Work to finish before the window closes (e.g. a last save). */
   beforeClose(fn: () => Promise<void>): () => void;
 }
 
+/** Feature-hosted slot, offered by Library: tools in the reader's toolbar (e.g. capturing). */
+export const READER_TOOLS = "library.reader-tools";
+export interface ReaderToolContext {
+  source: RecordInfo;
+  view: import("../reader/host").ReaderView;
+  /** The stored text anchors refer to. */
+  text(): Promise<string>;
+}
+export interface ReaderTool {
+  id: string;
+  /** Builds the tool's controls for one open item; returns a disposer. */
+  mount(toolbar: HTMLElement, ctx: ReaderToolContext): (() => void) | void;
+}
+
+/** shell.embeds: how a record embedded with `![[label|id]]` reads (in the editor and exports). */
+export interface EmbedRenderer {
+  kind: string;
+  /** A block shown in place of the embed. */
+  render(r: RecordInfo, open: (id: string, params?: Record<string, string>) => void): HTMLElement;
+  /** Plain Markdown for "Export with quotations". */
+  markdown(r: RecordInfo): string;
+}
+
 /** Every interface slot, for the architecture report. */
-export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", NOTE_GROUPS] as const;
+export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", "shell.embeds", NOTE_GROUPS, READER_TOOLS] as const;

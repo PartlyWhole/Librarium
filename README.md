@@ -84,3 +84,5 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-03 | How files are imported: staging, one rename, text extracted in the worker. | [0022](docs/decisions/0022-imports.md) |
 | 2026-10-03 | The reader uses PDF.js's legacy build and a polyfill; end-to-end checks run in WebKit. | [0023](docs/decisions/0023-reader-and-webkit.md) |
 | 2026-10-03 | foliate-js vendored at a pinned commit, with book scripts disabled. | [0024](docs/decisions/0024-foliate-js.md) |
+| 2026-10-03 | How captures anchor, and how places are found again (found, moved, lost). | [0025](docs/decisions/0025-anchors.md) |
+| 2026-10-03 | Captures meets the reader and editor through reader tools, places and embeds. | [0026](docs/decisions/0026-feature-meeting-points.md) |

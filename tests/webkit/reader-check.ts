@@ -33,14 +33,12 @@ async function inked(name: string, wasm: boolean): Promise<number> {
 async function open(engine: ReaderEngine, name: string, format: string) {
   stage.replaceChildren();
   let firstPaint = -1;
-  const painted = new Promise<void>((r) => {
-    const src: ReaderSource = { id: name, format, title: name, bytes: () => fixture(name), text: async () => null };
-    void engine.open(stage, src, { moved() {}, firstPaint: (ms) => ((firstPaint = ms), r()) }).then((v) => (view = v));
-  });
-  let view: Awaited<ReturnType<ReaderEngine["open"]>> | null = null;
-  await Promise.race([painted, new Promise((r) => setTimeout(r, 10_000))]);
-  while (!view) await new Promise((r) => setTimeout(r, 20));
-  return { view: view as NonNullable<typeof view>, firstPaint };
+  let painted!: () => void;
+  const paint = new Promise<void>((r) => (painted = r));
+  const src: ReaderSource = { id: name, format, title: name, bytes: () => fixture(name), text: async () => null };
+  const view = await engine.open(stage, src, { moved() {}, firstPaint: (ms) => ((firstPaint = ms), painted()) });
+  await Promise.race([paint, new Promise((r) => setTimeout(r, 10_000))]);
+  return { view, firstPaint };
 }
 
 function step(name: string) {
@@ -77,6 +75,10 @@ async function run() {
   await new Promise((r) => setTimeout(r, 300));
   const after = (stage.querySelector(".page") as HTMLElement | null)?.getBoundingClientRect().width ?? 0;
   results.pdfZoomed = after > before;
+  step("pdf place");
+  results.pdfPlace = await pdf.view.showPlace?.([{ type: "FragmentSelector", value: "page=3", refinedBy: { type: "FragmentSelector", value: "xywh=percent:10,10,30,5" } }]);
+  await new Promise((r) => setTimeout(r, 300));
+  results.pdfPlaceMarked = !!stage.querySelector(".region-mark") && pdf.view.position().startsWith("Page 3");
   step("pdf find");
   results.pdfFind = await pdf.view.find("Line 7 of page 42");
   pdf.view.destroy();

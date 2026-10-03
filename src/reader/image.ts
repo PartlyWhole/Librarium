@@ -1,6 +1,6 @@
 /** The image engine: the original image, zoomable; find searches its recognised text. */
 import { h } from "../kit/dom";
-import type { ReaderEngine, ReaderView } from "./host";
+import { cropToPng, dragRect, outlineRegion, regionOf, type ReaderEngine, type ReaderView } from "./host";
 
 export const imageEngine: ReaderEngine = {
   id: "image",
@@ -33,6 +33,32 @@ export const imageEngine: ReaderEngine = {
       },
       findClear() {},
       position: () => (img.naturalWidth ? `${img.naturalWidth} × ${img.naturalHeight}` : ""),
+      selection: () => null,
+      async pickRegion() {
+        const r = await dragRect(frame);
+        if (!r) return null;
+        const b = img.getBoundingClientRect();
+        const x = Math.max(0, r.left - b.left), y = Math.max(0, r.top - b.top);
+        const w = Math.min(b.width - x, r.width), h = Math.min(b.height - y, r.height);
+        if (w <= 0 || h <= 0) return null;
+        const sx = img.naturalWidth / b.width, sy = img.naturalHeight / b.height;
+        const pct = (v: number, of: number) => Math.round((v / of) * 10000) / 100;
+        return { x: pct(x, b.width), y: pct(y, b.height), w: pct(w, b.width), h: pct(h, b.height), png: cropToPng(img, x * sx, y * sy, w * sx, h * sy) };
+      },
+      async showPlace(selectors) {
+        const region = regionOf(selectors);
+        if (!region) return false;
+        const wrap = img.parentElement!;
+        let holder = wrap.querySelector<HTMLElement>(".image-holder");
+        if (!holder) {
+          holder = document.createElement("div");
+          holder.className = "image-holder";
+          img.replaceWith(holder);
+          holder.appendChild(img);
+        }
+        outlineRegion(holder, region).scrollIntoView({ block: "center" });
+        return true;
+      },
       destroy() {
         URL.revokeObjectURL(url);
         frame.remove();

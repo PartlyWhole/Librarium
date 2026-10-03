@@ -68,6 +68,37 @@ fn imports_keep_originals_byte_for_byte_and_their_text_is_searchable() {
     assert_eq!(hits[0]["title"], "Notebooks");
     let hits = a.api.call("search.query", json!({ "text": "\"Line 7 of page 42\"" })).unwrap();
     assert_eq!(hits[0]["title"], "text-100");
+
+    // The stored text anchors refer to, with a segment per page.
+    let st = a.api.call("records.text", json!({ "id": pdf.id })).unwrap();
+    assert_eq!(st["segments"].as_array().unwrap().len(), 100);
+    assert_eq!(st["segments"][41]["label"], "p. 42");
+    assert_eq!(st["origin"]["extractor"], "pdf-extract 0.12");
+    let seg = &st["segments"][41];
+    let page: String = st["text"]
+        .as_str()
+        .unwrap()
+        .chars()
+        .skip(seg["start"].as_u64().unwrap() as usize)
+        .take((seg["end"].as_u64().unwrap() - seg["start"].as_u64().unwrap()) as usize)
+        .collect();
+    assert!(page.starts_with("Page 42"), "{page}");
+
+    // A capture on page 42: sidecar first, then the record; its anchor holds its own ID.
+    let w = a.api.call("captures.create", json!({
+        "source": pdf.id,
+        "text": st["origin"],
+        "parts": [{ "selector": [{ "type": "TextQuoteSelector", "exact": "Line 7 of page 42", "prefix": "", "suffix": "" }, { "type": "FragmentSelector", "value": "page=42", "conformsTo": "http://tools.ietf.org/rfc/rfc8118" }], "quote": "Line 7 of page 42", "locator": "p. 42" }],
+        "words": "Mine."
+    })).unwrap();
+    let cid = w["info"]["id"].as_str().unwrap();
+    let md = d.join("lib/captures").join(format!("{cid}.md"));
+    assert!(std::fs::read_to_string(&md).unwrap().contains("captures.quote: \"Line 7 of page 42\""));
+    let anchor: Value =
+        serde_json::from_slice(&std::fs::read(d.join("lib/captures").join(format!("{cid}.anchor.json"))).unwrap())
+            .unwrap();
+    assert_eq!(anchor["id"], cid);
+    assert_eq!(anchor["source"], pdf.id.to_string());
     a.api.close_library();
     let _ = std::fs::remove_dir_all(&d);
 }

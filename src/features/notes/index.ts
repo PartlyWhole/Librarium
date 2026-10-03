@@ -4,7 +4,9 @@ import { icon } from "../../kit/icon";
 import { effect } from "../../kit/signal";
 import type { TreeNode } from "../../kit/tree";
 import { count } from "../../kit/format";
-import { call } from "../../backend";
+import { call, pickSavePath } from "../../backend";
+import { parseLinks } from "../../editor/links";
+import type { RecordText } from "../../generated/RecordText";
 import { toast } from "../../kit/toast";
 import { renderNote, moveNote } from "./page";
 import type { Draft } from "../../generated/Draft";
@@ -112,6 +114,21 @@ export function notes(shell: ShellApi): void {
     run: () => moveNote(shell, shell.router.current.peek().params.id ?? ""),
   });
 
+  shell.actions.add("notes", {
+    id: "notes.exportWithQuotations",
+    title: "Export with quotations…",
+    when: () => shell.router.current().page === "note",
+    menu: { name: "file", group: 3 },
+    run: async () => {
+      const id = shell.router.current.peek().params.id ?? "";
+      const t = await call<RecordText>("records.read", { id });
+      const path = await pickSavePath(`${t.info.title || "note"}.md`, "Export with quotations");
+      if (!path) return;
+      await call("export.write", { path, text: expandEmbeds(shell, t.body) });
+      shell.status.show("Exported, with each quotation written out.");
+    },
+  });
+
   // Text recovered from an earlier run is offered back once the library opens.
   let offered = false;
   effect(() => {
@@ -140,4 +157,18 @@ export function notes(shell: ShellApi): void {
       return [...grouped, ...folderTree(rest, open, current)];
     },
   }, 0);
+}
+
+/** A copy of a note's text with each embed written out (for reading outside the app). */
+export function expandEmbeds(shell: ShellApi, body: string): string {
+  let out = "";
+  let last = 0;
+  for (const l of parseLinks(body)) {
+    if (!l.embed || !l.id) continue;
+    const r = shell.records.get(l.id);
+    const renderer = r ? shell.embeds.get(r.kind) : undefined;
+    out += body.slice(last, l.from) + (r && renderer ? renderer.markdown(r) : l.label);
+    last = l.to;
+  }
+  return out + body.slice(last);
 }

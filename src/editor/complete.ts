@@ -7,6 +7,8 @@ export interface LinkTarget {
   id: string;
   title: string;
   detail?: string;
+  /** Offered after `![[` (captures). */
+  embeddable?: boolean;
 }
 
 export function linkCompletion(targets: () => LinkTarget[]) {
@@ -19,12 +21,14 @@ export function linkCompletion(targets: () => LinkTarget[]) {
     // An auto-closed "]]" after the cursor is replaced too.
     const after = cx.state.sliceDoc(cx.pos, cx.pos + 2);
     const to = after === "]]" ? cx.pos + 2 : cx.pos;
-    const options: Completion[] = fuzzyFilter(targets(), query, (t) => t.title, 50).map((t) => ({
+    const pool = targets().filter((t) => (embed ? t.embeddable : true));
+    const options: Completion[] = fuzzyFilter(pool, query, (t) => t.title, 50).map((t) => ({
       label: t.title || "Untitled",
       detail: t.detail,
       apply: (view) => {
-        const text = formatLink(t.title || "Untitled", t.id);
-        view.dispatch({ changes: { from: start, to, insert: text }, selection: { anchor: start + text.length }, userEvent: "input.complete" });
+        const text = formatLink(t.title || "Untitled", t.id, embed);
+        const from = embed ? start - 1 : start;
+        view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length }, userEvent: "input.complete" });
       },
     }));
     return { from: start + 2, to: cx.pos, options, filter: false };

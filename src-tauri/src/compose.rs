@@ -57,6 +57,7 @@ pub fn methods() -> librarium_kernel::registry::Registry<librarium_kernel::metho
     librarium_feature_search::contribute_methods(&mut r).expect("search methods");
     librarium_feature_links::contribute_methods(&mut r).expect("links methods");
     librarium_feature_library::contribute_methods(&mut r).expect("library methods");
+    librarium_feature_captures::contribute_methods(&mut r).expect("captures methods");
     r
 }
 

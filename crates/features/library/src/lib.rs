@@ -160,11 +160,39 @@ pub fn stored_text(store: &Store, e: &Entry) -> Option<Value> {
     serde_json::from_slice(&bytes).ok()
 }
 
-/// Text for the derived views: pages (or chapters) as paragraphs, from stored files only.
-pub fn item_text(store: &Store, e: &Entry) -> Option<String> {
+/// Text for derived views and anchors: pages (or chapters) joined by blank lines, from stored
+/// files only, with a segment for each.
+pub fn item_text(store: &Store, e: &Entry) -> Option<librarium_contracts::api::StoredText> {
     let v = stored_text(store, e)?;
-    let parts = v["pages"].as_array().or_else(|| v["chapters"].as_array())?;
-    Some(parts.iter().filter_map(|p| p["text"].as_str()).collect::<Vec<_>>().join("\n\n"))
+    let (parts, pages) = match v["pages"].as_array() {
+        Some(p) => (p, true),
+        None => (v["chapters"].as_array()?, false),
+    };
+    let mut text = String::new();
+    let mut segments = vec![];
+    let mut at = 0u64;
+    for (i, p) in parts.iter().enumerate() {
+        if i > 0 {
+            text.push_str("\n\n");
+            at += 2;
+        }
+        let t = p["text"].as_str().unwrap_or("");
+        let n = t.chars().count() as u64;
+        let label = if pages {
+            format!("p. {}", p["page"].as_u64().unwrap_or(i as u64 + 1))
+        } else {
+            p["title"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("chapter {}", i + 1))
+        };
+        segments.push(librarium_contracts::api::TextSegment { label, start: at, end: at + n });
+        text.push_str(t);
+        at += n;
+    }
+    let origin = serde_json::json!({ "file": e.field_str(TEXT).unwrap_or(TEXT_FILE), "extractor": v["extractor"], "version": v["version"] });
+    Some(librarium_contracts::api::StoredText { text, segments, origin: Some(origin) })
 }
 
 #[derive(Deserialize)]

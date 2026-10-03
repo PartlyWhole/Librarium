@@ -60,6 +60,8 @@ pub const METHODS: &[&str] = &[
     methods::JOBS_DISMISS,
     methods::INDEX_REBUILD,
     methods::INDEX_STATUS,
+    methods::EXPORT_WRITE,
+    methods::RECORDS_TEXT,
 ];
 
 /// The settings key holding the library folder.
@@ -337,6 +339,27 @@ impl Api {
             .ok_or_else(|| BackendError::new(ErrorCode::NotReady, "The index is starting."))
     }
 
+    /// Writes an export (a copy of a note with quotations, W3C annotations) to a path the
+    /// user chose in a save dialog. Never into the library's own folders.
+    pub fn export_write(&self, path: &Path, bytes: &[u8]) -> Result<()> {
+        if let Ok(lib) = self.library() {
+            if path.starts_with(&lib.root) && !path.starts_with(lib.root.join("exports")) {
+                return Err(BackendError::invalid("Exports go outside the library folder (or in its exports folder)."));
+            }
+        }
+        let fs = &self.deps.fs;
+        let dir = path.parent().ok_or_else(|| BackendError::invalid("no folder"))?;
+        let tmp = dir.join(format!(
+            ".{}.librarium-tmp-export",
+            path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+        ));
+        let _ = fs.remove_file(&tmp);
+        fs.write_new(&tmp, bytes)
+            .and_then(|_| fs.flush_file(&tmp, librarium_contracts::ports::Flush::Full))
+            .and_then(|_| fs.rename(&tmp, path))
+            .map_err(|e| BackendError::io(format!("the export could not be written: {e}")))
+    }
+
     pub fn jobs_list(&self) -> Result<JobsList> {
         Ok(self.hosts()?.jobs.list())
     }
@@ -537,6 +560,20 @@ impl Api {
                 Ok(
                     json!({ "ready": h.views.is_ready(), "applied": h.views.applied(), "progress": h.views.progress(), "views": h.views.view_names() }),
                 )
+            }
+            methods::RECORDS_TEXT => {
+                // The text derived views and anchors refer to (from stored files only).
+                let lib = self.library()?;
+                let e = lib
+                    .store
+                    .get(params::<IdParams>(p)?.id)
+                    .ok_or_else(|| BackendError::not_found("no such record"))?;
+                to_json(lib.store.stored_text(&e))
+            }
+            methods::EXPORT_WRITE => {
+                let p: librarium_contracts::api::ExportParams = params(p)?;
+                self.export_write(Path::new(&p.path), p.text.as_bytes())?;
+                Ok(Value::Null)
             }
             methods::DRAFTS_PUT => {
                 self.drafts_put(params(p)?)?;
