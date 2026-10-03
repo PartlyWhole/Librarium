@@ -59,15 +59,35 @@ export function jobsUi(shell: ShellApi): void {
     if (f) parts.push(`${f} failed`);
     jobsText.set(parts.join(" · "));
   });
+  // The status opens the Jobs view, where each job says what it is and what went wrong.
   effect(() => {
     const t = jobsText();
     const el = document.querySelector(".status-jobs");
-    if (el) el.textContent = t;
+    if (!el) return;
+    const failed = jobs().failed.length;
+    replace(el, t ? h("button", { class: `status-link${failed ? " failed" : ""}`, type: "button", title: "Show jobs", onclick: () => shell.showPanelSection("jobs") }, t) : null);
   });
 
-  const row = (j: JobInfo, buttons: [string, () => void][]) =>
-    h("li", { class: "job" }, h("div", null, h("span", null, j.title), j.progress != null && j.state === "running" ? h("span", { class: "muted" }, ` ${Math.round(j.progress * 100)}%`) : null), j.error ? h("div", { class: "muted small" }, j.error) : j.message ? h("div", { class: "muted small" }, j.message) : null, h("div", { class: "row tight" }, buttons.map(([label, run]) => h("button", { class: "link-button", onclick: run }, label))));
+  /** What a job is about: a web page's address, or the record it works on. */
+  const subject = (j: JobInfo): string | null => {
+    const url = (j.payload as { url?: unknown } | null)?.url;
+    if (typeof url === "string") return url;
+    const r = shell.records.get(j.key);
+    return r ? r.title || "Untitled" : null;
+  };
+  const row = (j: JobInfo, buttons: [string, () => void][]) => {
+    const about = subject(j);
+    return h("li", { class: "job" },
+      h("div", null, h("span", null, j.title), j.progress != null && j.state === "running" ? h("span", { class: "muted" }, ` ${Math.round(j.progress * 100)}%`) : null),
+      about ? h("div", { class: "small job-subject", title: about }, about) : null,
+      j.error ? h("div", { class: "muted small" }, `Why: ${j.error}`) : j.message ? h("div", { class: "muted small" }, j.message) : null,
+      h("div", { class: "row tight" }, buttons.map(([label, run]) => h("button", { class: "link-button", onclick: run }, label))));
+  };
   const act = (method: string, id: string) => void call(method, { id }).then(load, (e) => toast(String(e?.message ?? e)));
+  const actAll = async (method: string, list: JobInfo[]) => {
+    for (const j of list) await call(method, { id: j.id }).catch((e) => toast(String(e?.message ?? e)));
+    await load();
+  };
 
   shell.sidePanel.add("shell", "jobs", {
     id: "jobs",
@@ -81,7 +101,14 @@ export function jobsUi(shell: ShellApi): void {
           host,
           l.running.length + l.failed.length + l.recent.length === 0 ? h("p", { class: "muted" }, "No jobs.") : null,
           l.running.length ? h("ul", { class: "jobs" }, l.running.map((j) => row(j, [["Cancel", () => act("jobs.cancel", j.id)]]))) : null,
-          l.failed.length ? [h("h3", { class: "panel-subtitle" }, "Failed"), h("ul", { class: "jobs" }, l.failed.map((j) => row(j, [["Retry", () => act("jobs.retry", j.id)], ["Dismiss", () => act("jobs.dismiss", j.id)]])))] : null,
+          l.failed.length
+            ? [
+                h("div", { class: "row tight jobs-head" }, h("h3", { class: "panel-subtitle" }, `Failed (${l.failed.length})`),
+                  l.failed.length > 1 ? h("button", { class: "link-button", onclick: () => void actAll("jobs.retry", l.failed) }, "Retry all") : null,
+                  l.failed.length > 1 ? h("button", { class: "link-button", onclick: () => void actAll("jobs.dismiss", l.failed) }, "Dismiss all") : null),
+                h("ul", { class: "jobs" }, l.failed.map((j) => row(j, [["Retry", () => act("jobs.retry", j.id)], ["Dismiss", () => act("jobs.dismiss", j.id)]]))),
+              ]
+            : null,
           l.recent.length ? [h("h3", { class: "panel-subtitle" }, "Recent"), h("ul", { class: "jobs" }, l.recent.map((j) => row(j, [])))] : null,
         );
       });

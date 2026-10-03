@@ -98,15 +98,28 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       const items: MenuItem[] = [];
       const one = rs.length === 1 ? rs[0]! : null;
       if (one && openers.get(one.kind)) items.push({ label: "Open", run: () => shell.openRecord(one.id) });
-      const extra = recordActions
+      const extra = shell.recordActionsFor(rs);
+      if (items.length && extra.length) items.push("separator");
+      items.push(...extra);
+      if (items.length) contextMenu(items, at, one ? one.title || "Untitled" : `${rs.length} items`);
+    },
+    showPanelSection(id) {
+      panelOpen.set(true);
+      // After the panel has rendered.
+      setTimeout(() => {
+        const el = [...panelEl.querySelectorAll<HTMLElement>("[data-section]")].find((x) => x.dataset.section === id);
+        el?.scrollIntoView?.({ block: "start" });
+        el?.focus({ preventScroll: true });
+      }, 0);
+    },
+    recordActionsFor(rs) {
+      return recordActions
         .values()
-        .map((a) => ({ a, on: a.partial ? rs.filter((r) => a.applies(r)) : rs.every((r) => a.applies(r)) ? rs : [] }))
+        .map((a) => ({ a, on: a.partial ? rs.filter((r) => a.applies(r)) : rs.length && rs.every((r) => a.applies(r)) ? rs : [] }))
         .filter((x) => x.on.length)
         // Destructive entries go last.
-        .sort((x, y) => Number(!!x.a.destructive) - Number(!!y.a.destructive));
-      if (items.length && extra.length) items.push("separator");
-      for (const { a, on } of extra) items.push({ label: typeof a.label === "function" ? a.label(on.length) : a.label, destructive: a.destructive, run: () => void a.run(on) });
-      if (items.length) contextMenu(items, at, one ? one.title || "Untitled" : `${rs.length} items`);
+        .sort((x, y) => Number(!!x.a.destructive) - Number(!!y.a.destructive))
+        .map(({ a, on }) => ({ label: typeof a.label === "function" ? a.label(on.length) : a.label, destructive: a.destructive, run: () => void a.run(on) }));
     },
     slot<T>(id: string) {
       let r = slots.get(id);
@@ -324,7 +337,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
             const body = h("div", { class: "panel-body" });
             const d = untracked(() => s.render(body, r));
             if (typeof d === "function") panelDisposers.push(d);
-            return h("section", { class: "panel-section", "aria-label": s.title }, h("h2", { class: "panel-title" }, s.title), body);
+            return h("section", { class: "panel-section", "aria-label": s.title, tabindex: "-1", dataset: { section: s.id } }, h("h2", { class: "panel-title" }, s.title), body);
           })
         : [h("p", { class: "empty" }, "Nothing more to show here.")]),
     );

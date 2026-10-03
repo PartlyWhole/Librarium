@@ -5,7 +5,8 @@ import { icon } from "../../kit/icon";
 import { effect, signal, untracked } from "../../kit/signal";
 import { toast } from "../../kit/toast";
 import { Selection } from "../../kit/selection";
-import { selectList } from "../../kit/selectlist";
+import { selectList, type SelectListElement } from "../../kit/selectlist";
+import { selectBar } from "../../shell/selectbar";
 import { count } from "../../kit/format";
 import type { ShellApi } from "../../shell/api";
 import { READER_TOOLS, type ReaderTool } from "../../shell/slots";
@@ -205,35 +206,46 @@ export function library(shell: ShellApi): void {
     ribbon: 2,
     render(host, _p, ctx) {
       ctx.setHeaderActions([h("button", { class: "icon-button", "aria-label": "Add to library", title: "Add to library", onclick: () => shell.actions.run("library.add") }, icon(Plus))]);
-      // The selection outlives re-renders (a record changing re-renders the list).
+      // The selection and select mode outlive re-renders (a record changing re-renders the list).
       const selection = new Selection();
-      return effect(() => {
-        const items = shell.records.list(KIND).sort((a, b) => a.title.localeCompare(b.title));
-        const detail = (i: RecordInfo) => {
-          const snaps = Array.isArray(i.fields["library.snapshots"]) ? (i.fields["library.snapshots"] as unknown[]).length : 0;
-          if (snaps > 1) return count(snaps, "snapshot");
-          return i.fields["library.pages"] ? count(Number(i.fields["library.pages"]), formatOf(i) === "epub" ? "chapter" : "page") : "";
-        };
-        untracked(() =>
+      const mode = signal(false);
+      let list: SelectListElement | null = null;
+      const items = () => shell.records.list(KIND).sort((a, b) => a.title.localeCompare(b.title));
+      const bar = selectBar(shell, { selection, mode, items, sync: () => list?.sync(), noun: ["item", "items"] });
+      const detail = (i: RecordInfo) => {
+        const snaps = Array.isArray(i.fields["library.snapshots"]) ? (i.fields["library.snapshots"] as unknown[]).length : 0;
+        if (snaps > 1) return count(snaps, "snapshot");
+        return i.fields["library.pages"] ? count(Number(i.fields["library.pages"]), formatOf(i) === "epub" ? "chapter" : "page") : "";
+      };
+      const stop = effect(() => {
+        const all = items();
+        untracked(() => {
+          list = all.length
+            ? selectList({
+                label: "Library items",
+                className: "item-list",
+                items: all,
+                selection,
+                mode,
+                id: (i) => i.id,
+                render: (i) => h("span", { class: "item-link" }, icon(iconFor(i), 16), h("span", null, i.title || "Untitled"), h("span", { class: "muted small" }, detail(i))),
+                open: (i) => shell.openRecord(i.id),
+                menu: (rs, at) => shell.showRecordMenu(rs, at),
+              })
+            : null;
           replace(
             host,
             h("h1", { class: "page-title" }, "Library"),
-            items.length ? h("p", { class: "muted small list-hint" }, `${count(items.length, "item")}. Select several with ⌘-click or ⇧-click; right-click for what you can do with them.`) : null,
-            items.length
-              ? selectList({
-                  label: "Library items",
-                  className: "item-list",
-                  items,
-                  selection,
-                  id: (i) => i.id,
-                  render: (i) => h("span", { class: "item-link" }, icon(iconFor(i), 16), h("span", null, i.title || "Untitled"), h("span", { class: "muted small" }, detail(i))),
-                  open: (i) => shell.openRecord(i.id),
-                  menu: (rs, at) => shell.showRecordMenu(rs, at),
-                })
-              : h("p", { class: "empty" }, "No library items yet. Add PDFs, images or EPUBs, or drop them on the window."),
-          ),
-        );
+            all.length ? h("p", { class: "muted small list-hint" }, `${count(all.length, "item")}. To act on several, choose Select (or press ⌘A); right-click for what you can do.`) : null,
+            all.length ? bar.el : null,
+            list ?? h("p", { class: "empty" }, "No library items yet. Add PDFs, images or EPUBs, or drop them on the window."),
+          );
+        });
       });
+      return () => {
+        stop();
+        bar.dispose();
+      };
     },
   });
 

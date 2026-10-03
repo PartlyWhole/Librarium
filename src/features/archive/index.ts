@@ -7,10 +7,11 @@
 import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
 import { Selection } from "../../kit/selection";
-import { selectList } from "../../kit/selectlist";
+import { selectList, type SelectListElement } from "../../kit/selectlist";
+import { selectBar } from "../../shell/selectbar";
 import { ask } from "../../kit/dialog";
 import { toast } from "../../kit/toast";
-import { effect, untracked } from "../../kit/signal";
+import { effect, signal, untracked } from "../../kit/signal";
 import { count } from "../../kit/format";
 import { call } from "../../backend";
 import type { ShellApi } from "../../shell/api";
@@ -144,37 +145,48 @@ export function archive(shell: ShellApi): void {
     ribbon: 4,
     render(host) {
       const selection = new Selection();
-      return effect(() => {
-        const list = [...shell.records.byId().values()].filter(isArchived).sort((a, b) => String(b.fields[AT]).localeCompare(String(a.fields[AT])));
+      const mode = signal(false);
+      let list: SelectListElement | null = null;
+      const archived = () => [...shell.records.byId().values()].filter(isArchived).sort((a, b) => String(b.fields[AT]).localeCompare(String(a.fields[AT])));
+      const bar = selectBar(shell, { selection, mode, items: archived, sync: () => list?.sync(), noun: ["record", "records"] });
+      const stop = effect(() => {
+        const all = archived();
         untracked(() => {
-          if (!list.length) {
+          if (!all.length) {
+            list = null;
             replace(host, h("h1", { class: "page-title" }, "Archive"), h("p", { class: "empty" }, "Nothing is archived. Archived notes and items wait here until you restore them or delete them permanently."));
             return;
           }
           const when = (r: RecordInfo) => new Date(String(r.fields[AT])).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+          list = selectList({
+            label: "Archived records",
+            className: "item-list archive-list",
+            items: all,
+            selection,
+            mode,
+            id: (r) => r.id,
+            render: (r) =>
+              h("div", { class: "archive-row" },
+                h("span", { class: "item-link" }, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, `${r.kind} · archived ${when(r)}`)),
+                h("button", { class: "button", type: "button", tabindex: "-1", onclick: () => void restoreRecord(r.id) }, icon(ArchiveRestore, 14), "Restore"),
+                h("button", { class: "button destructive", type: "button", tabindex: "-1", onclick: () => void deletePermanently([r.id]) }, icon(Trash2, 14), "Delete permanently…"),
+              ),
+            open: (r) => shell.openRecord(r.id),
+            menu: (rs, at) => shell.showRecordMenu(rs, at),
+          });
           replace(
             host,
             h("h1", { class: "page-title" }, "Archive"),
-            h("p", { class: "muted" }, "Archived records are hidden from lists and search. Deleting here is permanent. Select several with ⌘-click or ⇧-click; right-click for what you can do with them."),
-            selectList({
-              label: "Archived records",
-              className: "item-list archive-list",
-              items: list,
-              selection,
-              id: (r) => r.id,
-              render: (r) =>
-                h("div", { class: "archive-row" },
-                  h("span", { class: "item-link" }, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, `${r.kind} · archived ${when(r)}`)),
-                  h("button", { class: "button", type: "button", tabindex: "-1", onclick: () => void restoreRecord(r.id) }, icon(ArchiveRestore, 14), "Restore"),
-                  h("button", { class: "button destructive", type: "button", tabindex: "-1", onclick: () => void deletePermanently([r.id]) }, icon(Trash2, 14), "Delete permanently…"),
-                ),
-              open: (r) => shell.openRecord(r.id),
-              menu: (rs, at) => shell.showRecordMenu(rs, at),
-            }),
-            list.length > 1 ? h("p", null, h("button", { class: "button destructive", type: "button", onclick: () => void deletePermanently(list.map((r) => r.id)) }, `Delete all ${list.length} permanently…`)) : null,
+            h("p", { class: "muted" }, `${count(all.length, "record")}, hidden from lists and search. Deleting here is permanent. To act on several, choose Select (or press ⌘A).`),
+            bar.el,
+            list,
           );
         });
       });
+      return () => {
+        stop();
+        bar.dispose();
+      };
     },
   });
 }

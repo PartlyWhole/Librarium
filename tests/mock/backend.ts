@@ -161,6 +161,12 @@ const api: Record<string, (p: any) => unknown> = {
   "captures.orphans": () => [],
   "captures.region": () => "data:image/png;base64,",
   "export.write": (p) => (exports.set(p.path, p.text), null),
+  "jobs.dismiss": (p) => ((state.jobs = state.jobs.filter((j) => j.id !== p.id)), null),
+  "jobs.retry": (p) => {
+    const j = state.jobs.find((x) => x.id === p.id);
+    if (j) j.state = "queued";
+    return j ?? null;
+  },
   "jobs.list": () => ({ running: state.jobs.filter((j) => j.state === "running" || j.state === "queued"), failed: state.jobs.filter((j) => j.state === "failed"), recent: state.jobs.filter((j) => j.state === "done"), resumed: null }),
   "index.rebuild": () => ({ id: "0192f3a4-7c1e-7b2a-9f00-0000000000ff", kind: "index.rebuild", key: "all", state: "queued", title: "Rebuilding the index", attempts: 0, error: null, progress: null, message: null, payload: null, created_ms: 0, updated_ms: 0 }),
   "library.removeSnapshots.prepare": (p: { items: { id: string; snapshots?: string[] }[] }) => {

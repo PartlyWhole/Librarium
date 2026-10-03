@@ -106,6 +106,10 @@ export interface ShellApi {
   recordActions: Registry<RecordAction>;
   /** Opens the context menu of a record, or of several selected, at a point. */
   showRecordMenu(rs: RecordInfo | RecordInfo[], at: { x: number; y: number }): void;
+  /** Opens the side panel at one of its sections (e.g. "jobs"). */
+  showPanelSection(id: string): void;
+  /** What can be done with these records (the context menu's entries, without Open). */
+  recordActionsFor(rs: RecordInfo[]): { label: string; destructive?: boolean; run(): void }[];
   /** A feature-hosted slot by its ID (defined in slots.ts). */
   slot<T>(id: string): Registry<T>;
   router: Router;

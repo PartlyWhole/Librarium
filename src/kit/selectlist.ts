@@ -7,6 +7,7 @@
 import { h, type Child } from "./dom";
 import { isMenuKey, menuPointFor } from "./menu";
 import type { Selection } from "./selection";
+import type { ReadSignal } from "./signal";
 
 export interface SelectListOptions<T> {
   label: string;
@@ -17,9 +18,14 @@ export interface SelectListOptions<T> {
   menu(ts: T[], at: { x: number; y: number }): void;
   selection: Selection;
   className?: string;
+  /** Select mode: a click ticks an item instead of opening it. */
+  mode?: ReadSignal<boolean>;
 }
 
-export function selectList<T>(o: SelectListOptions<T>): HTMLElement {
+/** The list element, with `sync()` to redraw the selection after it changed elsewhere. */
+export type SelectListElement = HTMLElement & { sync(): void };
+
+export function selectList<T>(o: SelectListOptions<T>): SelectListElement {
   const order = o.items.map(o.id);
   const byId = new Map(o.items.map((t) => [o.id(t), t]));
   // Forget selected items that are no longer listed.
@@ -28,6 +34,7 @@ export function selectList<T>(o: SelectListOptions<T>): HTMLElement {
   let focused = kept[0] ?? order[0] ?? null;
   const rows = new Map<string, HTMLElement>();
   const sync = () => {
+    list.classList.toggle("selecting", !!o.mode?.peek());
     const s = o.selection.ids.peek();
     for (const [id, li] of rows) {
       li.setAttribute("aria-selected", String(s.has(id)));
@@ -49,14 +56,15 @@ export function selectList<T>(o: SelectListOptions<T>): HTMLElement {
   const list = h("ul", { class: `select-list ${o.className ?? ""}`, role: "listbox", "aria-label": o.label, "aria-multiselectable": "true" },
     o.items.map((t) => {
       const id = o.id(t);
-      const li = h("li", { role: "option", "aria-selected": "false", tabindex: "-1", dataset: { id } }, o.render(t));
+      const li = h("li", { role: "option", "aria-selected": "false", tabindex: "-1", dataset: { id } }, h("span", { class: "select-check", "aria-hidden": "true" }), o.render(t));
       li.addEventListener("click", (e) => {
         // Buttons inside an item (Restore…) do their own thing.
         if ((e.target as HTMLElement).closest("button")) return;
         focused = id;
-        const plain = o.selection.click(id, order, { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey });
+        const selecting = !!o.mode?.peek();
+        const plain = o.selection.click(id, order, { meta: e.metaKey || e.ctrlKey || selecting, shift: e.shiftKey });
         sync();
-        if (plain) o.open(t);
+        if (plain && !selecting) o.open(t);
       });
       li.addEventListener("contextmenu", (e) => {
         e.preventDefault();
@@ -80,11 +88,16 @@ export function selectList<T>(o: SelectListOptions<T>): HTMLElement {
         else if (e.key === "ArrowUp") move(order[i - 1]);
         else if (e.key === "Home") move(order[0]);
         else if (e.key === "End") move(order[order.length - 1]);
-        else if (e.key === "Enter") o.open(t);
-        else if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
+        else if (e.key === "Enter" && !o.mode?.peek()) o.open(t);
+        else if (e.key === " " && o.mode?.peek()) {
+          o.selection.click(id, order, { meta: true, shift: false });
+          sync();
+        }
+        // With select mode, the page handles ⌘A and Escape (turning the mode on and off).
+        else if (!o.mode && e.key === "a" && (e.metaKey || e.ctrlKey)) {
           o.selection.set(order, id);
           sync();
-        } else if (e.key === "Escape" && o.selection.ids.peek().size > 1) {
+        } else if (!o.mode && e.key === "Escape" && o.selection.ids.peek().size > 1) {
           o.selection.set([id], id);
           sync();
         } else return;
@@ -95,6 +108,7 @@ export function selectList<T>(o: SelectListOptions<T>): HTMLElement {
       return li;
     }),
   );
+  const out = Object.assign(list, { sync });
   sync();
-  return list;
+  return out;
 }
