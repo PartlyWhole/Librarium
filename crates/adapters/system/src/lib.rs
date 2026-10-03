@@ -48,6 +48,20 @@ impl librarium_contracts::ports::Desktop for MacDesktop {
             Err(librarium_contracts::BackendError::io(format!("Finder could not show {}", path.display())))
         }
     }
+
+    fn open_url(&self, url: &str) -> librarium_contracts::Result<()> {
+        // Checked by the caller to be a web or mail address; never an option to `open`.
+        let status = std::process::Command::new("/usr/bin/open")
+            .arg("--")
+            .arg(url)
+            .status()
+            .map_err(|e| librarium_contracts::BackendError::io(e.to_string()))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(librarium_contracts::BackendError::io("The browser could not open that address."))
+        }
+    }
 }
 
 #[cfg(test)]

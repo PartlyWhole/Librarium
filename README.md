@@ -95,3 +95,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-03 | Folders: real subfolders, notes and library items each with their own; their pages browse them as in Finder; captures under their items; pointer dragging; arranging by hand. | [0033](docs/decisions/0033-folders-and-the-files-page.md) |
 | 2026-10-03 | Tabs, as in Obsidian: each with its own history and living page; ⌘T, ⌘W, ⇧⌘T, ⌃Tab, ⌘1–9; Today moves to ⇧⌘D. | [0034](docs/decisions/0034-tabs.md) |
 | 2026-10-03 | Daily notes are ordinary notes at the top level of Notes; Today (ribbon, ⇧⌘D) opens or makes today's; no special group. | [0035](docs/decisions/0035-daily-notes-are-notes.md) |
+| 2026-10-03 | Links to the web ask first (where they go, a warning if misleading) and open in the browser; the window never leaves the app. | [0036](docs/decisions/0036-links-to-the-web.md) |

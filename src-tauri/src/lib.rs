@@ -36,6 +36,16 @@ fn subscribe(app: tauri::State<'_, App>, channel: Channel<RpcNotification>) {
     app.transport.subscribe(channel);
 }
 
+/// Whether the app's own window may go to an address: only its own pages (the bundled app, or
+/// the dev server), never the web. A link to the web is stopped and offered to the browser.
+fn stays_in_app(url: &tauri::Url) -> bool {
+    match url.scheme() {
+        "tauri" | "asset" | "about" | "data" | "blob" => true,
+        "http" | "https" => matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "tauri.localhost")),
+        _ => false,
+    }
+}
+
 /// The settings key for the main window's frame.
 const WINDOW_KEY: &str = "window.main";
 
@@ -59,6 +69,24 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        // The main window never leaves the app: a link to the web is stopped, and the interface
+        // asks whether to open it in the browser. (The page saver's hidden window is its own.)
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry, ()>::new("stay-in-app")
+                .on_navigation(|webview, url| {
+                    if webview.label() != "main" || stays_in_app(url) {
+                        return true;
+                    }
+                    log::info!("a link to {url} was stopped; the interface offers it to the browser");
+                    if let Some(app) = webview.try_state::<App>() {
+                        if matches!(url.scheme(), "http" | "https" | "mailto") {
+                            app.api.link_stopped(url.as_str());
+                        }
+                    }
+                    false
+                })
+                .build(),
+        )
         .setup(|app| {
             std::panic::set_hook(Box::new(|info| log::error!("panic: {info}")));
             let app_support = app.path().app_data_dir()?;
@@ -110,4 +138,31 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![rpc, subscribe, bytes])
         .run(tauri::generate_context!())
         .expect("error while running Librarium");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::stays_in_app;
+
+    #[test]
+    fn the_window_stays_in_the_app() {
+        for ok in [
+            "tauri://localhost/index.html",
+            "http://localhost:1420/",
+            "http://tauri.localhost/x",
+            "about:blank",
+            "asset://localhost/x.pdf",
+        ] {
+            assert!(stays_in_app(&ok.parse().unwrap()), "{ok}");
+        }
+        for away in [
+            "https://example.org/",
+            "http://localhost.evil.org/",
+            "mailto:a@b.org",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+        ] {
+            assert!(!stays_in_app(&away.parse().unwrap()), "{away}");
+        }
+    }
 }

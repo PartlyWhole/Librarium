@@ -26,6 +26,7 @@ import { Prefs } from "./prefs";
 import { Records } from "./records";
 import { Router, sameRoute, type Route, type SavedTabs } from "./router";
 import { renderNewTab, tabBar } from "./tabs";
+import { guardLinks } from "./links";
 import { createFolders } from "./folders";
 import type { EmbedRenderer, Folders, Page, RecordAction, RecordLook, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
 import { contextMenu, type MenuItem } from "../kit/menu";
@@ -157,6 +158,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     destroy: () => {
       document.removeEventListener("keydown", onKey, true);
       destroyed = true;
+      unguard();
       for (const [id, m] of mounted) unmount(id, m);
     },
   };
@@ -223,6 +225,9 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   });
   pages.add("shell", "newtab", { id: "newtab", title: "New tab", icon: Plus, render: (host) => renderNewTab(shell, host, () => recent()) }, 102);
   pages.add("shell", "welcome", { id: "welcome", title: "Welcome", icon: FolderOpen, render: (host) => renderWelcome(host) }, 101);
+
+  // Links to the web ask before opening in the browser; the window never leaves the app.
+  const unguard = guardLinks(() => titleEl.textContent || undefined);
 
   // ---- features contribute ------------------------------------------------------------
   jobsUi(shell);

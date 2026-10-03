@@ -41,6 +41,7 @@ pub mod methods {
     pub const FOLDERS_MOVE: &str = "folders.move";
     pub const FOLDERS_REMOVE: &str = "folders.remove";
     pub const FOLDERS_SET_ORDER: &str = "folders.setOrder";
+    pub const APP_OPEN_URL: &str = "app.openUrl";
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]

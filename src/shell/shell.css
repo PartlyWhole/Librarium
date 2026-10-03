@@ -554,3 +554,6 @@ body.dragging-items, body.dragging-items * { cursor: grabbing !important; }
 .newtab-link svg { color: var(--muted); }
 .newtab-link span { flex: 1; }
 .newtab-link kbd { font-family: inherit; }
+/* Asking before a link opens in the browser. */
+.link-ask p { margin: 0 0 8px; }
+.link-url { font-family: var(--font-mono); font-size: 12px; padding: 6px 8px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--r1); word-break: break-all; max-height: 6em; overflow: auto; user-select: text; -webkit-user-select: text; }

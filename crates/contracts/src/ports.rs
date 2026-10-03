@@ -290,6 +290,8 @@ pub trait WorkerHost: Send + Sync {
 pub trait Desktop: Send + Sync {
     /// Shows a file or folder in Finder.
     fn reveal(&self, path: &Path) -> Result<()>;
+    /// Opens a web address (or mail link) in the user's own browser (or mail app).
+    fn open_url(&self, url: &str) -> Result<()>;
 }
 
 // ---------------------------------------------------------------------------------------------

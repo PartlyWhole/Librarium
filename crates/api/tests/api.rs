@@ -18,6 +18,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 fn api_with(fs: Arc<MemFs>) -> Arc<Api> {
+    api_with_desktop(fs, Arc::new(librarium_testkit::desktop::RecordingDesktop::default()))
+}
+
+fn api_with_desktop(fs: Arc<MemFs>, desktop: Arc<librarium_testkit::desktop::RecordingDesktop>) -> Arc<Api> {
     let index = MemIndex::new();
     let src = Arc::new(ScriptedChanges::new());
     Arc::new(Api::new(Deps {
@@ -46,7 +50,7 @@ fn api_with(fs: Arc<MemFs>) -> Arc<Api> {
         }),
         app_support: PathBuf::from("/app"),
         logs_dir: PathBuf::from("/logs"),
-        desktop: Arc::new(librarium_testkit::desktop::RecordingDesktop::default()),
+        desktop,
         methods: librarium_kernel::methods::registry(),
         views: Arc::new(Vec::new),
         job_kinds: Arc::new(librarium_kernel::jobs::registry),
@@ -247,4 +251,19 @@ fn folders_are_listed_made_moved_and_removed() {
     a.call("records.move", json!({ "ids": [id], "folder": null })).unwrap();
     a.call("folders.remove", json!({ "kind": "page", "path": "Done" })).unwrap();
     assert_eq!(a.call("folders.list", json!({})).unwrap()["spaces"][0]["folders"], json!([]));
+}
+
+#[test]
+fn only_web_and_mail_addresses_are_opened_in_the_browser() {
+    let fs = Arc::new(MemFs::new());
+    let desktop = Arc::new(librarium_testkit::desktop::RecordingDesktop::default());
+    let a = api_with_desktop(fs, desktop.clone());
+    a.call("app.openUrl", json!({ "url": "https://example.org/a?b=c" })).unwrap();
+    a.call("app.openUrl", json!({ "url": "mailto:someone@example.org" })).unwrap();
+    for bad in
+        ["file:///etc/passwd", "javascript:alert(1)", "-a Calculator", "https://x.org/a b", "tauri://localhost", ""]
+    {
+        assert!(a.call("app.openUrl", json!({ "url": bad })).is_err(), "{bad:?} refused");
+    }
+    assert_eq!(*desktop.opened.lock().unwrap(), ["https://example.org/a?b=c", "mailto:someone@example.org"]);
 }

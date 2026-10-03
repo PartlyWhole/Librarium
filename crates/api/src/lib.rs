@@ -72,6 +72,7 @@ pub const METHODS: &[&str] = &[
     methods::FOLDERS_MOVE,
     methods::FOLDERS_REMOVE,
     methods::FOLDERS_SET_ORDER,
+    methods::APP_OPEN_URL,
 ];
 
 /// The settings key holding the library folder.
@@ -171,6 +172,25 @@ impl Api {
         if let Some(s) = self.sink.read().unwrap().as_ref() {
             s.notify(RpcNotification::new(method, params));
         }
+    }
+
+    /// A link tried to take the window away from the app (it was stopped): the interface asks
+    /// whether to open it in the browser.
+    pub fn link_stopped(&self, url: &str) {
+        self.notify("event.openLink", json!({ "url": url }));
+    }
+
+    /// Opens an address in the user's browser: only web (`http`, `https`) and mail links.
+    pub fn open_url(&self, url: &str) -> Result<()> {
+        let u = url.trim();
+        let lower = u.to_ascii_lowercase();
+        let ok = (lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:"))
+            && u.len() <= 8192
+            && !u.chars().any(|c| c.is_whitespace() || c.is_control());
+        if !ok {
+            return Err(BackendError::invalid("Only web and mail addresses are opened."));
+        }
+        self.deps.desktop.open_url(u)
     }
 
     /// Opens the library chosen earlier, if any. Call once at startup.
@@ -659,6 +679,11 @@ impl Api {
                     "warn" => log::warn!(target: "interface", "{msg}"),
                     _ => log::info!(target: "interface", "{msg}"),
                 }
+                Ok(Value::Null)
+            }
+            methods::APP_OPEN_URL => {
+                let url = p.get("url").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                self.open_url(&url)?;
                 Ok(Value::Null)
             }
             methods::APP_REVEAL_LOGS => {

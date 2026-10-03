@@ -21,6 +21,11 @@ export const epubEngine: ReaderEngine = {
     let fontSize = 100;
     let location = "";
     let painted = false;
+    // A link to the web in the book: the app asks before opening it in the browser.
+    view.addEventListener("external-link", (e: any) => {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent("open-link", { detail: { url: e.detail?.href_, text: e.detail?.a?.textContent ?? "" } }));
+    });
     view.addEventListener("relocate", (e: any) => {
       const d = e.detail ?? {};
       location = d.tocItem?.label ? `${d.tocItem.label}${d.fraction != null ? ` · ${Math.round(d.fraction * 100)}%` : ""}` : d.fraction != null ? `${Math.round(d.fraction * 100)}%` : "";

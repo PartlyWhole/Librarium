@@ -301,6 +301,10 @@ const api: Record<string, (p: any) => unknown> = {
   "links.unresolved": () => [],
   "folder.inspect": (p) => ({ path: p.path, ...state.inspect }),
   "folder.reveal": () => null,
+  "app.openUrl": (p) => {
+    if (!/^(https?:\/\/|mailto:)/i.test(p.url ?? "")) fail("invalid-input", "Only web and mail addresses are opened.");
+    return null;
+  },
   "app.revealLogs": () => null,
   "settings.get": () => ({ ...state.settings }),
   "settings.set": (p) => (Object.assign(state.settings, p.values), { ...state.settings }),
