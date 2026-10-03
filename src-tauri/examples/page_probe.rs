@@ -62,6 +62,7 @@ fn main() {
                 let long = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let p = saver.save(&format!("{base}/long.html"), Duration::from_secs(60)).unwrap();
                     assert!(p.pdf.starts_with(b"%PDF"));
+                    assert!(p.images >= 1, "the image at the bottom, loaded only when scrolled to, is there");
                     p.pdf.windows(10).filter(|w| w == b"/Type /Pag" || w == b"/Type/Page").count()
                 }));
                 println!("long page: {long:?}");

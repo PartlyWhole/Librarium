@@ -28,8 +28,17 @@ const WIDTH: f64 = 1024.0;
 /// Runs in the page (an isolated world): scrolls, waits for images, reads text and metadata.
 const EXTRACT: &str = r#"
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Hidden windows stretch timers to about a second, so pass the page through without them:
+// a message-channel yield lets layout and lazy loaders run between scroll steps.
+const yieldTask = () => new Promise((r) => { const c = new MessageChannel(); c.port1.onmessage = () => r(); c.port2.postMessage(0); });
+const frame = () => new Promise((r) => { let done = false; requestAnimationFrame(() => { if (!done) { done = true; r(); } }); setTimeout(() => { if (!done) { done = true; r(); } }, 50); });
 const H = () => Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
-for (let y = 0; y < H() && y < 60000; y += Math.max(200, innerHeight * 0.8)) { scrollTo(0, y); await sleep(100); }
+const eager = () => document.querySelectorAll("img[loading=lazy], iframe[loading=lazy]").forEach((i) => { i.loading = "eager"; });
+eager();
+for (let y = 0; y < H() && y < 60000; y += Math.max(400, innerHeight * 2)) { scrollTo(0, y); for (let k = 0; k < 3; k++) await yieldTask(); }
+scrollTo(0, H());
+await frame();
+eager();
 scrollTo(0, 0);
 await sleep(300);
 await Promise.race([Promise.all([...document.images].filter((i) => !i.complete).map((i) => new Promise((r) => { i.addEventListener("load", r); i.addEventListener("error", r); }))), sleep(3000)]);

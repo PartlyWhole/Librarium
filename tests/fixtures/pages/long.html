@@ -697,4 +697,9 @@
 <p>Paragraph 696: reading slowly and quoting exactly, line after line, so the page grows tall.</p>
 <p>Paragraph 697: reading slowly and quoting exactly, line after line, so the page grows tall.</p>
 <p>Paragraph 698: reading slowly and quoting exactly, line after line, so the page grows tall.</p>
-<p>Paragraph 699: reading slowly and quoting exactly, line after line, so the page grows tall.</p></main></body></html>
+<p>Paragraph 699: reading slowly and quoting exactly, line after line, so the page grows tall.</p><img class="lazy" data-src="factory.png" alt="A factory, loaded only when scrolled to" width="600" height="400">
+<script>
+const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.src = e.target.dataset.src; io.unobserve(e.target); } }));
+document.querySelectorAll("img.lazy").forEach((i) => io.observe(i));
+</script>
+</main></body></html>
