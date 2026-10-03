@@ -176,7 +176,7 @@ export function library(shell: ShellApi): void {
       const notices = h("div", { class: "reader-notices" });
       if (web) {
         const current = snapshots.find((s) => s.at === snap);
-        for (const c of current?.checks ?? []) notices.appendChild(h("p", { class: "notice" }, `This snapshot may not be the page itself: ${c.reason}`));
+        for (const c of current?.checks ?? []) notices.appendChild(h("p", { class: "notice" }, `About this snapshot: ${c.reason}`));
         if (snapshots.length > 1) {
           const pick = h("select", { "aria-label": "Snapshot", onchange: () => shell.router.go("item", { id, snapshot: pick.value }, { replace: true }) }, snapshots.map((s) => h("option", { value: s.at, selected: s.at === snap }, snapshotLabel(s.at))));
           tools.before(pick);

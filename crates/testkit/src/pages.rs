@@ -42,6 +42,8 @@ pub fn html_text(html: &str) -> String {
         out.push(' ');
     }
     out.push_str(rest);
+    // As the real saver does: soft hyphens and zero-width characters don't split words.
+    out.retain(|c| !matches!(c, '\u{AD}' | '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}' | '\u{FEFF}'));
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
@@ -69,6 +71,9 @@ impl PageSaver for FixturePages {
             visible_text: text,
             html: html.clone(),
             images: html.matches("<img").count() as u32,
+            // The stand-in reads a canvas's share of the page from `data-drawn`.
+            complete: true,
+            drawn: between(&html, "data-drawn=\"", "\"").and_then(|s| s.parse().ok()).unwrap_or(0.0),
             // The stand-in differs when the page does.
             pdf: format!(
                 "%PDF-1.4\n% stand-in for {url}, {} bytes of HTML, checksum {}\n%%EOF\n",
@@ -88,7 +93,8 @@ mod tests {
         let read = |f: &str| std::fs::read_to_string(format!("{dir}{f}")).unwrap();
         let saver = super::FixturePages::default()
             .with("http://fixture.test/article.html", 200, &read("article.html"))
-            .with("http://fixture.test/missing.html", 404, &read("not-found.html"));
+            .with("http://fixture.test/missing.html", 404, &read("not-found.html"))
+            .with("http://fixture.test/canvas.html", 200, &read("canvas.html"));
         crate::suites::pagesaver::run(&saver, "http://fixture.test");
     }
 }

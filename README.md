@@ -89,3 +89,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-03 | How web pages are saved: a hidden WebKit window, createPDF, page checks, snapshots. | [0027](docs/decisions/0027-saving-web-pages.md) |
 | 2026-10-03 | Text recognition with Apple Vision in the worker, stored and selectable. | [0028](docs/decisions/0028-text-recognition.md) |
 | 2026-10-03 | Archive sets a field; permanent deletion needs an archived record and a single-use confirmation token. | [0029](docs/decisions/0029-archive-and-permanent-deletion.md) |
+| 2026-10-03 | The real-pages check, on 10 pages from the user's list: PDFKit for PDF text, in-memory page saving, soft hyphens, canvas and slow-page checks, fewer false alarms. | [0030](docs/decisions/0030-real-pages-check.md) |

@@ -73,7 +73,7 @@ fn imports_keep_originals_byte_for_byte_and_their_text_is_searchable() {
     let st = a.api.call("records.text", json!({ "id": pdf.id })).unwrap();
     assert_eq!(st["segments"].as_array().unwrap().len(), 100);
     assert_eq!(st["segments"][41]["label"], "p. 42");
-    assert_eq!(st["origin"]["extractor"], "pdf-extract 0.12");
+    assert_eq!(st["origin"]["extractor"], "pdfkit");
     let seg = &st["segments"][41];
     let page: String = st["text"]
         .as_str()

@@ -77,7 +77,14 @@ fn main() {
                 for url in &args[2..] {
                     match saver.save(url, Duration::from_secs(90)) {
                         Ok(p) => {
-                            let tmp = std::env::temp_dir().join(format!("librarium-check-{}.pdf", std::process::id()));
+                            // LIBRARIUM_PROBE_KEEP=<dir> keeps each PDF for inspection.
+                            let tmp = match std::env::var_os("LIBRARIUM_PROBE_KEEP") {
+                                Some(d) => PathBuf::from(d)
+                                    .join(format!("page-{}.pdf", args[2..].iter().position(|u| u == url).unwrap() + 1)),
+                                None => {
+                                    std::env::temp_dir().join(format!("librarium-check-{}.pdf", std::process::id()))
+                                }
+                            };
                             std::fs::write(&tmp, &p.pdf).unwrap();
                             let text = worker
                                 .call("pdf.text", serde_json::json!({ "path": tmp }), Duration::from_secs(60))
@@ -99,12 +106,21 @@ fn main() {
                             } else {
                                 seen.intersection(&inpdf).count() as f64 / seen.len() as f64
                             };
+                            if cover < 0.9 {
+                                let mut missing: Vec<_> = seen.difference(&inpdf).cloned().collect();
+                                missing.sort();
+                                eprintln!("  missing ({}): {:?}", missing.len(), &missing[..missing.len().min(40)]);
+                            }
                             let images_pdf = info["images"].as_u64().unwrap_or(0);
-                            let ok = cover >= 0.9 && images_pdf as u32 >= p.images.min(1);
+                            let checks: Vec<String> =
+                                librarium_feature_library::checks::check(&p).into_iter().map(|c| c.kind).collect();
+                            // A flagged page passes when its check explains the shortfall.
+                            let ok = (cover >= 0.9 || checks.iter().any(|k| k == "drawn"))
+                                && images_pdf as u32 >= p.images.min(1);
                             if !ok {
                                 failed += 1;
                             }
-                            println!("{} {url}: text {:.0}% of {} words; images visible {} / in PDF {}; {} pages; checks {:?}", if ok { "✓" } else { "✗" }, cover * 100.0, seen.len(), p.images, images_pdf, info["pages"], p.status);
+                            println!("{} {url}: text {:.0}% of {} words; images visible {} / in PDF {}; {} pages; drawn {:.0}%; checks {:?}", if ok { "✓" } else { "✗" }, cover * 100.0, seen.len(), p.images, images_pdf, info["pages"], p.drawn * 100.0, checks);
                         }
                         Err(e) => {
                             failed += 1;

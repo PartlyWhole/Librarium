@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Untitled document - Docs</title>
+<style>body { margin: 0; } .menu { height: 40px; } canvas { display: block; width: 1000px; height: 2400px; }</style></head>
+<body>
+<div class="menu">File Edit View Insert Format Tools Help</div>
+<p>Turn on screen reader support. To enable screen reader support, press a shortcut.</p>
+<canvas id="page" width="1000" height="2400" data-drawn="0.9"></canvas>
+<script>
+const c = document.getElementById("page").getContext("2d");
+c.font = "18px Georgia";
+for (let i = 0; i < 60; i++) c.fillText("This line of the document is drawn on a canvas, not written as text.", 60, 60 + i * 36);
+</script>
+</body>
+</html>

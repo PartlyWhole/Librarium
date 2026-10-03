@@ -35,11 +35,13 @@ await sleep(300);
 await Promise.race([Promise.all([...document.images].filter((i) => !i.complete).map((i) => new Promise((r) => { i.addEventListener("load", r); i.addEventListener("error", r); }))), sleep(3000)]);
 const meta = (sel) => document.querySelector(sel)?.getAttribute("content") || null;
 const main = document.querySelector("article") || document.querySelector("main") || document.querySelector("[role=main]") || document.body;
+// Soft hyphens and zero-width characters would split words in the stored text.
+const tidy = (s) => s.replace(/[\u00AD\u200B\u200C\u200D\u2060\uFEFF]/g, "");
 const clean = (el) => {
   if (!el) return "";
   const c = el.cloneNode(true);
   c.querySelectorAll("script,style,noscript,nav,footer,aside,form,iframe,svg,button,[aria-hidden=true]").forEach((n) => n.remove());
-  return (c.innerText || c.textContent || "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return tidy(c.innerText || c.textContent || "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 };
 const nav = performance.getEntriesByType("navigation")[0];
 const shown = (img) => { const r = img.getBoundingClientRect(); return img.naturalWidth > 32 && img.naturalHeight > 32 && r.width > 32 && r.height > 32 && getComputedStyle(img).visibility !== "hidden"; };
@@ -52,9 +54,10 @@ return JSON.stringify({
   published: meta('meta[property="article:published_time"]') || meta('meta[name="date"]') || document.querySelector("time[datetime]")?.getAttribute("datetime") || null,
   language: document.documentElement.lang || null,
   text: clean(main),
-  visible_text: (document.body ? document.body.innerText : "").trim(),
+  visible_text: tidy(document.body ? document.body.innerText : "").trim(),
   html: document.documentElement.outerHTML.slice(0, 2000000),
   images: [...document.images].filter(shown).length,
+  drawn: Math.min(1, [...document.querySelectorAll("canvas")].map((c) => c.getBoundingClientRect()).filter((r) => r.width > 100 && r.height > 100).reduce((a, r) => a + r.width * r.height, 0) / Math.max(1, Math.max(document.documentElement.scrollWidth, innerWidth) * Math.min(H(), Math.max(innerHeight, 1) * 3))),
   width: Math.max(document.documentElement.scrollWidth, innerWidth),
   height: H(),
 });
@@ -73,6 +76,7 @@ struct Extracted {
     visible_text: String,
     html: String,
     images: u32,
+    drawn: f64,
     width: f64,
     height: f64,
 }
@@ -207,6 +211,9 @@ impl PageSaver for WebKitPageSaver {
         let started = Instant::now();
         let window = WebviewWindowBuilder::new(&self.app, &label, WebviewUrl::External(parsed))
             .visible(false)
+            // A fresh, in-memory data store for every page: no cookies or storage carried
+            // between saves, and WebKit never asks the keychain for its WebCrypto key.
+            .incognito(true)
             .inner_size(WIDTH, 900.0)
             .on_page_load(move |_w, p| {
                 if p.event() == PageLoadEvent::Finished {
@@ -218,12 +225,14 @@ impl PageSaver for WebKitPageSaver {
         let close = || {
             let _ = window.destroy();
         };
-        if rx.recv_timeout(timeout).is_err() {
-            close();
-            return Err(err(format!("the page didn’t finish loading in {} s", timeout.as_secs())));
-        }
+        // Wait for the load to finish, but not forever: some pages never stop loading.
+        // Then save what is there, and say so.
+        let complete = rx.recv_timeout(timeout.mul_f64(0.6)).is_ok();
         let left = timeout.saturating_sub(started.elapsed()).max(Duration::from_secs(20));
         let result = self.extract(&label, left).and_then(|x| {
+            if !complete && x.visible_text.split_whitespace().count() < 20 {
+                return Err(err(format!("the page didn’t finish loading in {} s", timeout.as_secs())));
+            }
             let pdf = self.pdf(&label, x.width.min(WIDTH * 2.0), x.height, left)?;
             Ok(SavedPage {
                 final_url: x.final_url,
@@ -237,6 +246,8 @@ impl PageSaver for WebKitPageSaver {
                 visible_text: x.visible_text,
                 html: x.html,
                 images: x.images,
+                drawn: x.drawn,
+                complete,
                 pdf,
             })
         });

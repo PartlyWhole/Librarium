@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Check {
-    /// "error", "not-found", "paywall", "verification", "sign-in", "empty".
+    /// "error", "not-found", "paywall", "verification", "sign-in", "drawn", "incomplete",
+    /// "empty".
     pub kind: String,
     pub reason: String,
 }
@@ -50,6 +51,11 @@ pub fn check(p: &SavedPage) -> Vec<Check> {
         push(&mut out, "error", "The page is a server error.".into());
     }
 
+    // The article's own words: a challenge page or a paywall teaser has few. Full articles
+    // often load captcha scripts (for comment or sign-up forms) or mark themselves as
+    // subscriber content in metadata while showing everything, so those signs alone aren't
+    // enough.
+    let article_words = p.text.split_whitespace().count();
     if let Some(m) = has_any(
         &html,
         &[
@@ -64,7 +70,9 @@ pub fn check(p: &SavedPage) -> Vec<Check> {
             "px-captcha",
             "datadome",
         ],
-    ) {
+    )
+    .filter(|_| article_words < 400)
+    {
         push(&mut out, "verification", format!("The page asks to verify a human ({m})."));
     } else if words < 400
         && (has_any(&title, &["just a moment", "are you a robot", "attention required", "access denied"]).is_some()
@@ -82,10 +90,11 @@ pub fn check(p: &SavedPage) -> Vec<Check> {
         push(&mut out, "verification", "The page asks to verify a human.".into());
     }
 
-    let schema_locked = html.contains("\"isaccessibleforfree\":false")
-        || html.contains("\"isaccessibleforfree\": false")
-        || html.contains("\"isaccessibleforfree\":\"false\"")
-        || html.contains("content_tier\" content=\"locked\"");
+    let schema_locked = article_words < 500
+        && (html.contains("\"isaccessibleforfree\":false")
+            || html.contains("\"isaccessibleforfree\": false")
+            || html.contains("\"isaccessibleforfree\":\"false\"")
+            || html.contains("content_tier\" content=\"locked\""));
     let gate = has_any(
         &text,
         &[
@@ -119,6 +128,16 @@ pub fn check(p: &SavedPage) -> Vec<Check> {
             .is_some()
     {
         push(&mut out, "sign-in", "The page asks to sign in.".into());
+    }
+    if !p.complete {
+        push(&mut out, "incomplete", "The page was still loading when it was saved, so parts may be missing.".into());
+    }
+    if p.drawn >= 0.3 && p.text.split_whitespace().count() < 300 {
+        push(
+            &mut out,
+            "drawn",
+            "Most of this page is drawn as a picture (as in apps like Google Docs), so its text can’t be searched or quoted. If the site can export the document, add that file instead.".into(),
+        );
     }
     if words < 20 && p.images == 0 && out.is_empty() {
         out.push(Check {
@@ -168,5 +187,14 @@ mod tests {
         assert_eq!(kinds("captcha.html", 200), ["verification"]);
         assert_eq!(kinds("login-wall.html", 200), ["sign-in"]);
         assert_eq!(kinds("empty.html", 200), ["empty"]);
+        assert_eq!(kinds("canvas.html", 200), ["drawn"]);
+        assert_eq!(
+            kinds("full-with-widgets.html", 200),
+            Vec::<String>::new(),
+            "a full article with a comment-form captcha and subscriber metadata is not flagged"
+        );
+        let mut slow = page("article.html", 200);
+        slow.complete = false;
+        assert_eq!(check(&slow).into_iter().map(|c| c.kind).collect::<Vec<_>>(), ["incomplete"]);
     }
 }

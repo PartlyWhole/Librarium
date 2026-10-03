@@ -316,6 +316,12 @@ pub struct SavedPage {
     pub html: String,
     /// Images visible on the page (loaded, not tiny).
     pub images: u32,
+    /// The share of the page's area drawn on canvases (0–1). Apps such as Google Docs draw
+    /// their text this way, so it can't be searched or quoted.
+    pub drawn: f64,
+    /// Whether the page finished loading. Some pages never do (ads and trackers keep
+    /// loading); they are saved as they stand after a while, and flagged.
+    pub complete: bool,
     pub pdf: Vec<u8>,
 }
 

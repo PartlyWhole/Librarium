@@ -284,7 +284,7 @@ pub mod pagesaver {
     use std::time::Duration;
 
     /// The PageSaver contract, against the fixture pages served at `base`
-    /// (`article.html`, and `missing.html` answering 404).
+    /// (`article.html`, `canvas.html`, and `missing.html` answering 404).
     pub fn run(saver: &dyn PageSaver, base: &str) {
         let p = saver.save(&format!("{base}/article.html"), Duration::from_secs(60)).expect("save the article");
         assert!(p.pdf.starts_with(b"%PDF"), "a PDF");
@@ -297,6 +297,11 @@ pub mod pagesaver {
         assert!(p.final_url.ends_with("/article.html"));
         assert!(p.images >= 1, "the picture is seen");
         assert!(p.html.contains("<article>"));
+        assert!(p.text.contains("A paragraph with a soft hyphen."), "soft hyphens don't split words: {}", p.text);
+        assert!(p.drawn < 0.05, "an article isn't drawn: {}", p.drawn);
+        assert!(p.complete, "the article finished loading");
+        let c = saver.save(&format!("{base}/canvas.html"), Duration::from_secs(60)).expect("save the canvas page");
+        assert!(c.drawn > 0.3, "a page drawn on a canvas is noticed: {}", c.drawn);
         let e =
             saver.save(&format!("{base}/missing.html"), Duration::from_secs(60)).expect("an error page is still saved");
         assert!(e.status == Some(404) || e.title.contains("404"), "{:?} {}", e.status, e.title);
