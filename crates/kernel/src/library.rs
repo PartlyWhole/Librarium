@@ -305,7 +305,7 @@ impl Library {
                 let mut redone = 0;
                 for (p, intent) in s.pending_intents() {
                     if let Some(i) = intent {
-                        match tx.apply(&i) {
+                        match tx.redo(&i) {
                             Ok(_) => redone += 1,
                             Err(e) => log_warn(&format!("dropping intent {i:?}: {e}")),
                         }

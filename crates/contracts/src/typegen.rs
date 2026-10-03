@@ -50,6 +50,13 @@ pub fn export_types(dir: &Path) -> Result<(), String> {
         crate::api::OrphanSidecar,
         crate::api::ExportParams,
         crate::api::StoredText,
+        crate::api::FoldersList,
+        crate::api::FolderPathParams,
+        crate::api::FolderMoveParams,
+        crate::api::FolderMoved,
+        crate::api::MoveRecordsParams,
+        crate::api::MoveFailure,
+        crate::api::MovedRecords,
     );
     Ok(())
 }

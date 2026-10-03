@@ -11,6 +11,7 @@ import { isMenuKey, menuPointFor } from "./menu";
 import { Selection } from "./selection";
 import { h } from "./dom";
 import { icon, type IconNode } from "./icon";
+import { dragSource, dropTarget, type DragPayload, type DropTarget } from "./dnd";
 
 export interface TreeNode {
   id: string;
@@ -21,7 +22,14 @@ export interface TreeNode {
   /** A calm placeholder line ("No notes yet"), shown but not focusable. */
   placeholder?: boolean;
   current?: boolean;
+  /** For a row with children too: a click opens it, and only the arrow folds it. */
   onActivate?: () => void;
+  /** The row's own context menu (instead of the tree's). */
+  onContext?: (at: { x: number; y: number }) => void;
+  /** What dragging this row carries (with others selected, theirs too). */
+  drag?: () => DragPayload;
+  /** Things can be dropped on this row. */
+  drop?: DropTarget;
 }
 
 interface Flat {
@@ -51,6 +59,16 @@ export class Tree {
   constructor(label: string, private onToggle: (id: string, expanded: boolean) => void) {
     this.el = h("div", { class: "tree", role: "tree", "aria-label": label, "aria-multiselectable": "true" });
     this.el.addEventListener("keydown", (e) => this.key(e));
+    // Rows that carry something can be dragged (with the others selected, if it is one).
+    dragSource(this.el, (t) => {
+      const id = t.closest<HTMLElement>("[role=treeitem]")?.dataset.id;
+      const n = this.flat.find((f) => f.node.id === id)?.node;
+      if (!n?.drag) return null;
+      const sel = this.selection.ids.peek();
+      const nodes = sel.has(n.id) && sel.size > 1 ? this.flat.filter((f) => sel.has(f.node.id) && f.node.drag).map((f) => f.node) : [n];
+      const ps = nodes.map((x) => x.drag!());
+      return { payload: { records: ps.flatMap((p) => p.records), folders: ps.flatMap((p) => p.folders) }, label: n.label };
+    });
     this.el.addEventListener("focusin", (e) => {
       const it = (e.target as HTMLElement).closest<HTMLElement>("[role=treeitem]");
       if (it?.dataset.id) this.focusedId = it.dataset.id;
@@ -113,7 +131,7 @@ export class Tree {
       style: { top: `${i * ROW}px`, paddingLeft: `${8 + (f.level - 1) * 14}px` },
       dataset: { id: n.id, index: String(i) },
     },
-      hasChildren ? h("span", { class: `tree-twisty ${n.expanded ? "open" : ""}`, "aria-hidden": "true" }) : h("span", { class: "tree-spacer" }),
+      hasChildren ? h("span", { class: `tree-twisty ${n.expanded ? "open" : ""} ${n.children!.length ? "" : "leafless"}`, "aria-hidden": "true" }) : h("span", { class: "tree-spacer" }),
       n.icon ? icon(n.icon, 15) : null,
       h("span", { class: "tree-label" }, n.label),
     );
@@ -121,14 +139,24 @@ export class Tree {
       el.addEventListener("click", (e) => {
         if (hasChildren) {
           this.focus(i);
-          this.onToggle(n.id, !n.expanded);
+          const onTwisty = (e.target as HTMLElement).closest(".tree-twisty");
+          if (n.onActivate && !onTwisty) n.onActivate();
+          else this.onToggle(n.id, !n.expanded);
           return;
         }
         const plain = this.selection.click(n.id, this.items(), { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey });
         this.focus(i);
         if (plain) n.onActivate?.();
       });
+      if (n.drop) dropTarget(el, n.drop);
       el.addEventListener("contextmenu", (e) => {
+        if (n.onContext) {
+          e.preventDefault();
+          this.focusedId = n.id;
+          el.focus({ preventScroll: true });
+          n.onContext({ x: e.clientX, y: e.clientY });
+          return;
+        }
         if (!this.onContext) return;
         e.preventDefault();
         const ids = item ? this.selection.forMenu(n.id, this.items()) : [n.id];
@@ -172,9 +200,15 @@ export class Tree {
 
   private key(e: KeyboardEvent): void {
     if (e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (isMenuKey(e) && this.onContext && this.focusedId) {
+    if (isMenuKey(e) && this.focusedId) {
       const it = [...this.el.querySelectorAll<HTMLElement>("[role=treeitem]")].find((x) => x.dataset.id === this.focusedId);
-      if (it) {
+      const own = this.flat.find((f) => f.node.id === this.focusedId)?.node.onContext;
+      if (it && own) {
+        e.preventDefault();
+        own(menuPointFor(it));
+        return;
+      }
+      if (it && this.onContext) {
         e.preventDefault();
         const isItem = this.items().includes(this.focusedId);
         const ids = isItem ? this.selection.forMenu(this.focusedId, this.items()) : [this.focusedId];
@@ -229,7 +263,8 @@ export class Tree {
         else if (cur.f.parent) go(vis.find((x) => x.f.node === cur.f.parent));
         break;
       case "Enter":
-        if (n.children) this.onToggle(n.id, !n.expanded);
+        if (n.children && n.onActivate) n.onActivate();
+        else if (n.children) this.onToggle(n.id, !n.expanded);
         else n.onActivate?.();
         break;
       default:

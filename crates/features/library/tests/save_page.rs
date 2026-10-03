@@ -240,3 +240,63 @@ fn saving_a_page_whose_item_is_archived_makes_a_new_item() {
     assert_eq!(archived.fields["library.snapshots"].as_array().unwrap().len(), 1, "the archived item is untouched");
     hosts.stop();
 }
+
+#[test]
+fn a_page_saved_into_a_folder_lands_there_and_a_new_snapshot_stays_where_the_item_is() {
+    let fs = Arc::new(MemFs::new());
+    fs.create_dir_all(Path::new("/lib")).unwrap();
+    let mut k = Kinds::new();
+    librarium_feature_library::contribute_kinds(&mut k).unwrap();
+    let index = MemIndex::new();
+    let factory: IndexFactory = Arc::new(move |_p: &Path| Arc::new(index.clone()) as Arc<dyn IndexEngine>);
+    let clock = Arc::new(FixedClock::new());
+    let lib = Arc::new(
+        Library::open(
+            Path::new("/lib"),
+            Path::new("/app"),
+            LibraryPorts {
+                fs: fs.clone() as Arc<dyn FileSystem>,
+                clock: clock.clone(),
+                ids: Arc::new(SequenceIds::new()),
+                versions: Arc::new(RecordingVersions::default()),
+                index: factory.clone(),
+                changes: Arc::new(ScriptedChanges::new()) as Arc<dyn ChangeSource>,
+            },
+            k,
+            OpenOptions { tick: Duration::from_secs(3600), ..Default::default() },
+        )
+        .unwrap(),
+    );
+    let url = "https://quarterly.example/on-technique";
+    let mut jobs = librarium_kernel::jobs::registry();
+    let pages = FixturePages::default().with(url, 200, &fixture("article.html"));
+    librarium_feature_library::contribute_page_jobs(&mut jobs, Arc::new(pages)).unwrap();
+    let hosts = Hosts::start(
+        lib.clone(),
+        &factory,
+        Arc::new(FakeWorkerHost::new()),
+        vec![],
+        jobs,
+        HostEvents { indexed: Box::new(|_| {}), job: Box::new(|_| {}) },
+    )
+    .unwrap();
+    let save = |folder: &str| {
+        let j = hosts.jobs.enqueue("library.savePage", url, json!({ "url": url, "folder": folder })).unwrap();
+        assert_eq!(hosts.jobs.wait(j.id, Duration::from_secs(10)).unwrap().state, JobState::Done);
+    };
+    save("Reading/Technique");
+    let item = lib.store.list(Some("item"))[0].clone();
+    assert!(item.path.starts_with("items/Reading/Technique/"), "{}", item.path);
+    assert_eq!(item.fields["library.folder"], "Reading/Technique");
+    let snap = item.fields["library.snapshot"].as_str().unwrap().to_string();
+    assert!(fs
+        .read(&Path::new("/lib").join(item.path.replace("record.json", &format!("snapshots/{snap}/page.pdf"))))
+        .is_ok());
+    // Saved again from another folder: it is the same page, so the item stays where it is.
+    clock.advance_ms(60_000);
+    save("Elsewhere");
+    let items = lib.store.list(Some("item"));
+    assert_eq!(items.len(), 1);
+    assert!(items[0].path.starts_with("items/Reading/Technique/"), "it stays in its folder");
+    assert!(lib.store.folders().iter().all(|f| !f.starts_with("Elsewhere")), "{:?}", lib.store.folders());
+}

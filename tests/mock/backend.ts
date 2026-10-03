@@ -48,7 +48,48 @@ const state = {
   deleted: [] as string[],
   /** Pending snapshot removals: token → [item, snapshots]. */
   snapshotRemovals: new Map<string, [string, string[]][]>(),
+  /** The user's folders that exist on disk (empty ones too); records' folders count as well. */
+  folders: new Set<string>(),
 };
+
+const FOLDERED = ["note", "item"];
+
+/** A record's folder inside its kind's top folder ("" at the top). */
+function folderOf(info: RecordInfo): string {
+  const parts = info.path.split("/").slice(1);
+  return parts.slice(0, parts[parts.length - 1] === "record.json" ? -2 : -1).join("/");
+}
+
+function pathFor(info: RecordInfo, folder: string, title = info.title): string {
+  const top = info.kind === "item" ? "items" : info.kind === "capture" ? "captures" : "notes";
+  const sub = folder ? `${folder}/` : "";
+  return info.kind === "item" ? `${top}/${sub}${info.id}-${slug(title)}/record.json` : `${top}/${sub}${info.id}-${slug(title)}.md`;
+}
+
+function allFolders(): string[] {
+  const out = new Set(state.folders);
+  for (const r of state.records.values()) {
+    if (!FOLDERED.includes(r.info.kind)) continue;
+    const parts = folderOf(r.info).split("/").filter(Boolean);
+    for (let i = 1; i <= parts.length; i++) out.add(parts.slice(0, i).join("/"));
+  }
+  return [...out].sort();
+}
+
+function cleanFolder(p: string): string {
+  const f = String(p ?? "").trim().replace(/^\/+|\/+$/g, "");
+  if (!f || f.split("/").some((x) => !x || x.startsWith(".") || x.trim() !== x)) fail("invalid-input", `“${f}” can’t be a folder name`);
+  return f;
+}
+
+function moveTo(r: Rec, folder: string) {
+  if (!FOLDERED.includes(r.info.kind)) fail("invalid-input", `“${r.info.title}” can’t be put in a folder`);
+  r.info.path = pathFor(r.info, folder);
+  const field = r.info.kind === "item" ? "library.folder" : "notes.folder";
+  if (folder) r.info.fields[field] = folder;
+  else delete r.info.fields[field];
+  return { info: r.info, seq: touch(r, "renamed") };
+}
 
 const listeners = new Map<string, Set<(p: unknown) => void>>();
 
@@ -106,6 +147,7 @@ export function seed(kind: string, title: string, body = "", fields: Record<stri
   const id = `0192f3a4-7c1e-7b2a-9f00-${String(state.idn++).padStart(12, "0")}`;
   const top = kind === "item" ? "items" : kind === "capture" ? "captures" : "notes";
   const info: RecordInfo = { id, kind, title, path: `${top}/${folder ? folder + "/" : ""}${id}-${slug(title)}.md`, version: "", created: "2026-10-02T09:14:00Z", read_only: null, fields, conflicts: [] };
+  if (kind === "item") info.path = pathFor(info, folder);
   const r = { info, body };
   info.version = version(body, info);
   state.records.set(id, r);
@@ -285,12 +327,57 @@ const api: Record<string, (p: any) => unknown> = {
   "records.relocate": (p) => {
     const r = need(p.id);
     if (p.base_version && p.base_version !== r.info.version) fail("conflict", "It changed since, so this can’t be undone.");
-    if (p.subfolder !== undefined) r.info.path = `notes/${p.subfolder ? p.subfolder + "/" : ""}${r.info.id}-${slug(r.info.title)}.md`;
-    if (p.title) {
-      r.info.title = p.title;
-      r.info.path = r.info.path.replace(/[^/]*$/, `${r.info.id}-${slug(p.title)}.md`);
-    }
+    if (p.title) r.info.title = p.title;
+    r.info.path = pathFor(r.info, p.subfolder !== undefined ? p.subfolder ?? "" : folderOf(r.info));
     return { info: r.info, seq: touch(r, "renamed") };
+  },
+  "records.move": (p) => {
+    const moved = [];
+    const failed = [];
+    for (const id of p.ids as string[]) {
+      try {
+        moved.push(moveTo(need(id), p.folder ? cleanFolder(p.folder) : ""));
+      } catch (e) {
+        failed.push({ id, error: (e as Error).message });
+      }
+    }
+    return { moved, failed };
+  },
+  "folders.list": () => ({ folders: allFolders(), kinds: FOLDERED }),
+  "folders.create": (p) => {
+    const f = cleanFolder(p.path);
+    if (allFolders().includes(f)) fail("conflict", `There’s already a folder called “${f.split("/").pop()}” there.`);
+    state.folders.add(f);
+    return { path: f, moved: 0 };
+  },
+  "folders.move": (p) => {
+    const from = cleanFolder(p.from);
+    const to = cleanFolder(p.to);
+    if (to.startsWith(`${from}/`)) fail("invalid-input", `“${from.split("/").pop()}” can’t go inside itself.`);
+    const all = allFolders();
+    if (!all.includes(from)) fail("not-found", `There’s no folder “${from}” any more.`);
+    if (all.includes(to)) fail("conflict", `There’s already a folder called “${to.split("/").pop()}” there.`);
+    const under = (f: string) => f === from || f.startsWith(`${from}/`);
+    const swap = (f: string) => to + f.slice(from.length);
+    for (const f of [...state.folders]) {
+      if (!under(f)) continue;
+      state.folders.delete(f);
+      state.folders.add(swap(f));
+    }
+    let moved = 0;
+    for (const r of state.records.values()) {
+      if (!FOLDERED.includes(r.info.kind) || !under(folderOf(r.info))) continue;
+      moveTo(r, swap(folderOf(r.info)));
+      moved++;
+    }
+    return { path: to, moved };
+  },
+  "folders.remove": (p) => {
+    const f = cleanFolder(p.path);
+    const inside = [...state.records.values()].filter((r) => FOLDERED.includes(r.info.kind) && (folderOf(r.info) === f || folderOf(r.info).startsWith(`${f}/`)));
+    if (inside.length) fail("conflict", `“${f.split("/").pop()}” isn’t empty: it holds ${inside.length} ${inside.length === 1 ? "item" : "items"} (archived ones count too).`);
+    for (const x of [...state.folders]) if (x === f || x.startsWith(`${f}/`)) state.folders.delete(x);
+    return null;
   },
 };
 
@@ -384,6 +471,7 @@ export const mock = {
     state.jobs = [];
     state.confirmations.clear();
     state.snapshotRemovals.clear();
+    state.folders.clear();
     state.deleted = [];
     state.inspect = { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false };
   },

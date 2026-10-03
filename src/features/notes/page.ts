@@ -215,7 +215,8 @@ async function compareCopies(paths: string[], body: string) {
 
 /** Moves a note to a folder (new or existing), with undo. */
 export async function moveNote(shell: ShellApi, id: string): Promise<void> {
-  const folders = await call<string[]>("notes.folders").catch(() => [] as string[]);
+  // Every folder (notes and library items share them), empty ones too.
+  const folders = await call<{ folders: string[] }>("folders.list").then((l) => l.folders, () => [] as string[]);
   const r = shell.records.get(id);
   const from = r ? r.path.split("/").slice(1, -1).join("/") : "";
   const choices = [{ id: "", label: "Notes (top level)" }, ...folders.map((f) => ({ id: f, label: f }))];

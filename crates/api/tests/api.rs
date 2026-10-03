@@ -38,7 +38,7 @@ fn api_with(fs: Arc<MemFs>) -> Arc<Api> {
                     format: Format::Markdown,
                     folder: "pages".into(),
                     slugged: true,
-                    subfolder_field: None,
+                    subfolder_field: Some("test.folder".into()),
                 },
             )
             .unwrap();
@@ -220,4 +220,25 @@ fn renaming_a_note_keeps_every_link_working() {
     let links = librarium_kernel::links::parse_links(&body);
     let target = a.call("records.get", json!({ "id": links[0].id.unwrap().to_string() })).unwrap();
     assert_eq!(target["title"], "Weil, Simone", "the link resolves by ID after the rename and move");
+}
+
+#[test]
+fn folders_are_listed_made_moved_and_removed() {
+    let (a, _fs) = api();
+    a.call("folder.open", json!({ "path": "/lib" })).unwrap();
+    let w = a.call("records.create", json!({ "kind": "page", "title": "One", "body": "" })).unwrap();
+    let id = w["info"]["id"].as_str().unwrap().to_string();
+    a.call("folders.create", json!({ "path": "Reading" })).unwrap();
+    let l = a.call("folders.list", json!({})).unwrap();
+    assert_eq!(l, json!({ "folders": ["Reading"], "kinds": ["page"] }));
+    let m = a.call("records.move", json!({ "ids": [id], "folder": "Reading" })).unwrap();
+    assert!(m["moved"][0]["info"]["path"].as_str().unwrap().starts_with("pages/Reading/"), "{m}");
+    assert_eq!(m["failed"], json!([]));
+    let r = a.call("folders.move", json!({ "from": "Reading", "to": "Done/Reading" })).unwrap();
+    assert_eq!(r, json!({ "path": "Done/Reading", "moved": 1 }));
+    let e = a.call("folders.remove", json!({ "path": "Done" })).unwrap_err();
+    assert!(e.message.contains("isn’t empty"), "{}", e.message);
+    a.call("records.move", json!({ "ids": [id], "folder": null })).unwrap();
+    a.call("folders.remove", json!({ "path": "Done" })).unwrap();
+    assert_eq!(a.call("folders.list", json!({})).unwrap()["folders"], json!([]));
 }

@@ -109,13 +109,32 @@ export function library(shell: ShellApi): void {
     run: (rs) => void removeSnapshots(shell, rs.map((r) => ({ id: r.id }))),
   });
   shell.openers.add("library", KIND, "item");
+  shell.looks.add("library", KIND, {
+    kind: KIND,
+    icon: iconFor,
+    kindName: (r) => ({ web: "Web page", pdf: "PDF", epub: "EPUB", image: "Image" })[formatOf(r)] ?? "Item",
+    detail: (r) => {
+      if (formatOf(r) === "web") {
+        const src = (r.fields.provenance as { source?: string } | undefined)?.source;
+        try {
+          return src ? new URL(src).hostname.replace(/^www\./, "") : "";
+        } catch {
+          return "";
+        }
+      }
+      const n = Number(r.fields["library.pages"]);
+      return n > 0 ? count(n, "page") : "";
+    },
+  });
   for (const e of [pdfEngine, epubEngine, imageEngine]) shell.readerEngines.add("library", e.id, e);
 
   const importPaths = async (paths: string[]) => {
     if (!paths.length) return;
     shell.status.show(`Adding ${count(paths.length, "file")}…`, 0);
     try {
-      const r = await call<ImportResult>("library.import", { paths });
+      // Into the folder being looked at, if any.
+      const folder = shell.here.peek() || undefined;
+      const r = await call<ImportResult>("library.import", { paths, folder });
       for (const w of r.imported) shell.records.put(w.info, w.seq);
       shell.status.show(r.imported.length ? `Added ${count(r.imported.length, "item")}.` : "");
       for (const f of r.failed) toast(f.error);
@@ -151,6 +170,8 @@ export function library(shell: ShellApi): void {
       };
       input.addEventListener("input", update);
       again.addEventListener("change", update);
+      // New pages go into the folder being looked at, if any.
+      const folder = shell.here.peek() || undefined;
       const go = async () => {
         const { all, todo: urls } = split();
         if (!all.length) return toast("There’s no web address (http or https) there.");
@@ -163,7 +184,7 @@ export function library(shell: ShellApi): void {
         const failed: string[] = [];
         for (const url of urls) {
           try {
-            await call("library.savePage", { url, hide: shell.hidingFields.values() });
+            await call("library.savePage", { url, hide: shell.hidingFields.values(), folder });
             queued++;
           } catch {
             failed.push(url);
@@ -180,7 +201,7 @@ export function library(shell: ShellApi): void {
           void go();
         }
       });
-      const m = modal(h("div", { class: "ask" }, h("h2", { class: "ask-title" }, "Save web pages"), h("p", { class: "muted small" }, "Librarium keeps a faithful PDF of each page and its clean text, with where and when it came from. Pages are saved one after another in the background."), input, count, againRow, h("div", { class: "ask-buttons" }, h("button", { class: "button", onclick: () => m.close() }, "Cancel"), h("button", { class: "button primary", title: "Save (⌘↩)", onclick: () => void go() }, "Save"))), { label: "Save web pages" });
+      const m = modal(h("div", { class: "ask" }, h("h2", { class: "ask-title" }, "Save web pages"), h("p", { class: "muted small" }, "Librarium keeps a faithful PDF of each page and its clean text, with where and when it came from. Pages are saved one after another in the background.", folder ? ` New pages go into “${folder.split("/").pop()}”.` : ""), input, count, againRow, h("div", { class: "ask-buttons" }, h("button", { class: "button", onclick: () => m.close() }, "Cancel"), h("button", { class: "button primary", title: "Save (⌘↩)", onclick: () => void go() }, "Save"))), { label: "Save web pages" });
       input.focus();
     },
   });

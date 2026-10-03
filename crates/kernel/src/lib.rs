@@ -6,6 +6,7 @@
 pub mod changes;
 pub mod check;
 pub mod drafts;
+pub mod folders;
 pub mod frontmatter;
 pub mod hash;
 pub mod hosts;

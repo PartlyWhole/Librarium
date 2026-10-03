@@ -53,7 +53,7 @@ pub fn kinds() -> Kinds {
             format: Format::JsonDir,
             folder: "things".into(),
             slugged: true,
-            subfolder_field: None,
+            subfolder_field: Some("test.place".into()),
         },
     )
     .unwrap();

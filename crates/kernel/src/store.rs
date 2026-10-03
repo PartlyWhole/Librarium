@@ -39,7 +39,7 @@ pub enum Durability {
 }
 
 impl Durability {
-    fn flush(self) -> Flush {
+    pub(crate) fn flush(self) -> Flush {
         match self {
             Durability::Full => Flush::Full,
             Durability::Batch => Flush::Data,
@@ -140,6 +140,9 @@ pub enum Intent {
     /// Permanently delete a record: its own file first, then these files and folders
     /// (store-relative), deepest first. Asked for only after the user's two-step confirmation.
     Delete { record: Id, files: Vec<String>, folders: Vec<String> },
+    /// Move one of the user's folders (in every kind's folder that has subfolders), then make
+    /// the records inside follow: their paths, and the field mirroring their subfolder.
+    MoveFolder { from: String, to: String },
 }
 
 #[derive(Default)]
@@ -608,7 +611,7 @@ impl Store {
         let sub = subfolder.filter(|s| !s.is_empty()).map(|s| format!("{s}/")).unwrap_or_default();
         match def.format {
             Format::Markdown => format!("{}/{sub}{base}.md", def.folder),
-            Format::JsonDir => format!("{}/{base}/record.json", def.folder),
+            Format::JsonDir => format!("{}/{sub}{base}/record.json", def.folder),
         }
     }
 
@@ -644,8 +647,14 @@ impl Store {
     /// The subfolder of a record's path inside its kind's folder.
     pub fn subfolder_of(&self, def: &RecordKindDef, rel: &str) -> Option<String> {
         let inner = rel.strip_prefix(&format!("{}/", def.folder))?;
-        let (dir, _) = inner.rsplit_once('/')?;
-        (def.format == Format::Markdown).then(|| dir.to_string())
+        match def.format {
+            Format::Markdown => Some(inner.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default()),
+            // `<sub>/<id>-slug/record.json`
+            Format::JsonDir => {
+                let dir = inner.strip_suffix("/record.json")?;
+                Some(dir.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default())
+            }
+        }
     }
 }
 
@@ -917,7 +926,22 @@ impl<'a> Tx<'a> {
     /// another volume, the folder is first copied to `<library>/.librarium/staging/`, so the
     /// move into place is still one rename.
     pub fn import_staged(&self, kind: &str, stage: &Path, title: &str) -> Result<(Entry, u64)> {
+        self.import_staged_in(kind, stage, title, None)
+    }
+
+    /// Like [`Tx::import_staged`], into one of the user's folders (for kinds that have them).
+    pub fn import_staged_in(
+        &self,
+        kind: &str,
+        stage: &Path,
+        title: &str,
+        subfolder: Option<&str>,
+    ) -> Result<(Entry, u64)> {
         let s = self.store;
+        let subfolder = match subfolder {
+            Some(f) if s.kind_def(kind)?.subfolder_field.is_some() => Some(crate::folders::clean_folder(f)?),
+            _ => None,
+        };
         let bytes = s.fs.read(&stage.join("record.json")).map_err(|e| io_err(e, "reading the staged record"))?;
         let folder = s.kind_def(kind)?.folder.clone();
         let d = s
@@ -926,7 +950,7 @@ impl<'a> Tx<'a> {
         let id = d.id.ok_or_else(|| BackendError::invalid("the staged record has no ID"))?;
         let def = s.kind_def(&d.kind)?.clone();
         let slug = s.slug_for(&d.kind, title, &d.fields);
-        let rel = s.record_path(&def, id, &slug, None);
+        let rel = s.record_path(&def, id, &slug, subfolder.as_deref());
         let target = s.abs(&rel).parent().unwrap().to_path_buf();
         s.fs.create_dir_all(target.parent().unwrap()).map_err(|e| io_err(e, "creating the folder"))?;
         let moved = s.fs.rename_exclusive(stage, &target);
@@ -1102,12 +1126,21 @@ impl<'a> Tx<'a> {
         r
     }
 
+    /// Redoes an unfinished intent (at startup).
+    pub fn redo(&self, intent: &Intent) -> Result<()> {
+        match intent {
+            Intent::MoveFolder { from, to } => self.apply_move_folder(from, to).map(|_| ()),
+            _ => self.apply(intent).map(|_| ()),
+        }
+    }
+
     /// Carries out an intent. Idempotent: redoing a finished intent changes nothing.
     pub fn apply(&self, intent: &Intent) -> Result<(Entry, u64)> {
         match intent {
             Intent::Relocate { record, title, subfolder } => self.apply_relocate(*record, title, subfolder.as_deref()),
             Intent::Identify { from, id, copied_from } => self.apply_identify(from, *id, *copied_from),
             Intent::Delete { record, files, folders } => self.apply_delete(*record, files, folders),
+            Intent::MoveFolder { .. } => Err(BackendError::internal("a folder move gives no one record; redo it")),
         }
     }
 
@@ -1156,6 +1189,19 @@ impl<'a> Tx<'a> {
                 edits.push((f.clone(), subfolder.map(|x| FmValue::Str(x.into()))));
             }
         }
+        self.rewrite(&def, &path, &edits, renamed)
+    }
+
+    /// Rewrites a record's frontmatter (or `record.json`) fields in place, then indexes it.
+    pub(crate) fn rewrite(
+        &self,
+        def: &RecordKindDef,
+        path: &str,
+        edits: &[(String, Option<FmValue>)],
+        renamed: bool,
+    ) -> Result<(Entry, u64)> {
+        let s = self.store;
+        let path = path.to_string();
         let abs = s.abs(&path);
         let cur = s.fs.read(&abs).map_err(|err| io_err(err, "reading"))?;
         if edits.is_empty() {
@@ -1168,7 +1214,7 @@ impl<'a> Tx<'a> {
                 let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
                 let (fm, body) = frontmatter::split(&text);
                 let mut fm = Frontmatter::parse(fm.map(|f| f.0).unwrap_or("")).map_err(fm_err)?;
-                for (k, v) in &edits {
+                for (k, v) in edits {
                     match v {
                         Some(v) => fm.set(k, v).map_err(fm_err)?,
                         None => fm.remove(k).map_err(fm_err)?,
@@ -1179,7 +1225,7 @@ impl<'a> Tx<'a> {
             Format::JsonDir => {
                 let mut obj: Map<String, Value> = serde_json::from_slice(&cur)
                     .map_err(|err| BackendError::new(ErrorCode::ReadOnly, err.to_string()))?;
-                for (k, v) in &edits {
+                for (k, v) in edits {
                     match v {
                         Some(v) => obj.insert(k.clone(), v.to_json()),
                         None => obj.remove(k),

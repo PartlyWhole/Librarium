@@ -37,6 +37,8 @@ pub const TEXT_FILE: &str = "extracted/text-v1.json";
 pub const SNAPSHOT: &str = "library.snapshot";
 /// Every snapshot: `[{at, sha256, final-url, status, checks}]`.
 pub const SNAPSHOTS: &str = "library.snapshots";
+/// Mirrors the item's folder inside `items/` (the path is the truth).
+pub const FOLDER: &str = "library.folder";
 pub const PAGE_EXTRACTOR: &str = "webkit-page 1";
 
 pub fn contribute_kinds(k: &mut Kinds) -> Result<(), DuplicateId> {
@@ -48,7 +50,7 @@ pub fn contribute_kinds(k: &mut Kinds) -> Result<(), DuplicateId> {
             format: Format::JsonDir,
             folder: "items".into(),
             slugged: true,
-            subfolder_field: None,
+            subfolder_field: Some(FOLDER.into()),
         },
     )?;
     k.add_text_source(ID, KIND, Arc::new(|s: &Store, e: &Entry, part: Option<&str>| item_text(s, e, part)))
@@ -113,6 +115,12 @@ fn stem(path: &Path) -> String {
 
 /// Imports one file: the original is kept byte for byte.
 pub fn import(ctx: &MethodCtx, path: &Path) -> Result<Written> {
+    import_in(ctx, path, None)
+}
+
+/// Imports one file into one of the user's folders (`None`: the top level).
+pub fn import_in(ctx: &MethodCtx, path: &Path, folder: Option<&str>) -> Result<Written> {
+    let folder = folder.map(librarium_kernel::folders::clean_folder).transpose()?;
     let lib = ctx.library;
     let store = &lib.store;
     let bytes =
@@ -135,13 +143,17 @@ pub fn import(ctx: &MethodCtx, path: &Path) -> Result<Written> {
         FORMAT: kind.name(),
         ORIGINAL: original,
     });
+    let mut record = record;
+    if let Some(f) = &folder {
+        record[FOLDER] = json!(f);
+    }
     let stage = store.stage_dir(id);
     store.stage_file(&stage, &original, &bytes)?;
     let mut rj = serde_json::to_vec_pretty(&record).unwrap();
     rj.push(b'\n');
     store.stage_file(&stage, "record.json", &rj)?;
     let t2 = title.clone();
-    let (e, seq) = lib.write(Lane::Interactive, move |tx| tx.import_staged(KIND, &stage, &t2))?;
+    let (e, seq) = lib.write(Lane::Interactive, move |tx| tx.import_staged_in(KIND, &stage, &t2, folder.as_deref()))?;
     if let Some(jobs) = ctx.jobs {
         jobs.enqueue("library.extract", &id.to_string(), json!({ "id": id }))?;
     }
@@ -209,6 +221,8 @@ pub fn item_text(store: &Store, e: &Entry, part: Option<&str>) -> Option<librari
 #[derive(Deserialize)]
 struct ImportParams {
     paths: Vec<String>,
+    #[serde(default)]
+    folder: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -242,7 +256,7 @@ pub fn contribute_methods(r: &mut Registry<ApiMethod>) -> Result<(), DuplicateId
             let mut done = vec![];
             let mut failed = vec![];
             for path in p.paths {
-                match import(ctx, Path::new(&path)) {
+                match import_in(ctx, Path::new(&path), p.folder.as_deref().filter(|f| !f.is_empty())) {
                     Ok(w) => done.push(w),
                     Err(e) => failed.push(json!({ "path": path, "error": e.message })),
                 }
@@ -491,7 +505,12 @@ fn save_page(saver: &dyn librarium_contracts::ports::PageSaver, ctx: &JobCtx, p:
         }
         None => {
             let title = if page.title.trim().is_empty() { url.clone() } else { page.title.clone() };
-            let record = json!({
+            // Into the folder it was saved from, if that is still a folder name.
+            let folder = p["folder"]
+                .as_str()
+                .filter(|f| !f.is_empty())
+                .and_then(|f| librarium_kernel::folders::clean_folder(f).ok());
+            let mut record = json!({
                 "id": id,
                 "kind": KIND,
                 "kind-version": 1,
@@ -502,6 +521,9 @@ fn save_page(saver: &dyn librarium_contracts::ports::PageSaver, ctx: &JobCtx, p:
                 SNAPSHOT: at,
                 SNAPSHOTS: [snapshot],
             });
+            if let Some(f) = &folder {
+                record[FOLDER] = json!(f);
+            }
             let dir = store.stage_dir(id);
             let snap_dir = dir.join("snapshots").join(&at);
             store.fs.create_dir_all(snap_dir.parent().unwrap()).map_err(|e| BackendError::io(e.to_string()))?;
@@ -509,7 +531,8 @@ fn save_page(saver: &dyn librarium_contracts::ports::PageSaver, ctx: &JobCtx, p:
             let mut rj = serde_json::to_vec_pretty(&record).unwrap();
             rj.push(b'\n');
             store.stage_file(&dir, "record.json", &rj)?;
-            ctx.library.write(Lane::Background, move |tx| tx.import_staged(KIND, &dir, &title))?;
+            ctx.library
+                .write(Lane::Background, move |tx| tx.import_staged_in(KIND, &dir, &title, folder.as_deref()))?;
         }
     }
     Ok(())
@@ -535,7 +558,8 @@ pub fn contribute_page_jobs(
     )
 }
 
-/// `library.savePage {url, hide?}`: queues a save (one job per address at a time).
+/// `library.savePage {url, hide?, folder?}`: queues a save (one job per address at a time). A new
+/// item goes into `folder`; a page already saved gets a new snapshot where it is.
 pub fn contribute_page_methods(m: &mut Registry<ApiMethod>) -> Result<(), DuplicateId> {
     m.add(
         ID,
@@ -549,8 +573,11 @@ pub fn contribute_page_methods(m: &mut Registry<ApiMethod>) -> Result<(), Duplic
             let jobs = ctx.jobs.ok_or_else(|| BackendError::new(ErrorCode::NotReady, "Jobs are starting."))?;
             // Records hidden in the interface (e.g. archived) never receive the snapshot.
             let hide = p.get("hide").cloned().unwrap_or(json!([]));
-            Ok(serde_json::to_value(jobs.enqueue("library.savePage", url, json!({ "url": url, "hide": hide }))?)
-                .unwrap())
+            let mut payload = json!({ "url": url, "hide": hide });
+            if let Some(f) = p.get("folder").and_then(|f| f.as_str()).filter(|f| !f.is_empty()) {
+                payload["folder"] = json!(librarium_kernel::folders::clean_folder(f)?);
+            }
+            Ok(serde_json::to_value(jobs.enqueue("library.savePage", url, payload)?).unwrap())
         }),
     )
 }

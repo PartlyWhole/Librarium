@@ -47,6 +47,7 @@ export function folderTree(notes: RecordInfo[], open: (id: string) => void, curr
 export function notes(shell: ShellApi): void {
   const groups = shell.slot<NoteGroup>(NOTE_GROUPS);
   shell.openers.add("notes", KIND, "note");
+  shell.looks.add("notes", KIND, { kind: KIND, icon: () => FileText, kindName: () => "Note" });
 
   shell.pages.add("notes", "notes", {
     id: "notes",
@@ -100,7 +101,8 @@ export function notes(shell: ShellApi): void {
     run: async () => {
       const r = shell.router.current.peek();
       const cur = r.page === "note" ? shell.records.get(r.params.id ?? "") : undefined;
-      const folder = cur ? folderOf(cur) : undefined;
+      // Beside the note being read, or in the folder being looked at.
+      const folder = cur ? folderOf(cur) : shell.here.peek() || undefined;
       const w = await call<Written>("notes.create", { folder });
       shell.records.put(w.info, w.seq);
       shell.router.go("note", { id: w.info.id, focus: "title" });

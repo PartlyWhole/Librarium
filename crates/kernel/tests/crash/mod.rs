@@ -299,3 +299,39 @@ pub fn delete_scenarios<R: Rig>(make: &dyn Fn() -> R) {
     );
     assert!(steps >= 3, "delete took {steps} steps");
 }
+
+pub fn move_folder_scenarios<R: Rig>(make: &dyn Fn() -> R) {
+    // Moving a folder: afterwards every record in it is in the old place or all are in the new
+    // one, and each one's folder field matches its path.
+    let steps = sweep(
+        make,
+        "move folder",
+        &|lib| {
+            let a =
+                lib.write(Lane::Interactive, |tx| tx.create("page", "Seed", vec![], "old body\n", Some("A"))).unwrap();
+            lib.write(Lane::Interactive, |tx| tx.create("page", "Deeper", vec![], "deep\n", Some("A/B"))).unwrap();
+            a.0.id
+        },
+        &|lib, _| lib.write(Lane::Interactive, |tx| tx.move_folder("A", "Z/A")).is_ok(),
+        &|lib, id, ok| {
+            let all = lib.store.list(Some("page"));
+            assert_eq!(all.len(), 2, "both records survive");
+            let moved = all.iter().filter(|e| e.path.starts_with("pages/Z/A/")).count();
+            assert!(moved == 0 || moved == 2, "all or nothing: {:?}", all.iter().map(|e| &e.path).collect::<Vec<_>>());
+            if ok {
+                assert_eq!(moved, 2, "a completed move is durable");
+            }
+            for e in &all {
+                let sub = e.path.strip_prefix("pages/").unwrap().rsplit_once('/').unwrap().0;
+                assert_eq!(
+                    e.fields.get("test.folder").and_then(|v| v.as_str()),
+                    Some(sub),
+                    "the field follows {}",
+                    e.path
+                );
+            }
+            assert_eq!(body_of(lib, id), "old body\n");
+        },
+    );
+    assert!(steps >= 3, "moving a folder took {steps} steps");
+}

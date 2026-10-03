@@ -35,6 +35,11 @@ pub mod methods {
     pub const INDEX_STATUS: &str = "index.status";
     pub const EXPORT_WRITE: &str = "export.write";
     pub const RECORDS_TEXT: &str = "records.text";
+    pub const RECORDS_MOVE: &str = "records.move";
+    pub const FOLDERS_LIST: &str = "folders.list";
+    pub const FOLDERS_CREATE: &str = "folders.create";
+    pub const FOLDERS_MOVE: &str = "folders.move";
+    pub const FOLDERS_REMOVE: &str = "folders.remove";
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -218,6 +223,53 @@ pub struct RelocateParams {
     #[serde(default, deserialize_with = "some_option")]
     #[ts(optional, type = "string | null")]
     pub subfolder: Option<Option<String>>,
+}
+
+/// The user's folders (`/`-separated paths, sorted), and the record kinds kept in them.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct FoldersList {
+    pub folders: Vec<String>,
+    pub kinds: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct FolderPathParams {
+    pub path: String,
+}
+
+/// Moves or renames a folder: `from` becomes `to` (a full path).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct FolderMoveParams {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct FolderMoved {
+    pub path: String,
+    /// How many records moved with it.
+    #[ts(type = "number")]
+    pub moved: usize,
+}
+
+/// Moves records into a folder; `null` or "" is the top level.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct MoveRecordsParams {
+    pub ids: Vec<crate::Id>,
+    #[serde(default)]
+    pub folder: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct MoveFailure {
+    pub id: crate::Id,
+    pub error: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct MovedRecords {
+    pub moved: Vec<Written>,
+    pub failed: Vec<MoveFailure>,
 }
 
 fn some_option<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D::Error> {

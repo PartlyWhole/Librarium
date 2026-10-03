@@ -62,3 +62,8 @@ fn power_cut_during_rename() {
 fn power_cut_during_permanent_delete() {
     crash::delete_scenarios(&make);
 }
+
+#[test]
+fn power_cut_during_folder_move() {
+    crash::move_folder_scenarios(&make);
+}

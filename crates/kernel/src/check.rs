@@ -106,16 +106,24 @@ impl Tx<'_> {
                     }
                 }
                 Format::JsonDir => {
-                    let Ok(list) = s.fs.list(&top) else { continue };
-                    for e in list.into_iter().filter(|e| e.is_dir && !e.name.starts_with('.')) {
-                        let dir = top.join(&e.name);
-                        if let Ok(inner) = s.fs.list(&dir) {
-                            for f in inner {
+                    // Record folders, in the user's folders when the kind has them.
+                    let mut stack = vec![top];
+                    while let Some(d) = stack.pop() {
+                        let Ok(list) = s.fs.list(&d) else { continue };
+                        for e in list.into_iter().filter(|e| e.is_dir && !e.name.starts_with('.')) {
+                            let dir = d.join(&e.name);
+                            let Ok(inner) = s.fs.list(&dir) else { continue };
+                            let mut is_record = false;
+                            for f in &inner {
                                 if f.name.starts_with('.') && f.name.contains(TMP_MARK) {
                                     temps.push(dir.join(&f.name));
                                 } else if f.name == "record.json" {
+                                    is_record = true;
                                     files.push(rel_str(dir.join("record.json").strip_prefix(&s.root).unwrap()));
                                 }
+                            }
+                            if !is_record && def.subfolder_field.is_some() {
+                                stack.push(dir);
                             }
                         }
                     }

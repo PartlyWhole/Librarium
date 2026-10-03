@@ -8,6 +8,9 @@ use librarium_contracts::api::{
     Written,
 };
 use librarium_contracts::api::{Draft, FolderInfo, LogParams};
+use librarium_contracts::api::{
+    FolderMoveParams, FolderMoved, FolderPathParams, FoldersList, MoveFailure, MoveRecordsParams, MovedRecords,
+};
 use librarium_contracts::api::{JobInfo, JobsList};
 use librarium_contracts::events::methods as events;
 use librarium_contracts::ports::{ChangeSource, Clock, Desktop, FileSystem, IdGenerator, VersionStore, WorkerHost};
@@ -62,6 +65,11 @@ pub const METHODS: &[&str] = &[
     methods::INDEX_STATUS,
     methods::EXPORT_WRITE,
     methods::RECORDS_TEXT,
+    methods::RECORDS_MOVE,
+    methods::FOLDERS_LIST,
+    methods::FOLDERS_CREATE,
+    methods::FOLDERS_MOVE,
+    methods::FOLDERS_REMOVE,
 ];
 
 /// The settings key holding the library folder.
@@ -455,6 +463,27 @@ impl Api {
         Ok(Written { info: e.info(), seq })
     }
 
+    /// Moves records into one of the user's folders, one by one; what can't move is listed.
+    pub fn records_move(&self, p: MoveRecordsParams) -> Result<MovedRecords> {
+        let lib = self.library()?;
+        let folder = p.folder.filter(|f| !f.trim().trim_matches('/').is_empty());
+        let mut out = MovedRecords { moved: vec![], failed: vec![] };
+        for id in p.ids {
+            let f = folder.clone();
+            match lib.write(Lane::Interactive, move |tx| tx.move_to_folder(id, f.as_deref())) {
+                Ok((e, seq)) => out.moved.push(Written { info: e.info(), seq }),
+                Err(e) => out.failed.push(MoveFailure { id, error: e.message }),
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn folders_list(&self) -> Result<FoldersList> {
+        let lib = self.library()?;
+        let s = &lib.store;
+        Ok(FoldersList { folders: s.folders(), kinds: s.foldered().into_iter().map(|d| d.kind).collect() })
+    }
+
     /// What a folder holds, so first run can ask how to treat it.
     pub fn folder_inspect(&self, path: &Path) -> FolderInfo {
         let fs = &self.deps.fs;
@@ -540,6 +569,25 @@ impl Api {
             methods::RECORDS_SAVE => to_json(self.records_save(params(p)?)?),
             methods::RECORDS_SET_FIELDS => to_json(self.records_set_fields(params(p)?)?),
             methods::RECORDS_RELOCATE => to_json(self.records_relocate(params(p)?)?),
+            methods::RECORDS_MOVE => to_json(self.records_move(params(p)?)?),
+            methods::FOLDERS_LIST => to_json(self.folders_list()?),
+            methods::FOLDERS_CREATE => {
+                let p: FolderPathParams = params(p)?;
+                let path = self.library()?.write(Lane::Interactive, move |tx| tx.create_folder(&p.path))?;
+                to_json(FolderMoved { path, moved: 0 })
+            }
+            methods::FOLDERS_MOVE => {
+                let p: FolderMoveParams = params(p)?;
+                let to = librarium_kernel::folders::clean_folder(&p.to)?;
+                let t2 = to.clone();
+                let moved = self.library()?.write(Lane::Interactive, move |tx| tx.move_folder(&p.from, &t2))?;
+                to_json(FolderMoved { path: to, moved })
+            }
+            methods::FOLDERS_REMOVE => {
+                let p: FolderPathParams = params(p)?;
+                self.library()?.write(Lane::Interactive, move |tx| tx.remove_folder(&p.path))?;
+                Ok(Value::Null)
+            }
             methods::SETTINGS_GET => to_json(self.settings_get()),
             methods::SETTINGS_SET => to_json(self.settings_set(params::<SettingsParams>(p)?.values)?),
             methods::FOLDER_INSPECT => to_json(self.folder_inspect(Path::new(&params::<OpenLibraryParams>(p)?.path))),

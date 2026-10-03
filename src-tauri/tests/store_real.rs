@@ -105,6 +105,11 @@ fn process_crash_during_rename() {
 }
 
 #[test]
+fn process_crash_during_folder_move() {
+    crash::move_folder_scenarios(&real);
+}
+
+#[test]
 fn process_crash_during_permanent_delete() {
     crash::delete_scenarios(&real);
 }

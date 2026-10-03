@@ -25,7 +25,7 @@ import { refreshMenu } from "./menu";
 import { Prefs } from "./prefs";
 import { Records } from "./records";
 import { Router } from "./router";
-import type { EmbedRenderer, Page, RecordAction, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
+import type { EmbedRenderer, Page, RecordAction, RecordLook, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
 import { contextMenu, type MenuItem } from "../kit/menu";
 import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, Command, Keyboard, Settings, FolderOpen, X } from "lucide";
 
@@ -66,6 +66,8 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const prefs = new Prefs();
   const hidingFields = new Registry<string>("shell.hiding-fields");
   const recordActions = new Registry<RecordAction>("shell.record-actions");
+  const looks = new Registry<RecordLook>("shell.record-looks");
+  const here = signal<string | null>(null);
   const records = new Records(() => hidingFields.values());
   const folder = signal<LibraryStatus | null>(null);
   const indexed = signal(0);
@@ -92,6 +94,8 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     openers,
     hidingFields,
     recordActions,
+    looks,
+    here,
     showRecordMenu(target, at) {
       const rs = Array.isArray(target) ? target : [target];
       if (!rs.length) return;
@@ -284,7 +288,9 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
         const kids = n.children.map(match).filter((x): x is TreeNode => !!x);
         return kids.length || n.label.toLowerCase().includes(q) ? { ...n, children: kids, expanded: q ? true : !f.includes(n.id) } : null;
       }
-      return !q || n.label.toLowerCase().includes(q) ? n : null;
+      if (q && !n.label.toLowerCase().includes(q)) return null;
+      // A record's row can be dragged (onto a folder).
+      return !n.drag && records.get(n.id) ? { ...n, drag: () => ({ records: [n.id], folders: [] }) } : n;
     };
     const nodes: TreeNode[] = open
       ? sidebar.values().map((s) => {

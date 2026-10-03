@@ -72,6 +72,16 @@ export interface RecordAction {
   partial?: boolean;
 }
 
+/** shell.record-looks: how records of a kind look in lists of files (icon, kind name). */
+export interface RecordLook {
+  kind: string;
+  icon(r: RecordInfo): IconNode;
+  /** "Note", "PDF", "Web page"… */
+  kindName(r: RecordInfo): string;
+  /** A short line under the name (e.g. a web page's site), if any. */
+  detail?(r: RecordInfo): string;
+}
+
 /** Feature-hosted slot, offered by Notes: groups of notes shown apart in the sidebar. */
 export const NOTE_GROUPS = "notes.groups";
 export interface NoteGroup {
@@ -104,6 +114,11 @@ export interface ShellApi {
   hidingFields: Registry<string>;
   /** shell.record-actions: what a record's context menu offers (Archive, Restore…). */
   recordActions: Registry<RecordAction>;
+  /** shell.record-looks, by record kind. */
+  looks: Registry<RecordLook>;
+  /** The user's folder being looked at (`""`: the top level), where new things go; `null`
+   * when no page shows a folder. */
+  here: Signal<string | null>;
   /** Opens the context menu of a record, or of several selected, at a point. */
   showRecordMenu(rs: RecordInfo | RecordInfo[], at: { x: number; y: number }): void;
   /** Opens the side panel at one of its sections (e.g. "jobs"). */
@@ -160,4 +175,4 @@ export interface EmbedRenderer {
 }
 
 /** Every interface slot, for the architecture report. */
-export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", "shell.embeds", "shell.hiding-fields", "shell.record-actions", NOTE_GROUPS, READER_TOOLS] as const;
+export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", "shell.embeds", "shell.hiding-fields", "shell.record-actions", "shell.record-looks", NOTE_GROUPS, READER_TOOLS] as const;
