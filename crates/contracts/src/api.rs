@@ -27,6 +27,12 @@ pub mod methods {
     pub const DRAFTS_GET: &str = "drafts.get";
     pub const DRAFTS_LIST: &str = "drafts.list";
     pub const DRAFTS_DISCARD: &str = "drafts.discard";
+    pub const JOBS_LIST: &str = "jobs.list";
+    pub const JOBS_RETRY: &str = "jobs.retry";
+    pub const JOBS_CANCEL: &str = "jobs.cancel";
+    pub const JOBS_DISMISS: &str = "jobs.dismiss";
+    pub const INDEX_REBUILD: &str = "index.rebuild";
+    pub const INDEX_STATUS: &str = "index.status";
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -263,4 +269,80 @@ pub struct Draft {
     #[serde(default)]
     #[ts(type = "number")]
     pub updated_ms: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum JobState {
+    Queued,
+    Running,
+    Done,
+    Failed,
+    Cancelled,
+}
+
+/// A background job. Its payload holds IDs, not content.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct JobInfo {
+    pub id: crate::Id,
+    pub kind: String,
+    /// Two requests with one key are one job.
+    pub key: String,
+    pub state: JobState,
+    /// A short, calm description ("Rebuilding the index").
+    pub title: String,
+    #[ts(type = "number")]
+    pub attempts: u32,
+    pub error: Option<String>,
+    /// 0 to 1, when known.
+    pub progress: Option<f32>,
+    pub message: Option<String>,
+    #[ts(type = "unknown")]
+    pub payload: serde_json::Value,
+    #[ts(type = "number")]
+    pub created_ms: i64,
+    #[ts(type = "number")]
+    pub updated_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct JobsList {
+    pub running: Vec<JobInfo>,
+    pub failed: Vec<JobInfo>,
+    pub recent: Vec<JobInfo>,
+    /// Shown once after a restart, e.g. "Resumed 3 saves".
+    pub resumed: Option<String>,
+}
+
+/// A search result: a passage of a record.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct SearchHit {
+    pub id: crate::Id,
+    pub kind: String,
+    pub title: String,
+    /// The passage with matches between U+0002 and U+0003.
+    pub snippet: String,
+    /// Where the passage starts in the record's text, in code points.
+    #[ts(type = "number")]
+    pub offset: i64,
+    pub score: f64,
+}
+
+/// A record that links to another.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct Backlink {
+    pub source: crate::Id,
+    pub title: String,
+    pub kind: String,
+    /// The line around the link, links shown as labels.
+    pub context: String,
+    pub embed: bool,
+}
+
+/// A link with no usable ID, waiting for the user to choose its target.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct Unresolved {
+    pub source: crate::Id,
+    pub title: String,
+    pub label: String,
 }

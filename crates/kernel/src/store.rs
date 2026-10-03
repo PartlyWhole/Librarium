@@ -346,6 +346,20 @@ impl Store {
         Ok(RecordText { info, frontmatter: fm.map(|f| f.0.to_string()).unwrap_or_default(), body: body.to_string() })
     }
 
+    /// A record's text for derived views: a Markdown body, or its kind's text source.
+    pub fn record_text(&self, e: &Entry) -> Option<String> {
+        if let Some(src) = self.kinds.text_sources.get(&e.kind) {
+            return src(self, e);
+        }
+        let def = self.kinds.get(&e.kind)?;
+        if def.format != Format::Markdown {
+            return None;
+        }
+        let bytes = self.fs.read(&self.abs(&e.path)).ok()?;
+        let text = String::from_utf8_lossy(&bytes).into_owned();
+        Some(frontmatter::split(&text).1.to_string())
+    }
+
     pub fn read_bytes(&self, rel: &str) -> Result<Vec<u8>> {
         self.fs.read(&self.abs(rel)).map_err(|e| io_err(e, rel))
     }
@@ -732,6 +746,32 @@ impl<'a> Tx<'a> {
         } else {
             SaveResult::Saved { version: entry.hash, seq }
         })
+    }
+
+    /// A repair: rewrites a Markdown body if the file is still at `expected_version`
+    /// (`f` returns `None` when nothing needs changing). Returns whether it wrote.
+    pub fn repair_body(&self, id: Id, expected_version: &str, f: impl FnOnce(&str) -> Option<String>) -> Result<bool> {
+        let s = self.store;
+        let e = self.writable(id)?;
+        let abs = s.abs(&e.path);
+        let cur = s.fs.read(&abs).map_err(|err| io_err(err, "reading"))?;
+        if version_of(&cur) != expected_version {
+            return Err(BackendError::conflict("the record changed since the repair was planned"));
+        }
+        let text = String::from_utf8_lossy(&cur).into_owned();
+        let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+        let (fm, body) = frontmatter::split(&text);
+        let Some(new_body) = f(body) else { return Ok(false) };
+        let out = match fm {
+            Some((f, _)) => frontmatter::join(f, &new_body, newline),
+            None => new_body,
+        };
+        if out.as_bytes() == cur.as_slice() {
+            return Ok(false);
+        }
+        s.safe_write(&abs, out.as_bytes(), false, self.dur).map_err(|err| io_err(err, "repairing"))?;
+        self.indexed(&e.path, out.as_bytes(), ChangeOp::Updated)?;
+        Ok(true)
     }
 
     /// Sets or removes module fields (`module.key`), changing only their bytes.

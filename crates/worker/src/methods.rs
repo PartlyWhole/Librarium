@@ -11,6 +11,10 @@ pub fn call(method: &str, params: Value) -> Result<Value, BackendError> {
             std::thread::sleep(std::time::Duration::from_secs(3600));
         },
         "test.echo" => Ok(json!({ "echo": params })),
+        "test.sleep" => {
+            std::thread::sleep(std::time::Duration::from_millis(params["ms"].as_u64().unwrap_or(1000)));
+            Ok(json!({ "pid": std::process::id() }))
+        }
         _ => Err(BackendError::not_found(format!("no worker method {method}")).with_data(json!({ "method": method }))),
     }
 }

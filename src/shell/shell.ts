@@ -4,6 +4,7 @@
  */
 import { call, on, onCloseRequested, pickFolder } from "../backend";
 import { Undo } from "./undo";
+import { jobsUi } from "./jobs";
 import type { EditorContribution } from "../editor/editor";
 import { ask, modal } from "../kit/dialog";
 import { h, replace } from "../kit/dom";
@@ -61,6 +62,8 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const prefs = new Prefs();
   const records = new Records();
   const folder = signal<LibraryStatus | null>(null);
+  const indexed = signal(0);
+  on("event.indexed", (p) => indexed.set((p as { seq: number }).seq));
   const message = signal("");
   const right = signal("");
   let msgTimer: ReturnType<typeof setTimeout> | undefined;
@@ -91,14 +94,15 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     records,
     status,
     folder,
-    openRecord(id) {
+    openRecord(id, params = {}) {
       const r = records.get(id);
       const page = r ? openers.get(r.kind) : undefined;
-      if (page) router.go(page, { id });
+      if (page) router.go(page, { id, ...params });
       else status.show("That record can't be opened here.");
     },
     editorExtensions,
     undo,
+    indexed,
     beforeClose(fn) {
       closing.add(fn);
       return () => closing.delete(fn);
@@ -133,6 +137,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   pages.add("shell", "welcome", { id: "welcome", title: "Welcome", icon: FolderOpen, render: (host) => renderWelcome(host) }, 101);
 
   // ---- features contribute ------------------------------------------------------------
+  jobsUi(shell);
   for (const f of features) f(shell);
   for (const p of pages.values()) {
     if (p.keys || p.ribbon !== undefined) {
@@ -173,8 +178,9 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const workspace = h("main", { class: "workspace" }, h("header", { class: "ws-header" }, h("div", { class: "ws-nav" }, back, fwd), titleEl, headerActions), pageScroll);
   const panelEl = h("aside", { class: "side-panel", "aria-label": "Side panel" });
   const statusLeft = h("div", { class: "status-left", role: "status", "aria-live": "polite" });
+  const statusJobs = h("div", { class: "status-jobs", role: "status", "aria-live": "polite" });
   const statusRight = h("div", { class: "status-right" });
-  const statusBar = h("footer", { class: "status-bar" }, statusLeft, statusRight);
+  const statusBar = h("footer", { class: "status-bar" }, h("div", { class: "status-group" }, statusLeft, statusJobs), statusRight);
   const app = h("div", { class: "app" }, ribbon, sidebarEl, workspace, panelEl, statusBar);
   replace(root, app);
 

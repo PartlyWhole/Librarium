@@ -10,6 +10,10 @@ use std::sync::Arc;
 pub struct MethodCtx<'a> {
     pub library: &'a Arc<Library>,
     pub setting: &'a dyn Fn(&str) -> Option<Value>,
+    /// The derived views, once started.
+    pub views: Option<&'a crate::views::ViewHost>,
+    /// The job host, once started.
+    pub jobs: Option<&'a crate::jobs::JobHost>,
 }
 
 pub type ApiMethod = Arc<dyn Fn(&MethodCtx, Value) -> Result<Value> + Send + Sync>;

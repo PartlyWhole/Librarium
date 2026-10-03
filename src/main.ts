@@ -7,8 +7,9 @@ import { daily } from "./features/daily";
 import { library } from "./features/library";
 import { search } from "./features/search";
 import { archive } from "./features/archive";
+import { links } from "./features/links";
 
-const shell = createShell(document.getElementById("app")!, [notes, daily, library, search, archive]);
+const shell = createShell(document.getElementById("app")!, [notes, daily, library, search, links, archive]);
 (window as unknown as { librarium: unknown }).librarium = { timings: shell.timings };
 
 // Interface errors go to the app's log file (nothing is sent anywhere).

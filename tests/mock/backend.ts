@@ -38,6 +38,7 @@ const state = {
   /** Make records.save fail with this error (e.g. a read-only file). */
   failSave: null as string | null,
   today: "2026-10-02",
+  jobs: [] as { state: string; [k: string]: unknown }[],
   inspect: { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false },
   idn: 1,
 };
@@ -119,6 +120,16 @@ const api: Record<string, (p: any) => unknown> = {
     const info = seed("note", state.today, "", { "daily.date": state.today });
     return { info, seq: touch(need(info.id), "created") };
   },
+  "jobs.list": () => ({ running: state.jobs.filter((j) => j.state === "running" || j.state === "queued"), failed: state.jobs.filter((j) => j.state === "failed"), recent: state.jobs.filter((j) => j.state === "done"), resumed: null }),
+  "index.rebuild": () => ({ id: "0192f3a4-7c1e-7b2a-9f00-0000000000ff", kind: "index.rebuild", key: "all", state: "queued", title: "Rebuilding the index", attempts: 0, error: null, progress: null, message: null, payload: null, created_ms: 0, updated_ms: 0 }),
+  "search.query": (p) => {
+    const words = String(p.text).toLowerCase().split(/\s+/).filter((w) => w && !w.startsWith("-"));
+    return [...state.records.values()]
+      .filter((r) => (!p.kinds?.length || p.kinds.includes(r.info.kind)) && words.every((w) => (r.info.title + " " + r.body).toLowerCase().includes(w.replace(/"/g, ""))))
+      .map((r) => ({ id: r.info.id, kind: r.info.kind, title: r.info.title, snippet: r.body.replace(new RegExp(`(${words.map((w) => w.replace(/[^\p{L}\p{N}]/gu, "")).join("|")})`, "giu"), "\u0002$1\u0003"), offset: 0, score: 1 }));
+  },
+  "links.backlinks": (p) => [...state.records.values()].filter((r) => r.body.includes(`|${p.id}]]`)).map((r) => ({ source: r.info.id, title: r.info.title, kind: r.info.kind, context: r.body.split("\n").find((l) => l.includes(p.id)) ?? "", embed: false })),
+  "links.unresolved": () => [],
   "folder.inspect": (p) => ({ path: p.path, ...state.inspect }),
   "folder.reveal": () => null,
   "app.revealLogs": () => null,
@@ -211,6 +222,7 @@ export const mock = {
     state.idn = 1;
     state.drafts.clear();
     state.failSave = null;
+    state.jobs = [];
     state.inspect = { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false };
   },
   /** A sample library for the browser preview. */

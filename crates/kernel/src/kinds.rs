@@ -33,9 +33,14 @@ pub struct SlugField {
     pub field: String,
 }
 
+/// Gives a non-Markdown kind's text to derived views (from stored files only).
+pub type TextSource =
+    std::sync::Arc<dyn Fn(&crate::store::Store, &crate::store::Entry) -> Option<String> + Send + Sync>;
+
 pub struct Kinds {
     pub kinds: Registry<RecordKindDef>,
     pub slug_fields: Registry<SlugField>,
+    pub text_sources: Registry<TextSource>,
 }
 
 impl Default for Kinds {
@@ -46,7 +51,11 @@ impl Default for Kinds {
 
 impl Kinds {
     pub fn new() -> Self {
-        Kinds { kinds: Registry::new(slots::RECORD_KINDS), slug_fields: Registry::new("kernel.slug-fields") }
+        Kinds {
+            kinds: Registry::new(slots::RECORD_KINDS),
+            slug_fields: Registry::new("kernel.slug-fields"),
+            text_sources: Registry::new("kernel.text-sources"),
+        }
     }
     pub fn add(&mut self, contributor: &str, def: RecordKindDef) -> Result<(), DuplicateId> {
         if let Some(other) = self.kinds.iter().find(|e| e.value.folder == def.folder) {
@@ -71,6 +80,11 @@ impl Kinds {
     pub fn all(&self) -> impl Iterator<Item = &RecordKindDef> {
         self.kinds.iter().map(|e| &e.value)
     }
+    /// Contributes the text of a kind's records (keyed by kind).
+    pub fn add_text_source(&mut self, contributor: &str, kind: &str, f: TextSource) -> Result<(), DuplicateId> {
+        self.text_sources.add(contributor, kind, f)
+    }
+
     pub fn slug_fields_for(&self, kind: &str) -> Vec<&str> {
         self.slug_fields.iter().filter(|e| e.value.kind == kind).map(|e| e.value.field.as_str()).collect()
     }

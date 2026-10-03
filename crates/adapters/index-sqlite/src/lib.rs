@@ -59,6 +59,8 @@ fn create_schema(c: &Connection, spec: &ViewSpec) -> Result<()> {
     }
     if spec.text {
         sql.push_str("CREATE VIRTUAL TABLE IF NOT EXISTS passages USING fts5(title, body, record UNINDEXED, kind UNINDEXED, ordinal UNINDEXED, offset UNINDEXED);\n");
+        // Which passage rows belong to a record, so replacing them doesn't scan the FTS table.
+        sql.push_str("CREATE TABLE IF NOT EXISTS _passage_rows (record TEXT NOT NULL, rid INTEGER NOT NULL);\nCREATE INDEX IF NOT EXISTS _passage_rows_record ON _passage_rows (record);\n");
     }
     c.execute_batch(&sql).map_err(err)?;
     c.execute(
@@ -320,14 +322,20 @@ impl ViewIndex for SqliteView {
     }
     fn put_passages(&mut self, record: &str, passages: &[Passage]) -> Result<()> {
         self.delete_passages(record)?;
-        let mut st = self
-            .c
-            .prepare_cached(
-                "INSERT INTO passages (title, body, record, kind, ordinal, offset) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            )
-            .map_err(err)?;
         for p in passages {
-            st.execute(params![p.title, p.body, p.record, p.kind, p.ordinal, p.offset]).map_err(err)?;
+            self.c
+                .prepare_cached(
+                    "INSERT INTO passages (title, body, record, kind, ordinal, offset) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                )
+                .map_err(err)?
+                .execute(params![p.title, p.body, p.record, p.kind, p.ordinal, p.offset])
+                .map_err(err)?;
+            let rid = self.c.last_insert_rowid();
+            self.c
+                .prepare_cached("INSERT INTO _passage_rows (record, rid) VALUES (?1, ?2)")
+                .map_err(err)?
+                .execute(params![record, rid])
+                .map_err(err)?;
         }
         Ok(())
     }
@@ -335,8 +343,21 @@ impl ViewIndex for SqliteView {
         if !self.spec.text {
             return Ok(());
         }
+        // The side table finds a record's rows without scanning the FTS table.
+        let rids: Vec<i64> = {
+            let mut st = self.c.prepare_cached("SELECT rid FROM _passage_rows WHERE record = ?1").map_err(err)?;
+            let rows = st.query_map(params![record], |r| r.get(0)).map_err(err)?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?
+        };
+        for rid in rids {
+            self.c
+                .prepare_cached("DELETE FROM passages WHERE rowid = ?1")
+                .map_err(err)?
+                .execute(params![rid])
+                .map_err(err)?;
+        }
         self.c
-            .prepare_cached("DELETE FROM passages WHERE record = ?1")
+            .prepare_cached("DELETE FROM _passage_rows WHERE record = ?1")
             .map_err(err)?
             .execute(params![record])
             .map_err(err)?;

@@ -93,8 +93,10 @@ export interface ShellApi {
   records: Records;
   status: StatusBar;
   folder: Signal<LibraryStatus | null>;
-  /** Opens a record on the page registered for its kind. */
-  openRecord(id: string): void;
+  /** Opens a record on the page registered for its kind (with optional extra params). */
+  openRecord(id: string, params?: Record<string, string>): void;
+  /** The highest change sequence number the index has applied. */
+  indexed: Signal<number>;
   /** shell.editor-extensions */
   editorExtensions: Registry<EditorContribution>;
   undo: Undo;

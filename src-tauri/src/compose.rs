@@ -33,11 +33,28 @@ pub fn kinds() -> Kinds {
     k
 }
 
+/// Derived views contributed by features.
+pub fn views() -> Vec<(String, Arc<dyn librarium_kernel::views::DerivedView>)> {
+    let mut v = vec![];
+    librarium_feature_search::contribute_views(&mut v);
+    librarium_feature_links::contribute_views(&mut v);
+    v
+}
+
+/// Job kinds contributed by features.
+pub fn job_kinds() -> librarium_kernel::registry::Registry<librarium_kernel::jobs::JobKind> {
+    let mut r = librarium_kernel::jobs::registry();
+    librarium_feature_links::contribute_jobs(&mut r).expect("links jobs");
+    r
+}
+
 /// API calls contributed by features.
 pub fn methods() -> librarium_kernel::registry::Registry<librarium_kernel::methods::ApiMethod> {
     let mut r = librarium_kernel::methods::registry();
     librarium_feature_notes::contribute_methods(&mut r).expect("notes methods");
     librarium_feature_daily::contribute_methods(&mut r).expect("daily methods");
+    librarium_feature_search::contribute_methods(&mut r).expect("search methods");
+    librarium_feature_links::contribute_methods(&mut r).expect("links methods");
     r
 }
 
@@ -58,6 +75,8 @@ impl App {
             desktop: Arc::new(librarium_system::MacDesktop),
             open_options: OpenOptions::default(),
             methods: methods(),
+            views: Arc::new(views),
+            job_kinds: Arc::new(job_kinds),
         }));
         let transport = Arc::new(TauriTransport::new(Arc::new(Handler(api.clone()))));
         api.set_sink(transport.clone());
@@ -78,5 +97,14 @@ pub fn slot_contributors() -> Vec<(String, Vec<(String, String)>)> {
         (k.kinds.slot().to_string(), k.kinds.contributors()),
         (k.slug_fields.slot().to_string(), k.slug_fields.contributors()),
         (librarium_contracts::slots::API_METHODS.to_string(), methods().contributors()),
+        (
+            librarium_contracts::slots::DERIVED_VIEWS.to_string(),
+            views().into_iter().map(|(by, v)| (v.spec().name, by)).collect(),
+        ),
+        (librarium_contracts::slots::JOB_KINDS.to_string(), {
+            let mut r = job_kinds();
+            librarium_kernel::hosts::kernel_job_kinds(&mut r);
+            r.contributors()
+        }),
     ]
 }

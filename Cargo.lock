@@ -2047,7 +2047,9 @@ dependencies = [
  "librarium-feature-captures",
  "librarium-feature-daily",
  "librarium-feature-library",
+ "librarium-feature-links",
  "librarium-feature-notes",
+ "librarium-feature-search",
  "librarium-fs-macos",
  "librarium-index-sqlite",
  "librarium-kernel",
@@ -2136,6 +2138,7 @@ version = "0.1.0"
 dependencies = [
  "librarium-contracts",
  "librarium-kernel",
+ "librarium-testkit",
  "serde",
  "serde_json",
 ]
@@ -2156,6 +2159,7 @@ version = "0.1.0"
 dependencies = [
  "librarium-contracts",
  "librarium-kernel",
+ "librarium-testkit",
  "serde",
  "serde_json",
 ]

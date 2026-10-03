@@ -40,6 +40,11 @@ pub fn export_types(dir: &Path) -> Result<(), String> {
         crate::api::FolderInfo,
         crate::api::LogParams,
         crate::api::Draft,
+        crate::api::JobInfo,
+        crate::api::JobsList,
+        crate::api::SearchHit,
+        crate::api::Backlink,
+        crate::api::Unresolved,
     );
     Ok(())
 }

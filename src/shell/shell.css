@@ -304,3 +304,20 @@ select { width: auto; }
 .compare-col h3 { font-size: var(--small); margin: 0 0 4px; color: var(--muted); }
 .compare-text { white-space: pre-wrap; font: var(--small)/1.4 var(--font-ui); background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--r2); padding: 8px; max-height: 40vh; overflow: auto; margin: 0; }
 .modal:has(.compare) { max-width: min(900px, 94vw); }
+
+/* Search, side-panel lists and jobs */
+.chips { display: flex; gap: 6px; margin: 8px 0 16px; flex-wrap: wrap; }
+.chip { height: 24px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--muted); font-size: var(--small); }
+.chip.on { background: var(--active); color: var(--ink); border-color: var(--border-strong); }
+.hit-list { list-style: none; padding: 0; margin: 0; }
+.hit { display: block; padding: 10px 12px; margin: 0 -12px; border-radius: var(--r2); color: var(--ink); text-decoration: none; }
+.hit:hover, .hit:focus-visible { background: var(--hover); }
+.hit-title { display: block; font-weight: 600; font-size: var(--ui); }
+.hit-kind { font-weight: 400; color: var(--faint); font-size: var(--tiny); margin-left: 8px; }
+.hit-snippet { display: block; color: var(--muted); font-size: var(--small); margin-top: 2px; }
+mark { background: var(--selection); color: inherit; border-radius: 2px; padding: 0 1px; }
+.backlinks, .jobs { list-style: none; margin: 0; padding: 0; }
+.backlinks li, .jobs li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.panel-subtitle { font-size: var(--tiny); color: var(--muted); margin: 12px 0 4px; font-weight: 600; }
+.row.tight { margin: 2px 0 0; gap: 12px; }
+.status-group { display: flex; gap: 16px; min-width: 0; overflow: hidden; }

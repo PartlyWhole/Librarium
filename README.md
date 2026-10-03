@@ -75,3 +75,7 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-02 | A read-only or locked file is never replaced; saves to it are retried and reported. | [0015](docs/decisions/0015-read-only-files.md) |
 | 2026-10-02 | Features offer API calls through the `kernel.api-methods` slot. | [0016](docs/decisions/0016-feature-api-calls.md) |
 | 2026-10-02 | How notes are edited, saved, recovered and merged; undo for renames and moves. | [0017](docs/decisions/0017-editing-and-conflicts.md) |
+| 2026-10-02 | The derived-view host keeps views in step by record hashes; one file per view. | [0018](docs/decisions/0018-derived-view-host.md) |
+| 2026-10-02 | The job host: persistent jobs, idempotency keys, triggers, one retry after a worker failure. | [0019](docs/decisions/0019-job-host.md) |
+| 2026-10-02 | When link labels are refreshed and missing IDs restored. | [0020](docs/decisions/0020-link-repair.md) |
+| 2026-10-02 | Feature API message types live in `contracts`. | [0021](docs/decisions/0021-feature-api-types.md) |

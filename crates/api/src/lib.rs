@@ -8,16 +8,20 @@ use librarium_contracts::api::{
     Written,
 };
 use librarium_contracts::api::{Draft, FolderInfo, LogParams};
+use librarium_contracts::api::{JobInfo, JobsList};
 use librarium_contracts::events::methods as events;
 use librarium_contracts::ports::{ChangeSource, Clock, Desktop, FileSystem, IdGenerator, VersionStore, WorkerHost};
 use librarium_contracts::rpc::{NotificationSink, RpcHandler, RpcNotification, RpcRequest, RpcResponse};
 use librarium_contracts::{BackendError, ErrorCode, Id, Result};
 use librarium_kernel::frontmatter::FmValue;
+use librarium_kernel::hosts::{HostEvents, Hosts};
+use librarium_kernel::jobs::JobKind;
 use librarium_kernel::kinds::Kinds;
 use librarium_kernel::library::{IndexFactory, Library, LibraryPorts, OpenOptions};
 use librarium_kernel::methods::{ApiMethod, MethodCtx};
 use librarium_kernel::registry::Registry;
 use librarium_kernel::settings::Settings;
+use librarium_kernel::views::DerivedView;
 use librarium_kernel::writer::Lane;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -50,10 +54,19 @@ pub const METHODS: &[&str] = &[
     methods::DRAFTS_GET,
     methods::DRAFTS_LIST,
     methods::DRAFTS_DISCARD,
+    methods::JOBS_LIST,
+    methods::JOBS_RETRY,
+    methods::JOBS_CANCEL,
+    methods::JOBS_DISMISS,
+    methods::INDEX_REBUILD,
+    methods::INDEX_STATUS,
 ];
 
 /// The settings key holding the library folder.
 pub const LIBRARY_PATH: &str = "store.path";
+
+/// Makes the derived views for a library: (contributor, view).
+pub type ViewsFactory = Arc<dyn Fn() -> Vec<(String, Arc<dyn DerivedView>)> + Send + Sync>;
 
 pub struct Deps {
     pub worker: Arc<dyn WorkerHost>,
@@ -74,6 +87,10 @@ pub struct Deps {
     pub open_options: OpenOptions,
     /// API calls contributed by modules (`kernel.api-methods`).
     pub methods: Registry<ApiMethod>,
+    /// Derived views contributed by modules (`kernel.derived-views`), made per library.
+    pub views: ViewsFactory,
+    /// Job kinds contributed by modules (`kernel.job-kinds`), made per library.
+    pub job_kinds: Arc<dyn Fn() -> Registry<JobKind> + Send + Sync>,
 }
 
 enum Lib {
@@ -87,6 +104,7 @@ pub struct Api {
     deps: Deps,
     settings: Settings,
     library: RwLock<Lib>,
+    hosts: RwLock<Option<Arc<Hosts>>>,
     sink: RwLock<Option<Arc<dyn NotificationSink>>>,
     open_lock: Mutex<()>,
 }
@@ -122,7 +140,14 @@ impl Api {
             assert!(!METHODS.contains(&e.id.as_str()), "{} contributes the built-in API call {}", e.contributor, e.id);
         }
         let settings = Settings::load(deps.fs.clone(), &deps.app_support);
-        Api { deps, settings, library: RwLock::new(Lib::None), sink: RwLock::new(None), open_lock: Mutex::new(()) }
+        Api {
+            deps,
+            settings,
+            library: RwLock::new(Lib::None),
+            hosts: RwLock::new(None),
+            sink: RwLock::new(None),
+            open_lock: Mutex::new(()),
+        }
     }
 
     /// Where notifications (events) go.
@@ -242,6 +267,32 @@ impl Api {
                         api.notify(events::CHANGE, serde_json::to_value(c).unwrap());
                     }
                 }));
+                let w1 = Arc::downgrade(self);
+                let w2 = Arc::downgrade(self);
+                let views = (self.deps.views)().into_iter().map(|(_, v)| v).collect();
+                let hosts = Hosts::start(
+                    lib.clone(),
+                    &self.deps.index,
+                    self.deps.worker.clone(),
+                    views,
+                    (self.deps.job_kinds)(),
+                    HostEvents {
+                        indexed: Box::new(move |seq| {
+                            if let Some(api) = w1.upgrade() {
+                                api.notify(events::INDEXED, json!({ "seq": seq }));
+                            }
+                        }),
+                        job: Box::new(move |j: &JobInfo| {
+                            if let Some(api) = w2.upgrade() {
+                                api.notify(events::JOB, serde_json::to_value(j).unwrap());
+                            }
+                        }),
+                    },
+                );
+                match hosts {
+                    Ok(h) => *self.hosts.write().unwrap() = Some(Arc::new(h)),
+                    Err(e) => log::error!("the index could not start: {e}"),
+                }
                 *self.library.write().unwrap() = Lib::Open(lib);
                 self.settings.set(&[(LIBRARY_PATH.into(), Some(Value::String(path.display().to_string())))])?;
             }
@@ -257,6 +308,9 @@ impl Api {
     }
 
     pub fn close_library(&self) {
+        if let Some(h) = self.hosts.write().unwrap().take() {
+            h.stop();
+        }
         let old = std::mem::replace(&mut *self.library.write().unwrap(), Lib::None);
         if let Lib::Open(l) = old {
             l.close();
@@ -271,6 +325,20 @@ impl Api {
             Lib::Failed(_, e) => Err(e.clone()),
             Lib::None => Err(BackendError::new(ErrorCode::NotReady, "No library folder is chosen yet.")),
         }
+    }
+
+    /// The view and job hosts of the open library.
+    pub fn hosts(&self) -> Result<Arc<Hosts>> {
+        self.library()?;
+        self.hosts
+            .read()
+            .unwrap()
+            .clone()
+            .ok_or_else(|| BackendError::new(ErrorCode::NotReady, "The index is starting."))
+    }
+
+    pub fn jobs_list(&self) -> Result<JobsList> {
+        Ok(self.hosts()?.jobs.list())
     }
 
     pub fn store_status(&self) -> Result<StoreStatus> {
@@ -456,6 +524,20 @@ impl Api {
                 self.deps.desktop.reveal(&self.library()?.root)?;
                 Ok(Value::Null)
             }
+            methods::JOBS_LIST => to_json(self.hosts()?.jobs.list()),
+            methods::JOBS_RETRY => to_json(self.hosts()?.jobs.retry(params::<IdParams>(p)?.id)?),
+            methods::JOBS_CANCEL => to_json(self.hosts()?.jobs.cancel(params::<IdParams>(p)?.id)?),
+            methods::JOBS_DISMISS => {
+                self.hosts()?.jobs.dismiss(params::<IdParams>(p)?.id)?;
+                Ok(Value::Null)
+            }
+            methods::INDEX_REBUILD => to_json(self.hosts()?.jobs.enqueue("index.rebuild", "all", Value::Null)?),
+            methods::INDEX_STATUS => {
+                let h = self.hosts()?;
+                Ok(
+                    json!({ "ready": h.views.is_ready(), "applied": h.views.applied(), "progress": h.views.progress(), "views": h.views.view_names() }),
+                )
+            }
             methods::DRAFTS_PUT => {
                 self.drafts_put(params(p)?)?;
                 Ok(Value::Null)
@@ -486,7 +568,16 @@ impl Api {
                     let lib = self.library()?;
                     let settings = &self.settings;
                     let get = |k: &str| settings.get(k);
-                    m(&MethodCtx { library: &lib, setting: &get }, p)
+                    let hosts = self.hosts.read().unwrap().clone();
+                    m(
+                        &MethodCtx {
+                            library: &lib,
+                            setting: &get,
+                            views: hosts.as_ref().map(|h| &h.views),
+                            jobs: hosts.as_ref().map(|h| &h.jobs),
+                        },
+                        p,
+                    )
                 }
                 None => {
                     Err(BackendError::not_found(format!("no API call {method}")).with_data(json!({ "method": method })))

@@ -19,6 +19,8 @@ pub struct ProcessWorkerHost {
     memory_ceiling: u64,
     state: Mutex<Option<Running>>,
     next_id: Mutex<u64>,
+    /// The running worker's PID (0 when none), readable while a call is in flight.
+    pid: std::sync::atomic::AtomicU32,
 }
 
 struct Running {
@@ -30,11 +32,20 @@ struct Running {
 impl ProcessWorkerHost {
     /// `memory_ceiling` is in bytes of resident memory (the brief sets 2 GB).
     pub fn new(binary: impl Into<PathBuf>, memory_ceiling: u64) -> Self {
-        ProcessWorkerHost { binary: binary.into(), memory_ceiling, state: Mutex::new(None), next_id: Mutex::new(1) }
+        ProcessWorkerHost {
+            binary: binary.into(),
+            memory_ceiling,
+            state: Mutex::new(None),
+            next_id: Mutex::new(1),
+            pid: std::sync::atomic::AtomicU32::new(0),
+        }
     }
 
     pub fn pid(&self) -> Option<u32> {
-        self.state.lock().unwrap().as_ref().map(|r| r.child.id())
+        match self.pid.load(std::sync::atomic::Ordering::SeqCst) {
+            0 => None,
+            p => Some(p),
+        }
     }
 
     fn spawn(&self) -> Result<Running> {
@@ -80,7 +91,9 @@ impl WorkerHost for ProcessWorkerHost {
         };
         let mut state = self.state.lock().unwrap();
         if state.is_none() {
-            *state = Some(self.spawn()?);
+            let r = self.spawn()?;
+            self.pid.store(r.child.id(), std::sync::atomic::Ordering::SeqCst);
+            *state = Some(r);
         }
         let running = state.as_mut().unwrap();
         let mut line = serde_json::to_vec(&RpcRequest::new(id, method, params)).unwrap();

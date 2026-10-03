@@ -53,7 +53,7 @@ fn open(clock: Arc<FixedClock>) -> Arc<Library> {
 
 fn today(lib: &Arc<Library>, day_start: Option<u64>) -> librarium_contracts::api::Written {
     let get = move |k: &str| if k == librarium_feature_daily::DAY_START { day_start.map(Value::from) } else { None };
-    librarium_feature_daily::today(&MethodCtx { library: lib, setting: &get }).unwrap()
+    librarium_feature_daily::today(&MethodCtx { library: lib, setting: &get, views: None, jobs: None }).unwrap()
 }
 
 #[test]

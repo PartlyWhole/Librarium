@@ -145,9 +145,10 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
     cleanup.push(
       on("event.change", (p) => {
         const c = p as Change;
-        if (c.id !== id || c.origin !== "outside" || c.op === "removed") return;
+        if (c.id !== id || c.op === "removed") return;
         void call<RecordText>("records.read", { id }).then((fresh) => {
-          if (!alive) return;
+          // Our own saves are already shown; anything else (outside edits, repairs) reloads.
+          if (!alive || fresh.info.version === session.baseVersion) return;
           info = fresh.info;
           if (!session.dirty) {
             replaceDoc(view, fresh.body);
@@ -159,7 +160,19 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
       }),
     );
 
-    if (params.focus === "title") {
+    if (params.at) {
+      // A code-point offset (from search) → the editor's UTF-16 position.
+      const cp = Number(params.at);
+      let pos = 0;
+      let n = 0;
+      const doc = view.state.doc.toString();
+      for (const ch of doc) {
+        if (n++ >= cp) break;
+        pos += ch.length;
+      }
+      view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+      view.focus();
+    } else if (params.focus === "title") {
       titleInput.focus();
       titleInput.select();
     } else if (!readOnly) view.focus();

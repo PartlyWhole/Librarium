@@ -48,6 +48,8 @@ fn api_with(fs: Arc<MemFs>) -> Arc<Api> {
         logs_dir: PathBuf::from("/logs"),
         desktop: Arc::new(librarium_testkit::desktop::RecordingDesktop::default()),
         methods: librarium_kernel::methods::registry(),
+        views: Arc::new(Vec::new),
+        job_kinds: Arc::new(librarium_kernel::jobs::registry),
         open_options: OpenOptions { tick: Duration::from_secs(3600), ..Default::default() },
     }))
 }

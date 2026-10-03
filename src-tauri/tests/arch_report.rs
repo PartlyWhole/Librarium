@@ -57,12 +57,17 @@ fn arch_report() {
     println!("\nTimings against budgets (BRIEF §8):");
     let worker = worker_round_trip();
     println!("  worker start + ping            {:>8.1} ms   (no budget)", ms(worker));
-    let (first, warm, list) = cold_start(10_000);
+    let (first, warm, list, search) = cold_start(10_000);
     println!("  first open, 10,000 notes (full check, no index) {:>8.1} ms", ms(first));
     println!(
         "  cold start, 10,000 notes (replay) + list        {:>8.1} ms   budget 1500 ms  {}",
         ms(warm + list),
         verdict(warm + list, 1500)
+    );
+    println!(
+        "  search, 10,000 notes (slowest of 5 queries)     {:>8.1} ms   budget 150 ms   {}",
+        ms(search),
+        verdict(search, 150)
     );
     println!("  keystroke to paint             logged by the app as you type (\"keystroke to paint\"); 2,000-line note in the preview: median 1.6 ms, p95 3.0 ms   budget 16 ms");
     println!("  palette opens                  checked by tests/shell.test.ts (fails above 50 ms)   budget 50 ms");
@@ -89,14 +94,15 @@ fn verdict(d: Duration, budget_ms: u64) -> &'static str {
 
 /// Opens a library of `n` notes with the real adapters: first with no index (a full check),
 /// then again (replay), and lists every record as the interface does at startup.
-fn cold_start(n: usize) -> (Duration, Duration, Duration) {
+fn cold_start(n: usize) -> (Duration, Duration, Duration, Duration) {
     let dir = std::env::temp_dir().join(format!("librarium-perf-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let notes = dir.join("lib/notes");
     std::fs::create_dir_all(&notes).unwrap();
     for i in 0..n {
         let id = format!("0192f3a4-7c1e-7b2a-9f00-{i:012x}");
-        let body = format!("---\nid: \"{id}\"\nkind: \"note\"\nkind-version: 1\ntitle: \"Note {i}\"\n---\nSome text about thinker {i}, with a few sentences to read.\n");
+        let w = ["technique", "society", "attention", "grace", "gravity"][i % 5];
+        let body = format!("---\nid: \"{id}\"\nkind: \"note\"\nkind-version: 1\ntitle: \"Note {i}\"\n---\nSome text about {w} and thinker {i}, with a few sentences to read.\n");
         std::fs::write(notes.join(format!("{id}-note-{i}.md")), body).unwrap();
     }
     let bin = librarium_testkit::binaries::worker_binary();
@@ -116,9 +122,17 @@ fn cold_start(n: usize) -> (Duration, Duration, Duration) {
     assert_eq!(list.len(), n);
     assert!(!json.is_empty());
     let listed = t.elapsed();
+    let hosts = app.api.hosts().unwrap();
+    assert!(hosts.views.wait_applied(0, Duration::from_secs(120)));
+    let mut search = Duration::ZERO;
+    for q in ["technique", "grav", "\"thinker 5\"", "attention -grace", "text society"] {
+        let t = Instant::now();
+        app.api.call("search.query", serde_json::json!({ "text": q, "limit": 50 })).unwrap();
+        search = search.max(t.elapsed());
+    }
     app.api.close_library();
     let _ = std::fs::remove_dir_all(&dir);
-    (first, warm, listed)
+    (first, warm, listed, search)
 }
 
 fn ms(d: Duration) -> f64 {
