@@ -70,14 +70,29 @@ export function library(shell: ShellApi): void {
     run: () => {
       const input = h("textarea", { class: "combo-input links-input", rows: 4, placeholder: "https://…\nOne address per line, or paste a whole list.", "aria-label": "Addresses of the pages to save", spellcheck: false }) as HTMLTextAreaElement;
       const count = h("p", { class: "muted small", "aria-live": "polite" });
+      // Pages already in the library are skipped, unless a fresh snapshot of them is wanted.
+      const again = h("input", { type: "checkbox" }) as HTMLInputElement;
+      const againRow = h("label", { class: "check-row small", hidden: true }, again, " Save a new snapshot of those too");
+      const saved = savedAddresses(shell.records.list(KIND));
+      const split = () => {
+        const all = webAddresses(input.value);
+        const known = all.filter((u) => saved.has(normalizeAddress(u)));
+        return { all, known, todo: again.checked ? all : all.filter((u) => !saved.has(normalizeAddress(u))) };
+      };
       const update = () => {
-        const n = webAddresses(input.value).length;
-        count.textContent = n > 1 ? `${n} pages` : "";
+        const { all, known } = split();
+        againRow.hidden = !known.length;
+        count.textContent = [all.length > 1 ? `${all.length} pages` : "", known.length ? `${known.length} already in your library${again.checked ? "" : " (skipped)"}` : ""].filter(Boolean).join(" · ");
       };
       input.addEventListener("input", update);
+      again.addEventListener("change", update);
       const go = async () => {
-        const urls = webAddresses(input.value);
-        if (!urls.length) return toast("There’s no web address (http or https) there.");
+        const { all, todo: urls } = split();
+        if (!all.length) return toast("There’s no web address (http or https) there.");
+        if (!urls.length) {
+          m.close();
+          return shell.status.show(all.length === 1 ? "That page is already in your library." : "All of those pages are already in your library.", 6000);
+        }
         m.close();
         let queued = 0;
         const failed: string[] = [];
@@ -100,7 +115,7 @@ export function library(shell: ShellApi): void {
           void go();
         }
       });
-      const m = modal(h("div", { class: "ask" }, h("h2", { class: "ask-title" }, "Save web pages"), h("p", { class: "muted small" }, "Librarium keeps a faithful PDF of each page and its clean text, with where and when it came from. Pages are saved one after another in the background."), input, count, h("div", { class: "ask-buttons" }, h("button", { class: "button", onclick: () => m.close() }, "Cancel"), h("button", { class: "button primary", title: "Save (⌘↩)", onclick: () => void go() }, "Save"))), { label: "Save web pages" });
+      const m = modal(h("div", { class: "ask" }, h("h2", { class: "ask-title" }, "Save web pages"), h("p", { class: "muted small" }, "Librarium keeps a faithful PDF of each page and its clean text, with where and when it came from. Pages are saved one after another in the background."), input, count, againRow, h("div", { class: "ask-buttons" }, h("button", { class: "button", onclick: () => m.close() }, "Cancel"), h("button", { class: "button primary", title: "Save (⌘↩)", onclick: () => void go() }, "Save"))), { label: "Save web pages" });
       input.focus();
     },
   });
@@ -295,6 +310,21 @@ export function webAddresses(text: string): string[] {
       continue;
     }
     if (!out.includes(url)) out.push(url);
+  }
+  return out;
+}
+
+/** An address as compared for "already saved": no trailing slash, no #fragment (as the backend). */
+export function normalizeAddress(u: string): string {
+  return (u.split("#")[0] ?? "").replace(/\/+$/, "");
+}
+
+/** The addresses saved items came from (as given, and after redirects). */
+export function savedAddresses(items: RecordInfo[]): Set<string> {
+  const out = new Set<string>();
+  for (const i of items) {
+    const p = i.fields["provenance"] as { source?: string; "final-url"?: string } | undefined;
+    for (const u of [p?.source, p?.["final-url"]]) if (u) out.add(normalizeAddress(u));
   }
   return out;
 }

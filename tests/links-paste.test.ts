@@ -12,3 +12,19 @@ describe("web addresses in pasted text", () => {
     expect(webAddresses("(see https://x.example/a_(b))")).toEqual(["https://x.example/a_(b)"]);
   });
 });
+
+describe("pages already saved", () => {
+  it("are recognised by the address given or the one redirected to, ignoring a trailing slash and #fragment", async () => {
+    const { savedAddresses, normalizeAddress } = await import("../src/features/library/index");
+    const items = [
+      { fields: { provenance: { source: "https://a.example/post/", "final-url": "https://a.example/post" } } },
+      { fields: { provenance: { source: "http://short.example/x", "final-url": "https://long.example/article" } } },
+      { fields: {} },
+    ] as never;
+    const saved = savedAddresses(items);
+    const known = (u: string) => saved.has(normalizeAddress(u));
+    expect(known("https://a.example/post#comments")).toBe(true);
+    expect(known("https://long.example/article/")).toBe(true);
+    expect(known("https://a.example/other")).toBe(false);
+  });
+});
