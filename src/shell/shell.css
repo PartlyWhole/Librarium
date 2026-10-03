@@ -293,6 +293,12 @@ select { width: auto; }
 .cm-wikilink { color: var(--accent-text); cursor: pointer; text-decoration: underline; text-decoration-color: var(--selection); text-underline-offset: 2px; }
 .cm-wikilink.unresolved { color: var(--muted); text-decoration-style: dashed; }
 .cm-wikilink-source { color: var(--muted); }
+/* Markdown's marks while their construct is edited: there, but quiet. */
+.cm-mark-dim { color: var(--faint); }
+.cm-md-link, .cm-url { color: var(--accent-text); cursor: pointer; text-decoration: underline; text-decoration-color: var(--selection); text-underline-offset: 2px; }
+.cm-image-alt { color: var(--muted); font-style: italic; }
+.cm-image-alt::before { content: "▣ "; font-style: normal; color: var(--faint); }
+.cm-bullet { display: inline-block; width: 1ch; color: var(--muted); }
 .cm-task { margin: 0 4px 0 0; vertical-align: -2px; accent-color: var(--accent-solid); }
 .cm-tooltip { background: var(--bg) !important; border: 1px solid var(--border) !important; border-radius: var(--r2); box-shadow: 0 2px 6px rgb(0 0 0 / 8%), 0 12px 32px rgb(0 0 0 / 14%); color: var(--ink); }
 .cm-tooltip-autocomplete ul { font-family: var(--font-ui) !important; }

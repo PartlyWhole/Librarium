@@ -1,23 +1,45 @@
 /**
- * Live preview: Markdown syntax is hidden except on the lines being edited. Headings, emphasis,
- * highlight, code, quotes, tasks and links are styled; `[[label|id]]` shows only its label.
+ * Live preview, as in Obsidian: Markdown's marks are hidden except on the construct being
+ * edited (the emphasis, link or heading the cursor touches), and then shown faintly. Headings,
+ * emphasis, highlight, code, quotes, tasks, bullets and links are styled. `[[label|id]]` shows
+ * its label; while edited it shows `[[label]]`, the ID hidden and skipped as one unit.
+ * Text that isn't markup (bare addresses, `[sic]`, footnote marks) is never hidden.
  */
 import { syntaxTree } from "@codemirror/language";
-import { RangeSetBuilder, type EditorState, type Range } from "@codemirror/state";
+import { RangeSet, RangeSetBuilder, type EditorState, type Range } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
+import type { SyntaxNode } from "@lezer/common";
 import { parseLinks, type Link } from "./links";
 
-/** Hidden on inactive lines. */
-const HIDE = new Set(["HeaderMark", "EmphasisMark", "CodeMark", "StrikethroughMark", "HighlightMark", "LinkMark", "URL", "QuoteMark"]);
+/** Marks hidden while their construct isn't being edited. */
+const MARKS = new Set(["HeaderMark", "EmphasisMark", "CodeMark", "StrikethroughMark", "HighlightMark", "QuoteMark"]);
 
-function activeLines(state: EditorState): Set<number> {
-  const s = new Set<number>();
-  for (const r of state.selection.ranges) {
-    const a = state.doc.lineAt(r.from).number;
-    const b = state.doc.lineAt(r.to).number;
-    for (let n = a; n <= b; n++) s.add(n);
-  }
-  return s;
+/** Whether any selection touches [from, to] (a cursor at either edge counts). */
+function touches(state: EditorState, from: number, to: number): boolean {
+  return state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+}
+
+/** Whether any selection touches the lines of [from, to]. */
+function touchesLines(state: EditorState, from: number, to: number): boolean {
+  return touches(state, state.doc.lineAt(from).from, state.doc.lineAt(to).to);
+}
+
+/** The construct a mark belongs to: its heading or quote line, or its inline parent. */
+function construct(state: EditorState, n: SyntaxNode): [number, number] {
+  if (n.name === "HeaderMark" || n.name === "QuoteMark") return [state.doc.lineAt(n.from).from, state.doc.lineAt(n.to).to];
+  const p = n.parent;
+  return p ? [p.from, p.to] : [n.from, n.to];
+}
+
+/** A `[…]` that is a real link: inline (`[t](url)`) or a full reference (`[t][ref]`). */
+function isRealLink(n: SyntaxNode): boolean {
+  for (let c = n.firstChild; c; c = c.nextSibling) if (c.name === "URL" || c.name === "LinkLabel") return true;
+  return false;
+}
+
+function urlOf(state: EditorState, n: SyntaxNode): string | null {
+  for (let c = n.firstChild; c; c = c.nextSibling) if (c.name === "URL") return state.sliceDoc(c.from, c.to);
+  return null;
 }
 
 class LinkWidget extends WidgetType {
@@ -32,8 +54,9 @@ class LinkWidget extends WidgetType {
     a.className = `cm-wikilink ${this.link.id ? "" : "unresolved"}`;
     a.textContent = this.link.label || this.title || "Untitled";
     if (this.link.id) a.dataset.id = this.link.id;
+    else a.dataset.label = this.link.label;
     a.setAttribute("role", "link");
-    a.title = this.link.id ? (this.title && this.title !== this.link.label ? `${this.link.label} → ${this.title}` : this.link.label) : "Not linked to a record yet";
+    a.title = this.link.id ? (this.title && this.title !== this.link.label ? `${this.link.label} → ${this.title}` : this.link.label) : "Not linked to a note yet: click to make it";
     return a;
   }
   ignoreEvent() {
@@ -61,6 +84,20 @@ class CheckboxWidget extends WidgetType {
   }
 }
 
+class BulletWidget extends WidgetType {
+  eq() {
+    return true;
+  }
+  toDOM() {
+    const s = document.createElement("span");
+    s.className = "cm-bullet";
+    s.textContent = "•";
+    s.setAttribute("aria-hidden", "true");
+    return s;
+  }
+}
+const bullet = new BulletWidget();
+
 export interface LivePreviewOptions {
   /** The current title of a linked record (labels are a cache; this is for tooltips). */
   titleOf?: (id: string) => string | null;
@@ -68,19 +105,49 @@ export interface LivePreviewOptions {
   embedsHandled?: boolean;
 }
 
-function build(view: EditorView, opts: LivePreviewOptions): DecorationSet {
+interface Built {
+  decorations: DecorationSet;
+  /** Ranges the cursor moves over as one unit (a link's hidden ID). */
+  atomic: RangeSet<Decoration>;
+}
+
+const hide = Decoration.replace({});
+const dim = Decoration.mark({ class: "cm-mark-dim" });
+
+function build(view: EditorView, opts: LivePreviewOptions): Built {
   const { state } = view;
-  const active = activeLines(state);
   const ranges: Range<Decoration>[] = [];
+  const atomic: Range<Decoration>[] = [];
   const tree = syntaxTree(state);
   for (const { from, to } of view.visibleRanges) {
+    // Wiki links first: what lies inside them is theirs.
+    const end = state.doc.lineAt(to).to;
+    const wiki = parseLinks(state.sliceDoc(0, end), tree, Math.max(0, from - 2), to).filter((l) => l.to > from && l.from < to);
+    const inWiki = (a: number, b: number) => wiki.some((l) => a >= l.from && b <= l.to);
+    for (const l of wiki) {
+      if (l.embed && opts.embedsHandled) continue;
+      if (!touches(state, l.from, l.to)) {
+        ranges.push(Decoration.replace({ widget: new LinkWidget(l, l.id && opts.titleOf ? opts.titleOf(l.id) : null) }).range(l.from, l.to));
+        continue;
+      }
+      // Being edited: `[[label]]`, the ID hidden and skipped as one unit.
+      ranges.push(Decoration.mark({ class: "cm-wikilink-source" }).range(l.from, l.to));
+      if (l.id) {
+        const tail = state.sliceDoc(l.from, l.to).lastIndexOf(`|${l.id}`);
+        if (tail >= 0) {
+          const r = hide.range(l.from + tail, l.from + tail + l.id.length + 1);
+          ranges.push(r);
+          atomic.push(r);
+        }
+      }
+    }
     tree.iterate({
       from,
       to,
-      enter(n) {
-        const line = state.doc.lineAt(n.from).number;
-        const isActive = active.has(line);
+      enter(ref) {
+        const n = ref.node;
         const name = n.name;
+        if (inWiki(n.from, n.to) && name !== "Paragraph" && name !== "Document") return false;
         const m = /^ATXHeading(\d)$/.exec(name) ?? /^SetextHeading(\d)$/.exec(name);
         if (m) ranges.push(Decoration.line({ class: `cm-h${m[1]}` }).range(state.doc.lineAt(n.from).from));
         else if (name === "Emphasis") ranges.push(Decoration.mark({ class: "cm-em" }).range(n.from, n.to));
@@ -95,35 +162,67 @@ function build(view: EditorView, opts: LivePreviewOptions): DecorationSet {
           return false;
         } else if (name === "Table") {
           for (let l = state.doc.lineAt(n.from).number; l <= state.doc.lineAt(n.to).number; l++) ranges.push(Decoration.line({ class: "cm-table-row" }).range(state.doc.line(l).from));
-        } else if (name === "TaskMarker" && !isActive) {
-          const checked = /x/i.test(state.sliceDoc(n.from, n.to));
-          ranges.push(Decoration.replace({ widget: new CheckboxWidget(checked) }).range(n.from, n.to));
-        } else if (HIDE.has(name) && !isActive) {
-          // Keep a quote's mark if it's all there is (an empty line); hide the rest.
-          let end = n.to;
-          if ((name === "HeaderMark" || name === "QuoteMark") && state.sliceDoc(end, end + 1) === " ") end++;
-          if (end > n.from) ranges.push(Decoration.replace({}).range(n.from, end));
+        } else if (name === "TaskMarker") {
+          if (!touches(state, n.from, n.to)) {
+            const checked = /x/i.test(state.sliceDoc(n.from, n.to));
+            ranges.push(Decoration.replace({ widget: new CheckboxWidget(checked) }).range(n.from, n.to));
+          }
+        } else if (name === "ListMark") {
+          // A bullet shows as a dot (a task's bullet not at all) unless its line is edited.
+          const mark = state.sliceDoc(n.from, n.to);
+          if (/^[-*+]$/.test(mark) && !touchesLines(state, n.from, n.to)) {
+            const task = n.nextSibling?.name === "Task";
+            const sp = state.sliceDoc(n.to, n.to + 1) === " " ? 1 : 0;
+            ranges.push((task ? hide : Decoration.replace({ widget: bullet })).range(n.from, task ? n.to + sp : n.to));
+          }
+        } else if (name === "Link" || name === "Image") {
+          if (name === "Link" && !isRealLink(n)) return false; // [sic], [^1], [!note]: plain text
+          const url = urlOf(state, n);
+          const editing = touches(state, n.from, n.to);
+          ranges.push(Decoration.mark({ class: name === "Image" ? "cm-image-alt" : "cm-md-link", attributes: url ? { "data-url": url } : {} }).range(n.from, n.to));
+          // Its marks and address hide unless it is being edited.
+          for (let c = n.firstChild; c; c = c.nextSibling) {
+            if (c.name !== "LinkMark" && c.name !== "URL" && c.name !== "LinkLabel" && c.name !== "LinkTitle") continue;
+            // The text between "[" and "]" stays; everything from "]" on (and "[" / "![") goes.
+            if (c.name === "LinkMark" && c.from === n.from) ranges.push((editing ? dim : hide).range(c.from, c.to));
+            else if (c.from > n.from) {
+              // From the closing "]" to the end: one range.
+              ranges.push((editing ? dim : hide).range(c.from, n.to));
+              break;
+            }
+          }
+          return false;
+        } else if (name === "URL" && n.parent?.name !== "LinkReference") {
+          // A bare address or an autolink: shown, styled as a link.
+          ranges.push(Decoration.mark({ class: "cm-url", attributes: { "data-url": state.sliceDoc(n.from, n.to) } }).range(n.from, n.to));
+        } else if (name === "LinkMark" && n.parent?.name === "Autolink") {
+          ranges.push((touches(state, n.parent.from, n.parent.to) ? dim : hide).range(n.from, n.to));
+        } else if (MARKS.has(name)) {
+          const [a, b] = construct(state, n);
+          if (touches(state, a, b)) ranges.push(dim.range(n.from, n.to));
+          else {
+            // A heading's or quote's mark takes its space with it.
+            let e = n.to;
+            if ((name === "HeaderMark" || name === "QuoteMark") && state.sliceDoc(e, e + 1) === " ") e++;
+            if (e > n.from) ranges.push(hide.range(n.from, e));
+          }
         }
         return undefined;
       },
     });
-    // Wiki links and embeds: label only, except while the cursor is on their line.
-    const text = state.sliceDoc(0, state.doc.length);
-    for (const l of parseLinks(text, tree, Math.max(0, from - 2), to)) {
-      if (l.to <= from || l.from >= to) continue;
-      const line = state.doc.lineAt(l.from).number;
-      if (l.embed && opts.embedsHandled) continue;
-      if (active.has(line)) ranges.push(Decoration.mark({ class: "cm-wikilink-source" }).range(l.from, l.to));
-      else ranges.push(Decoration.replace({ widget: new LinkWidget(l, l.id && opts.titleOf ? opts.titleOf(l.id) : null) }).range(l.from, l.to));
-    }
   }
+  return { decorations: finish(ranges), atomic: finish(atomic) };
+}
+
+/** Sorted, with overlapping replacements dropped (the first one wins). */
+function finish(ranges: Range<Decoration>[]): DecorationSet {
   ranges.sort((a, b) => a.from - b.from || a.value.startSide - b.value.startSide);
   const b = new RangeSetBuilder<Decoration>();
   let lastTo = -1;
   for (const r of ranges) {
-    // Replacements may not overlap; the first one wins.
     const isReplace = r.value.point && r.from < r.to;
     if (isReplace && r.from < lastTo) continue;
+    if (!isReplace && r.from < lastTo && r.to <= lastTo && r.value.spec.class === "cm-mark-dim") continue;
     b.add(r.from, r.to, r.value);
     if (isReplace) lastTo = r.to;
   }
@@ -131,14 +230,15 @@ function build(view: EditorView, opts: LivePreviewOptions): DecorationSet {
 }
 
 export function livePreview(opts: LivePreviewOptions = {}) {
-  return ViewPlugin.fromClass(
+  const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
+      atomic: RangeSet<Decoration>;
       constructor(view: EditorView) {
-        this.decorations = build(view, opts);
+        ({ decorations: this.decorations, atomic: this.atomic } = build(view, opts));
       }
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged || u.selectionSet || syntaxTree(u.startState) !== syntaxTree(u.state)) this.decorations = build(u.view, opts);
+        if (u.docChanged || u.viewportChanged || u.selectionSet || syntaxTree(u.startState) !== syntaxTree(u.state)) ({ decorations: this.decorations, atomic: this.atomic } = build(u.view, opts));
       }
     },
     {
@@ -146,6 +246,18 @@ export function livePreview(opts: LivePreviewOptions = {}) {
       eventHandlers: {
         mousedown(e, view) {
           const t = e.target as HTMLElement;
+          // A link to the web opens (the app asks first) unless it is being edited; with ⌘,
+          // always. Its words can still be edited from the keyboard, or by clicking beside it.
+          const link = t.closest<HTMLElement>("[data-url]");
+          if (link && e.button === 0) {
+            const pos = view.posAtDOM(link);
+            const len = link.textContent?.length ?? 0;
+            if (e.metaKey || !touches(view.state, pos, pos + len)) {
+              e.preventDefault();
+              document.dispatchEvent(new CustomEvent("open-link", { detail: { url: link.dataset.url, text: link.textContent ?? "" } }));
+              return true;
+            }
+          }
           if (t.classList.contains("cm-task")) {
             const pos = view.posAtDOM(t);
             const text = view.state.sliceDoc(pos, pos + 3);
@@ -160,4 +272,5 @@ export function livePreview(opts: LivePreviewOptions = {}) {
       },
     },
   );
+  return [plugin, EditorView.atomicRanges.of((view) => view.plugin(plugin)?.atomic ?? RangeSet.empty)];
 }

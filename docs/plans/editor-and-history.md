@@ -21,7 +21,7 @@ The editor is CodeMirror 6 (`src/editor/`): `editor.ts` builds it, `livepreview.
 Markdown syntax, `links.ts` parses `[[label|id]]` (shared fixture with the Rust parser),
 `complete.ts` completes `[[`, `markdown.ts` adds `==highlight==`, `session.ts` saves.
 
-### E1. Live preview that feels right ✅ when done
+### E1. Live preview that feels right ✅
 
 - **Reveal per element, not per line.** With wrapping, a "line" is a paragraph: today every
   mark in it shows while the cursor is anywhere in it. Reveal a construct's marks only while a
