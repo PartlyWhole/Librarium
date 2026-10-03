@@ -1,6 +1,10 @@
 //! PageSaver port: WebKit through the system webview. WebKit isolates page content in its own
 //! processes, so saving runs through a hidden window of the app (with no IPC permissions).
 //!
+//! One hidden window is made (ahead of time, with `warm`) and reused for every page: creating a
+//! webview brings the app to the front (wry activates it), which mustn't happen on every save.
+//! Its data store is in memory and is wiped after each page, so saves share nothing.
+//!
 //! The page is loaded, scrolled through (so lazy images load), read in an isolated JavaScript
 //! world (clean text and metadata), and printed with `WKWebView.createPDF` (macOS 11+). Very
 //! tall pages are captured in slices and joined into one PDF with PDFKit.
@@ -11,12 +15,12 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{AnyThread, MainThreadMarker};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_foundation::{NSData, NSError, NSString};
-use objc2_web_kit::{WKContentWorld, WKPDFConfiguration, WKWebView};
+use objc2_foundation::{NSData, NSDate, NSError, NSString};
+use objc2_web_kit::{WKContentWorld, WKPDFConfiguration, WKWebView, WKWebsiteDataStore};
 use serde::Deserialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -93,7 +97,10 @@ struct Extracted {
 pub struct WebKitPageSaver {
     app: AppHandle,
     n: AtomicU64,
-    one_at_a_time: Mutex<()>,
+    /// The reusable window's label; holding the lock means one page at a time.
+    window: Mutex<Option<String>>,
+    /// Told when the page being saved finishes loading.
+    loaded: Arc<Mutex<Option<mpsc::Sender<()>>>>,
 }
 
 fn err(m: impl Into<String>) -> BackendError {
@@ -102,7 +109,76 @@ fn err(m: impl Into<String>) -> BackendError {
 
 impl WebKitPageSaver {
     pub fn new(app: AppHandle) -> Self {
-        WebKitPageSaver { app, n: AtomicU64::new(0), one_at_a_time: Mutex::new(()) }
+        WebKitPageSaver { app, n: AtomicU64::new(0), window: Mutex::new(None), loaded: Arc::default() }
+    }
+
+    /// Makes the hidden window now (at startup, while the app is in front anyway), so the first
+    /// save doesn't bring the app forward.
+    pub fn warm(&self) {
+        let mut slot = self.window.lock().unwrap();
+        let _ = self.ensure_window(&mut slot);
+    }
+
+    /// The reusable hidden window, made if it doesn't exist (or a page closed it).
+    fn ensure_window(&self, slot: &mut Option<String>) -> Result<String> {
+        if let Some(label) = slot.as_ref() {
+            if self.app.get_webview_window(label).is_some() {
+                return Ok(label.clone());
+            }
+        }
+        let label = format!("pagesaver-{}", self.n.fetch_add(1, Ordering::SeqCst));
+        let loaded = self.loaded.clone();
+        WebviewWindowBuilder::new(&self.app, &label, WebviewUrl::External("about:blank".parse().unwrap()))
+            .visible(false)
+            .focused(false)
+            // An in-memory data store: nothing is kept on disk, and WebKit never asks the
+            // keychain for its WebCrypto key. It is wiped after every page.
+            .incognito(true)
+            .inner_size(WIDTH, 900.0)
+            .on_page_load(move |_w, p| {
+                if p.event() == PageLoadEvent::Finished && p.url().scheme() != "about" {
+                    if let Some(tx) = loaded.lock().unwrap().as_ref() {
+                        let _ = tx.send(());
+                    }
+                }
+            })
+            .build()
+            .map_err(|e| err(format!("the page couldn’t be opened: {e}")))?;
+        *slot = Some(label.clone());
+        Ok(label)
+    }
+
+    /// Leaves the page and forgets everything it stored (cookies, storage, caches).
+    fn reset(&self, label: &str) {
+        *self.loaded.lock().unwrap() = None;
+        let Some(w) = self.app.get_webview_window(label) else { return };
+        let _ = w.navigate("about:blank".parse().unwrap());
+        // Wait until the blank page has really loaded: otherwise its late "finished" could be
+        // taken for the next page's.
+        let until = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < until {
+            let settled = self.on_webview(label, Duration::from_secs(2), |wk, _mtm, tx| {
+                // SAFETY: a live webview, on the main thread.
+                let url =
+                    unsafe { wk.URL() }.and_then(|u| u.absoluteString()).map(|s| s.to_string()).unwrap_or_default();
+                let _ = tx.send(!unsafe { wk.isLoading() } && url.starts_with("about:"));
+            });
+            if settled.unwrap_or(true) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let _ = self.on_webview(label, Duration::from_secs(10), |wk, mtm, tx| {
+            // SAFETY: WebKit objects of a live webview, on the main thread.
+            unsafe {
+                let store = wk.configuration().websiteDataStore();
+                let types = WKWebsiteDataStore::allWebsiteDataTypes(mtm);
+                let done = block2::RcBlock::new(move || {
+                    let _ = tx.send(());
+                });
+                store.removeDataOfTypes_modifiedSince_completionHandler(&types, &NSDate::distantPast(), &done);
+            }
+        });
     }
 
     fn on_webview<R: Send + 'static>(
@@ -210,30 +286,18 @@ fn join_pdfs(parts: &[Vec<u8>]) -> Result<Vec<u8>> {
 
 impl PageSaver for WebKitPageSaver {
     fn save(&self, url: &str, timeout: Duration) -> Result<SavedPage> {
-        let _one = self.one_at_a_time.lock().unwrap();
+        let mut slot = self.window.lock().unwrap();
         let parsed: tauri::Url = url.parse().map_err(|_| BackendError::invalid(format!("not a web address: {url}")))?;
         if !matches!(parsed.scheme(), "http" | "https") {
             return Err(BackendError::invalid("only http and https pages can be saved"));
         }
-        let label = format!("pagesaver-{}", self.n.fetch_add(1, Ordering::SeqCst));
+        let label = self.ensure_window(&mut slot)?;
+        let window = self.app.get_webview_window(&label).ok_or_else(|| err("the page's window closed"))?;
         let (tx, rx) = mpsc::channel();
+        *self.loaded.lock().unwrap() = Some(tx);
         let started = Instant::now();
-        let window = WebviewWindowBuilder::new(&self.app, &label, WebviewUrl::External(parsed))
-            .visible(false)
-            // A fresh, in-memory data store for every page: no cookies or storage carried
-            // between saves, and WebKit never asks the keychain for its WebCrypto key.
-            .incognito(true)
-            .inner_size(WIDTH, 900.0)
-            .on_page_load(move |_w, p| {
-                if p.event() == PageLoadEvent::Finished {
-                    let _ = tx.send(());
-                }
-            })
-            .build()
-            .map_err(|e| err(format!("the page couldn’t be opened: {e}")))?;
-        let close = || {
-            let _ = window.destroy();
-        };
+        window.navigate(parsed).map_err(|e| err(format!("the page couldn’t be opened: {e}")))?;
+        let close = || self.reset(&label);
         // Wait for the load to finish, but not forever: some pages never stop loading.
         // Then save what is there, and say so.
         let complete = rx.recv_timeout(timeout.mul_f64(0.6)).is_ok();

@@ -12,8 +12,8 @@ serde.workspace = true
 serde_json.workspace = true
 tauri.workspace = true
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSData", "NSError", "NSDictionary"] }
-objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKPDFConfiguration", "WKContentWorld", "WKFrameInfo", "block2", "objc2-core-foundation", "objc2-app-kit"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSData", "NSError", "NSDictionary", "NSDate", "NSSet", "NSURL"] }
+objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKPDFConfiguration", "WKContentWorld", "WKFrameInfo", "WKWebViewConfiguration", "WKWebsiteDataStore", "WKWebsiteDataRecord", "block2", "objc2-core-foundation", "objc2-app-kit"] }
 objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
 objc2-pdf-kit = { version = "0.3", features = ["PDFDocument", "PDFPage"] }
 block2 = "0.6"

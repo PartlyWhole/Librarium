@@ -64,6 +64,9 @@ pub fn run() {
             let app_support = app.path().app_data_dir()?;
             let logs = app.path().app_log_dir()?;
             let saver = Arc::new(librarium_pagesaver_webkit::WebKitPageSaver::new(app.handle().clone()));
+            // Its hidden window is made now, while the app is starting in front: making one
+            // later would bring the app forward in the middle of whatever the user is doing.
+            saver.warm();
             let composed = App::compose_with(compose::worker_binary()?, app_support, logs, saver);
             match composed.api.worker_ping() {
                 Ok(p) => log::info!("worker {} answered (pid {}) in {} µs", p.worker_version, p.pid, p.round_trip_us),
