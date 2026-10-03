@@ -17,6 +17,7 @@ objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKPDFConfiguration"
 objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
 objc2-pdf-kit = { version = "0.3", features = ["PDFDocument", "PDFPage"] }
 block2 = "0.6"
+log = "0.4"
 
 [lints]
 workspace = true

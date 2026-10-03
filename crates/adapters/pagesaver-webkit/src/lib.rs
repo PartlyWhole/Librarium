@@ -31,11 +31,15 @@ const WIDTH: f64 = 1024.0;
 
 /// Runs in the page (an isolated world): scrolls, waits for images, reads text and metadata.
 const EXTRACT: &str = r#"
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// No timers: a hidden window slows them down, more the longer it is hidden and the heavier the
+// page (seconds, then far longer), which made heavy pages miss their time limit.
 // Hidden windows stretch timers to about a second, so pass the page through without them:
 // a message-channel yield lets layout and lazy loaders run between scroll steps.
 const yieldTask = () => new Promise((r) => { const c = new MessageChannel(); c.port1.onmessage = () => r(); c.port2.postMessage(0); });
-const frame = () => new Promise((r) => { let done = false; requestAnimationFrame(() => { if (!done) { done = true; r(); } }); setTimeout(() => { if (!done) { done = true; r(); } }, 50); });
+// Waits by passing messages to itself (not slowed down) until the time is up.
+const sleep = (ms) => new Promise((r) => { const end = performance.now() + ms; const tick = () => (performance.now() >= end ? r() : yieldTask().then(tick)); tick(); });
+// A frame where there are frames (hidden windows have none), else a short wait.
+const frame = () => Promise.race([new Promise((r) => requestAnimationFrame(() => r())), sleep(50)]);
 const H = () => Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
 const eager = () => document.querySelectorAll("img[loading=lazy], iframe[loading=lazy]").forEach((i) => { i.loading = "eager"; });
 eager();
@@ -454,21 +458,37 @@ impl WebKitPageSaver {
         let started = Instant::now();
         window.navigate(parsed).map_err(|e| err(format!("the page couldn’t be opened: {e}")))?;
         let close = || self.reset(&label);
-        // Wait for the load to finish, but not forever: some pages never stop loading.
-        // Then save what is there, and say so.
-        let complete = match self.recv(&rx, timeout.mul_f64(0.6)) {
+        // Wait for the load to finish, but not forever: some pages never stop loading (ads keep
+        // coming). Then save what is there, and say so; most of the time goes to reading and
+        // printing it.
+        let complete = match self.recv(&rx, timeout.mul_f64(0.4)) {
             Ok(r) => r.is_some(),
             Err(e) => {
                 close();
                 return Err(e);
             }
         };
-        let left = timeout.saturating_sub(started.elapsed()).max(Duration::from_secs(20));
+        let loaded = started.elapsed();
+        let left = timeout.saturating_sub(loaded).max(Duration::from_secs(20));
         let result = self.extract(&label, left).and_then(|x| {
+            let read = started.elapsed();
             if !complete && x.visible_text.split_whitespace().count() < 20 {
                 return Err(err(format!("the page didn’t finish loading in {} s", timeout.as_secs())));
             }
-            let pdf = self.pdf(&label, x.width.min(WIDTH * 2.0), x.height, left)?;
+            let pdf = self.pdf(
+                &label,
+                x.width.min(WIDTH * 2.0),
+                x.height,
+                timeout.saturating_sub(read).max(Duration::from_secs(20)),
+            )?;
+            log::info!(
+                "saved {url}: loaded {} in {:.1} s, read in {:.1} s, printed {:.0} pt in {:.1} s",
+                if complete { "fully" } else { "partly" },
+                loaded.as_secs_f64(),
+                (read - loaded).as_secs_f64(),
+                x.height,
+                (started.elapsed() - read).as_secs_f64()
+            );
             Ok(SavedPage {
                 final_url: x.final_url,
                 status: x.status,
@@ -486,6 +506,15 @@ impl WebKitPageSaver {
                 pdf,
             })
         });
+        if let Err(e) = &result {
+            log::warn!(
+                "couldn’t save {url} after {:.1} s (loaded {}: {:.1} s): {}",
+                started.elapsed().as_secs_f64(),
+                if complete { "fully" } else { "partly" },
+                loaded.as_secs_f64(),
+                e.message
+            );
+        }
         close();
         result
     }
