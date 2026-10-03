@@ -115,7 +115,10 @@ come from.
   - The space gets its page (the Finder-like browser) and its sidebar tree.
   - Notes and Library are such spaces. Their pages ("notes", "library") are now the browser,
     and the Files page is gone.
-  - Daily notes stay in their own group.
+  - Daily notes stay in their own group. A space can have groups (`groups()`), shown first
+    at its top level and opening like a folder (`{ group }`), so the Notes page shows
+    "Daily notes" rather than looking empty. Nothing is dragged into or arranged in a group:
+    what it shows is decided by the records themselves.
 - **The sidebar has two trees,** Notes and Library: folders and records, arranged as on their
   pages. A section's heading takes drops onto its top level.
 - **Captures show under their item** through a Library-hosted slot, `library.item-children`.

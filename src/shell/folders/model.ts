@@ -36,11 +36,16 @@ export function ancestry(path: string): string[] {
 
 export type Entry =
   | { type: "folder"; id: string; path: string; name: string; count: number }
-  | { type: "record"; id: string; record: RecordInfo; name: string };
+  | { type: "record"; id: string; record: RecordInfo; name: string }
+  /** A group of records shown apart, opening like a folder (daily notes). */
+  | { type: "group"; id: string; group: string; name: string; count: number };
 
 export const folderId = (path: string) => `folder:${path}`;
 export const isFolderId = (id: string) => id.startsWith("folder:");
 export const pathOfId = (id: string) => id.slice("folder:".length);
+/** What a folder holds: folders and records. */
+export type FolderEntry = Exclude<Entry, { type: "group" }>;
+export const isGroupId = (id: string) => id.startsWith("group:");
 
 /**
  * What the folders hold. A folder whose records are all hidden (archived) is hidden too; an
@@ -100,10 +105,10 @@ export class Contents {
   }
 
   /** The folder's entries: its subfolders, then its records (unsorted). */
-  entries(path: string): Entry[] {
+  entries(path: string): FolderEntry[] {
     return [
-      ...this.subfoldersOf(path).map((p): Entry => ({ type: "folder", id: folderId(p), path: p, name: nameOf(p), count: this.subfoldersOf(p).length + this.recordsIn(p).length })),
-      ...this.recordsIn(path).map((r): Entry => ({ type: "record", id: r.id, record: r, name: r.title || "Untitled" })),
+      ...this.subfoldersOf(path).map((p): FolderEntry => ({ type: "folder", id: folderId(p), path: p, name: nameOf(p), count: this.subfoldersOf(p).length + this.recordsIn(p).length })),
+      ...this.recordsIn(path).map((r): FolderEntry => ({ type: "record", id: r.id, record: r, name: r.title || "Untitled" })),
     ];
   }
 }
@@ -116,6 +121,8 @@ export interface Sort {
 
 /** An entry's key in its folder's arrangement: a record's ID, or `folder:<name>`. */
 export const keyOf = (e: Entry): string => (e.type === "folder" ? `folder:${e.name}` : e.id);
+/** The record in an entry, if it is one. */
+export const recordOf = (e: Entry): RecordInfo | undefined => (e.type === "record" ? e.record : undefined);
 
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
@@ -123,25 +130,25 @@ const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: "base"
  * Folders first (as in Drive), then by the sort key, then by name. "Manual" is the order the
  * user arranged (`order`, as keys); what it doesn't list comes after, folders first.
  */
-export function sortEntries(entries: Entry[], sort: Sort, kindName: (r: RecordInfo) => string, order: string[] = []): Entry[] {
+export function sortEntries<E extends Entry>(entries: E[], sort: Sort, kindName: (r: RecordInfo) => string, order: string[] = []): E[] {
   if (sort.key === "manual") {
     const at = new Map(order.map((k, i) => [k, i]));
-    const rank = (e: Entry) => at.get(keyOf(e)) ?? Infinity;
+    const rank = (e: E) => at.get(keyOf(e)) ?? Infinity;
     return [...entries].sort((a, b) => {
       const ra = rank(a);
       const rb = rank(b);
       if (ra !== rb) return ra < rb ? -1 : 1;
-      if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+      if (a.type !== b.type) return a.type === "record" ? 1 : -1;
       return byName.compare(a.name, b.name);
     });
   }
-  const key = (e: Entry): string => {
-    if (sort.key === "kind") return e.type === "folder" ? "" : kindName(e.record);
-    if (sort.key === "added") return e.type === "folder" ? "" : e.record.created ?? "";
+  const key = (e: E): string => {
+    if (sort.key === "kind") return e.type === "record" ? kindName(e.record) : "";
+    if (sort.key === "added") return e.type === "record" ? e.record.created ?? "" : "";
     return "";
   };
   return [...entries].sort((a, b) => {
-    if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+    if (a.type !== b.type) return a.type === "record" ? 1 : -1;
     const k = sort.key === "name" ? 0 : byName.compare(key(a), key(b));
     return (k || byName.compare(a.name, b.name)) * sort.dir;
   });

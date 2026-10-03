@@ -35,6 +35,7 @@ export function notes(shell: ShellApi): void {
     page: "notes",
     title: "Notes",
     hide: grouped,
+    groups: () => groups.values(),
     emptyText: "No notes yet.",
     headerActions: () => [h("button", { class: "icon-button", "aria-label": "New note", title: "New note (⌘N)", onclick: () => shell.actions.run("notes.new") }, icon(FilePlus))],
   });

@@ -53,8 +53,10 @@ export interface FolderSpace {
   page: string;
   /** Its name, also the name of its top level ("Notes", "Library"). */
   title: string;
-  /** Records shown elsewhere and left out here (daily notes). */
+  /** Records shown elsewhere and left out of the folders (daily notes). */
   hide?(r: RecordInfo): boolean;
+  /** Groups shown first at its top level, each opening like a folder (Daily notes). */
+  groups?(): FolderGroup[];
   /** What a record holds, shown under it in the sidebar (an item's captures). */
   children?(r: RecordInfo): TreeNode[];
   /** Buttons for its page's header, before "New folder". */
@@ -114,16 +116,19 @@ export interface RecordLook {
   detail?(r: RecordInfo): string;
 }
 
-/** Feature-hosted slot, offered by Notes: groups of notes shown apart in the sidebar. */
-export const NOTE_GROUPS = "notes.groups";
-export interface NoteGroup {
+/** Records shown together apart from the folders, like a smart folder (daily notes). */
+export interface FolderGroup {
   id: string;
   title: string;
-  /** Notes this group shows (and Notes' folder tree then leaves out). */
+  /** Records this group shows (and the folders then leave out). */
   claims(r: RecordInfo): boolean;
   compare(a: RecordInfo, b: RecordInfo): number;
   label(r: RecordInfo): string;
 }
+
+/** Feature-hosted slot, offered by Notes: groups of notes shown apart in the sidebar. */
+export const NOTE_GROUPS = "notes.groups";
+export type NoteGroup = FolderGroup;
 
 /** What the shell offers features: its registries, navigation, prefs and records. */
 export interface StatusBar {

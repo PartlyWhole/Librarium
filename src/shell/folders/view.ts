@@ -15,8 +15,8 @@ import { dragSource, dropTarget, zone, type DragPayload } from "../../kit/dnd";
 import { toast } from "../../kit/toast";
 import type { FolderSpace, PageContext, ShellApi } from "../slots";
 import type { RecordInfo } from "../../generated/RecordInfo";
-import { ArrowDownUp, Folder, FolderPlus, LayoutGrid, List } from "lucide";
-import { Contents, badFolderName, folderId, isFolderId, join, keyOf, nameOf, parentOf, pathOfId, sortEntries, type Entry, type Sort, type SortKey } from "./model";
+import { ArrowDownUp, CalendarDays, Folder, FolderPlus, LayoutGrid, List } from "lucide";
+import { Contents, badFolderName, folderId, isFolderId, isGroupId, join, keyOf, nameOf, parentOf, pathOfId, sortEntries, type Entry, type Sort, type SortKey } from "./model";
 import { canMoveInto, canPlaceIn, moveInto, newFolder, renameFolder, renameRecord, type FolderStore } from "./ops";
 import { uniqueName } from "./model";
 
@@ -56,11 +56,13 @@ const added = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(un
 
 export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<string, string>, ctx: PageContext): () => void {
   const { shell } = fx;
-  const here = params.folder ?? "";
+  // A group (daily notes) shows like a folder of its own, beside the top level's folders.
+  const group = params.group ? fx.space.groups?.().find((g) => g.id === params.group) : undefined;
+  const here = group ? "" : params.folder ?? "";
   const { view, sort } = fx;
   const kind = fx.store.kind;
   const page = fx.space.page;
-  const spot = (folder: string) => `${page}:${folder}`;
+  const spot = (folder: string) => `${page}:${group ? `group:${group.id}` : folder}`;
   const filterText = signal("");
   const selection = new Selection();
   let order: string[] = [];
@@ -115,15 +117,23 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
     lastFocus.set(spot(parentOf(here)), folderId(here));
     go(parentOf(here));
   };
-  const open = (e: Entry) => (e.type === "folder" ? go(e.path) : (lastFocus.set(spot(here), e.id), shell.openRecord(e.id)));
-  const payload = (ids: string[]): DragPayload => ({ kind, records: ids.filter((i) => !isFolderId(i)), folders: ids.filter(isFolderId).map(pathOfId) });
+  const open = (e: Entry) => {
+    if (focused) lastFocus.set(spot(here), focused);
+    if (e.type === "folder") go(e.path);
+    else if (e.type === "group") shell.router.go(page, { group: e.group });
+    else shell.openRecord(e.id);
+  };
+  const payload = (ids: string[]): DragPayload => ({ kind, records: ids.filter((i) => !isFolderId(i) && !isGroupId(i)), folders: ids.filter(isFolderId).map(pathOfId) });
   const dropInto = (el: HTMLElement, dest: string) =>
     dropTarget(el, {
       accepts: (p) => canMoveInto(shell, p, dest, kind),
       drop: (p) => void moveInto(shell, fx.store, p, dest, fx.rootName()),
     });
-  // Dropped on the background: into this folder (from the sidebar, say).
-  dropInto(body, here);
+  // Dropped on the background (or the note an empty folder shows): into this folder.
+  if (!group) {
+    dropInto(body, here);
+    dropInto(empty, here);
+  }
 
   // ---- painting ------------------------------------------------------------------------
   const markSelection = () => {
@@ -163,14 +173,17 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
   const nameCell = (e: Entry) => {
     const name = h("span", { class: "files-name-text" }, e.name);
     const sub = e.type === "record" ? fx.detail(e.record) : "";
-    return h("span", { class: "files-name" }, icon(e.type === "folder" ? Folder : fx.iconOf(e.record), view.peek() === "icons" ? 40 : 16), h("span", { class: "files-name-lines" }, name, sub ? h("span", { class: "files-detail" }, sub) : null));
+    return h("span", { class: "files-name" }, icon(e.type === "folder" ? Folder : e.type === "group" ? CalendarDays : fx.iconOf(e.record), view.peek() === "icons" ? 40 : 16), h("span", { class: "files-name-lines" }, name, sub ? h("span", { class: "files-detail" }, sub) : null));
   };
   const entryEl = (e: Entry) => {
-    const kindText = e.type === "folder" ? `Folder · ${e.count ? count(e.count, "item") : "empty"}` : fx.kindName(e.record);
+    const kindText = e.type === "record" ? fx.kindName(e.record) : `${e.type === "folder" ? "Folder" : "Group"} · ${e.count ? count(e.count, "item") : "empty"}`;
     const el = h("div", { role: "option", class: `files-entry ${e.type}`, tabindex: "-1", dataset: { id: e.id }, title: e.type === "record" && fx.detail(e.record) ? `${e.name}\n${fx.detail(e.record)}` : e.name },
       nameCell(e),
       view.peek() === "list" ? [h("span", { class: "files-kind" }, kindText), h("span", { class: "files-added" }, e.type === "record" ? added(e.record.created) : "")] : null,
     );
+    // A group takes nothing (what it shows is decided by the records themselves), and in a
+    // group things aren't arranged.
+    if (e.type === "group" || group) return el;
     // Dropped on its edges, things go beside it (arranged by hand); in a folder's middle, into it.
     const into = (p: DragPayload) => e.type === "folder" && canMoveInto(shell, p, e.path, kind);
     dropTarget(el, {
@@ -197,6 +210,7 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       stale = true;
       return;
     }
+    const groupRecords = group ? shell.records.list(kind).filter((r) => group.claims(r)).sort(group.compare) : [];
     if (here && !c.has(here)) {
       // Moved or removed elsewhere: show the nearest folder still there.
       let up = parentOf(here);
@@ -204,20 +218,23 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       queueMicrotask(() => alive && shell.router.go(page, up ? { folder: up } : {}, { replace: true }));
       return;
     }
-    ctx.setTitle(here ? nameOf(here) : fx.rootName());
+    ctx.setTitle(group ? group.title : here ? nameOf(here) : fx.rootName());
     untracked(() => {
       // The path, each part a place to go and to drop on.
       const parts = ["", ...here.split("/").filter(Boolean).map((_, i, a) => a.slice(0, i + 1).join("/"))];
-      replace(crumbs, parts.map((p) => {
-        const current = p === here;
+      replace(crumbs, [...parts.map((p) => {
+        const current = p === here && !group;
         const b = h("button", { class: "crumb", type: "button", "aria-current": current ? "location" : undefined, onclick: () => !current && go(p) }, p ? nameOf(p) : fx.rootName());
         if (!current) dropInto(b, p);
         return h("li", null, b);
-      }));
+      }), group ? h("li", null, h("button", { class: "crumb", type: "button", "aria-current": "location" }, group.title)) : null]);
       listButton.setAttribute("aria-pressed", String(v === "list"));
       iconsButton.setAttribute("aria-pressed", String(v === "icons"));
-      const all = c.entries(here);
-      const shown = sortEntries(q ? all.filter((e) => e.name.toLowerCase().includes(q)) : all, s, fx.kindName, arranged);
+      // At the top level, the space's groups come first, like folders kept on top.
+      const groups: Entry[] = !here && !group ? (fx.space.groups?.() ?? []).map((g) => ({ type: "group", id: `group:${g.id}`, group: g.id, name: g.title, count: shell.records.list(kind).filter((r) => g.claims(r)).length })) : [];
+      const all: Entry[] = group ? groupRecords.map((r): Entry => ({ type: "record", id: r.id, record: r, name: group.label(r) })) : [...groups, ...c.entries(here)];
+      const match = (e: Entry) => !q || e.name.toLowerCase().includes(q);
+      const shown = group ? all.filter(match) : [...groups.filter(match), ...sortEntries(c.entries(here).filter(match), s, fx.kindName, arranged)];
       entries = new Map(shown.map((e) => [e.id, e]));
       order = shown.map((e) => e.id);
       const kept = selection.inOrder(order);
@@ -225,15 +242,15 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       if (!focused || !entries.has(focused)) focused = kept[0] ?? order[0] ?? null;
       const hadFocus = body.contains(document.activeElement);
       body.className = `files-body ${v}`;
-      head.hidden = v !== "list" || !shown.length;
+      head.hidden = v !== "list" || !shown.length || !!group;
       const col = (key: SortKey, label: string) =>
         h("button", { class: `files-col ${key}`, type: "button", "aria-sort": s.key === key ? (s.dir === 1 ? "ascending" : "descending") : undefined, onclick: () => sort.set({ key, dir: s.key === key ? (-s.dir as 1 | -1) : 1 }) }, label, s.key === key ? h("span", { class: "files-arrow", "aria-hidden": "true" }, s.dir === 1 ? "▲" : "▼") : null);
       replace(head, col("name", "Name"), col("kind", "Kind"), col("added", "Added"));
       replace(body, shown.map(entryEl));
-      const folders = all.filter((e) => e.type === "folder").length;
+      const folders = all.filter((e) => e.type !== "record").length;
       counts = [folders ? count(folders, "folder") : "", all.length - folders ? count(all.length - folders, "item") : ""].filter(Boolean).join(", ") || "Empty";
       empty.hidden = shown.length > 0;
-      replace(empty, q ? h("p", null, "Nothing in this folder matches.") : h("div", null, h("p", null, here ? "This folder is empty." : fx.space.emptyText ?? "Nothing here yet."), h("p", { class: "muted small" }, "Drag things here, or make a folder (⇧⌘N). What you add while looking at a folder goes into it.")));
+      replace(empty, q ? h("p", null, "Nothing in this folder matches.") : h("div", null, h("p", null, group ? `No ${group.title.toLowerCase()} yet.` : here ? "This folder is empty." : fx.space.emptyText ?? "Nothing here yet."), h("p", { class: "muted small" }, "Drag things here, or make a folder (⇧⌘N). What you add while looking at a folder goes into it.")));
       markSelection();
       if (hadFocus || document.activeElement === document.body || !document.activeElement) elOf(focused)?.focus({ preventScroll: true });
     });
@@ -246,6 +263,7 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
     const el = elOf(id);
     const text = el?.querySelector<HTMLElement>(".files-name-text");
     if (!e || !el || !text) return;
+    if (e.type === "group") return;
     if (e.type === "record" && e.record.read_only) return toast("This item can’t be renamed: it’s read-only.");
     renaming = e.id;
     const input = h("input", { class: "files-rename", value: e.name, "aria-label": `New name for “${e.name}”`, spellcheck: false }) as HTMLInputElement;
@@ -287,6 +305,10 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
   };
 
   const makeFolder = async () => {
+    if (group) {
+      go("");
+      return void setTimeout(() => makeFolderHere(), 0);
+    }
     const c = untracked(fx.contents);
     const name = uniqueName("untitled folder", (n) => c.has(join(here, n)));
     const path = await newFolder(fx.store, join(here, name));
@@ -316,7 +338,7 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
     const es = ids.map((i) => entries.get(i)).filter((e): e is Entry => !!e);
     if (es.length === 1) {
       const one = es[0]!;
-      return one.type === "folder" ? fx.folderMenu(one.path) : fx.recordMenu([one.record]);
+      return one.type === "folder" ? fx.folderMenu(one.path) : one.type === "group" ? [] : fx.recordMenu([one.record]);
     }
     const rs = es.flatMap((e) => (e.type === "record" ? [e.record] : []));
     const fs = es.flatMap((e) => (e.type === "folder" ? [e.path] : []));
@@ -325,7 +347,8 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
   const menuFor = (ids: string[], at: { x: number; y: number }) => {
     const es = ids.map((i) => entries.get(i)).filter((e): e is Entry => !!e);
     const one = es.length === 1 ? es[0]! : null;
-    if (one) {
+    if (one?.type === "group") contextMenu([{ label: "Open", run: () => open(one) }], at, one.name);
+    else if (one) {
       const more = menuItems(ids);
       contextMenu([{ label: "Open", run: () => open(one) }, { label: "Rename", run: () => rename(one.id) }, ...(more.length ? ["separator" as const, ...more] : [])], at, one.name);
     } else if (es.length) contextMenu(menuItems(ids), at, `${es.length} items`);
@@ -373,7 +396,7 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
   // Dragging what is selected (or the item pressed, if it isn't) onto a folder moves it.
   const stopDrag = dragSource(body, (t) => {
     const el = entryAt(t);
-    if (!el || renaming) return null;
+    if (!el || renaming || isGroupId(el.dataset.id!)) return null;
     const id = el.dataset.id!;
     if (!selection.ids.peek().has(id)) {
       selection.set([id], id);
@@ -456,7 +479,8 @@ export function renderFiles(fx: FilesCtx, host: HTMLElement, params: Record<stri
       menuFor(ids, menuPointFor(el));
     } else if (e.altKey && !mod && (k === "ArrowUp" || k === "ArrowDown" || (cols > 1 && (k === "ArrowLeft" || k === "ArrowRight")))) {
       // ⌥ and an arrow move what is selected one place along (arranging by hand).
-      const sel = selection.inOrder(order);
+      if (group) return;
+      const sel = selection.inOrder(order).filter((i) => !isGroupId(i));
       if (!sel.length && focused) sel.push(focused);
       if (!sel.length) return;
       const back = k === "ArrowUp" || k === "ArrowLeft";

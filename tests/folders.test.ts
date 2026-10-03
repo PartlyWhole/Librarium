@@ -6,6 +6,7 @@ import { notes } from "../src/features/notes";
 import { library } from "../src/features/library";
 import { archive } from "../src/features/archive";
 import { captures } from "../src/features/captures";
+import { daily } from "../src/features/daily";
 import { Contents, folderOf, placed, sortEntries, uniqueName, type Entry } from "../src/shell/folders/model";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -259,6 +260,33 @@ describe("the Notes and Library pages", () => {
     expect(drag(row("Jacques Ellul"), row("French"), "before")).toBe("drop-before");
     await wait(30);
     expect(names()).toEqual(["Jacques Ellul", "French"]);
+  });
+});
+
+describe("daily notes on the Notes page", () => {
+  it("show as a group first at the top level, which opens like a folder", async () => {
+    last?.destroy();
+    mock.reset();
+    mock.state.folder = "/lib";
+    seed("note", "2026-10-03", "Morning.\n", { "daily.date": "2026-10-03" });
+    document.body.innerHTML = '<div id="app"></div>';
+    const shell = createShell(document.getElementById("app")!, [notes, daily]);
+    last = shell;
+    await wait(60);
+    shell.router.go("notes", {});
+    await wait(30);
+    // Not "No notes yet": the daily note is there, in its group.
+    expect(names()).toEqual(["Daily notes"]);
+    expect(document.querySelector<HTMLElement>(".files-empty")!.hidden).toBe(true);
+    // (Today's note was made at startup, beside this one.)
+    const n = shell.records.list("note").length;
+    expect(row("Daily notes").textContent).toContain(`Group · ${n} item`);
+    row("Daily notes").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await wait(30);
+    expect(shell.router.current()).toEqual({ page: "notes", params: { group: "daily" } });
+    expect(names()).toContain("Saturday, October 3, 2026");
+    expect(names()).toHaveLength(n);
+    expect([...document.querySelectorAll(".crumb")].map((c) => c.textContent)).toEqual(["Notes", "Daily notes"]);
   });
 });
 

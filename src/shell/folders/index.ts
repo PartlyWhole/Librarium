@@ -16,7 +16,7 @@ import type { Folders, FolderSpace, PageContext, ShellApi } from "../slots";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import type { FoldersList } from "../../generated/FoldersList";
 import { FileText, Folder, FolderOpen } from "lucide";
-import { Contents, badFolderName, folderOf, join, keyOf, nameOf, parentOf, placed, sortEntries, within, type Sort } from "./model";
+import { Contents, badFolderName, folderOf, join, keyOf, nameOf, parentOf, placed, sortEntries, within, type FolderEntry, type Sort } from "./model";
 import { canMoveInto, canPlaceIn, moveInto, newFolder, pickFolder, removeFolder, renameFolder, type FolderStore } from "./ops";
 import { arriveWith, makeFolderHere, renderFiles, type FilesCtx } from "./view";
 
@@ -59,7 +59,7 @@ interface Space {
   store: FolderStore;
   contents(): Contents;
   sort: Signal<Sort>;
-  sorted(folder: string): ReturnType<typeof sortEntries>;
+  sorted(folder: string): FolderEntry[];
   fx: FilesCtx;
   moveRecords(rs: RecordInfo[], folders?: string[]): Promise<void>;
   showFolderMenu(path: string, at: { x: number; y: number }): void;
@@ -247,7 +247,7 @@ export function createFolders(shell: ShellApi): Folders {
     const openId = r.params.id;
     const store = sp.store;
     const entries = (path: string): TreeNode[] =>
-      sp.sorted(path).map((e) => {
+      sp.sorted(path).map((e): TreeNode => {
         if (e.type === "record") {
           const kids = sp.def.children?.(e.record) ?? [];
           return {
