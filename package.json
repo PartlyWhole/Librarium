@@ -16,7 +16,7 @@
     "gen:types": "cargo run -q -p librarium-contracts --example gen_types",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "test": "npm run test:web && npm run test:webkit && npm run test:rust",
-    "test:web": "vitest run",
+    "test:web": "vitest run --exclude tests/perf.test.ts --exclude tests/shell.test.ts && vitest run tests/perf.test.ts tests/shell.test.ts --no-file-parallelism",
     "test:rust": "cargo test --workspace",
     "arch-report": "vitest run tests/arch.test.ts && cargo test -q -p librarium-app --test arch_report -- --nocapture",
     "lint": "npm run lint:web && npm run lint:deps && npm run lint:rust",
