@@ -133,9 +133,10 @@ describe("tabs in the window", () => {
     const { shell, a, b } = await boot();
     shell.openRecord(a.id);
     shell.openRecord(b.id, {}, { newTab: true });
-    await wait(700);
-    const saved = mock.state.settings["ui.tabs"] as { tabs: unknown[]; active: number } | undefined;
-    expect(saved?.tabs).toHaveLength(2);
-    expect(saved?.active).toBe(1);
+    // Saved shortly after (debounced): wait for it, however busy the machine is.
+    const saved = () => mock.state.settings["ui.tabs"] as { tabs: unknown[]; active: number } | undefined;
+    for (let i = 0; i < 60 && saved()?.tabs.length !== 2; i++) await wait(50);
+    expect(saved()?.tabs).toHaveLength(2);
+    expect(saved()?.active).toBe(1);
   });
 });

@@ -36,16 +36,13 @@ export function ancestry(path: string): string[] {
 
 export type Entry =
   | { type: "folder"; id: string; path: string; name: string; count: number }
-  | { type: "record"; id: string; record: RecordInfo; name: string }
-  /** A group of records shown apart, opening like a folder (daily notes). */
-  | { type: "group"; id: string; group: string; name: string; count: number };
+  | { type: "record"; id: string; record: RecordInfo; name: string };
 
 export const folderId = (path: string) => `folder:${path}`;
 export const isFolderId = (id: string) => id.startsWith("folder:");
 export const pathOfId = (id: string) => id.slice("folder:".length);
 /** What a folder holds: folders and records. */
-export type FolderEntry = Exclude<Entry, { type: "group" }>;
-export const isGroupId = (id: string) => id.startsWith("group:");
+export type FolderEntry = Entry;
 
 /**
  * What the folders hold. A folder whose records are all hidden (archived) is hidden too; an

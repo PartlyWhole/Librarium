@@ -1,8 +1,7 @@
-/** Notes: pages, the sidebar section (folders, plus groups other modules contribute). */
+/** Notes: pages, and the Notes section (its folders and notes, daily notes among them). */
 import { h } from "../../kit/dom";
 import { icon } from "../../kit/icon";
 import { effect } from "../../kit/signal";
-import type { TreeNode } from "../../kit/tree";
 import { call, pickSavePath } from "../../backend";
 import { parseLinks } from "../../editor/links";
 import type { RecordText } from "../../generated/RecordText";
@@ -11,7 +10,6 @@ import { renderNote } from "./page";
 import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
 import type { ShellApi } from "../../shell/api";
-import { NOTE_GROUPS, type NoteGroup } from "../../shell/slots";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import { Files, FileText, FilePlus } from "lucide";
 
@@ -24,18 +22,14 @@ export function folderOf(r: RecordInfo): string {
 }
 
 export function notes(shell: ShellApi): void {
-  const groups = shell.slot<NoteGroup>(NOTE_GROUPS);
   shell.openers.add("notes", KIND, "note");
   shell.looks.add("notes", KIND, { kind: KIND, icon: () => FileText, kindName: () => "Note" });
 
-  // Notes live in their own folders, browsed as in Finder; daily notes are shown apart.
-  const grouped = (n: RecordInfo) => groups.values().some((g) => g.claims(n));
+  // Notes live in their own folders, browsed as in Finder (daily notes too: they are notes).
   shell.folders.add({
     kind: KIND,
     page: "notes",
     title: "Notes",
-    hide: grouped,
-    groups: () => groups.values(),
     emptyText: "No notes yet.",
     headerActions: () => [h("button", { class: "icon-button", "aria-label": "New note", title: "New note (⌘N)", onclick: () => shell.actions.run("notes.new") }, icon(FilePlus))],
   });
@@ -104,18 +98,7 @@ export function notes(shell: ShellApi): void {
     title: "Notes",
     emptyText: "No notes yet.",
     drop: shell.folders.dropOnTop(KIND),
-    nodes() {
-      const all = shell.records.list(KIND);
-      const r = shell.router.current();
-      const current = r.page === "note" ? r.params.id : undefined;
-      const open = (id: string) => shell.openRecord(id);
-      const grouped: TreeNode[] = groups.values().map((g) => {
-        const mine = all.filter((n) => g.claims(n)).sort(g.compare);
-        return { id: `group:${g.id}`, label: g.title, children: mine.length ? mine.map((n) => ({ id: n.id, label: g.label(n), icon: FileText, current: n.id === current, onActivate: () => open(n.id) })) : [{ id: `group-empty:${g.id}`, label: "None yet", placeholder: true }] };
-      });
-      // Then the notes' folders, and the notes in them.
-      return [...grouped, ...shell.folders.tree(KIND)];
-    },
+    nodes: () => shell.folders.tree(KIND),
   }, 0);
 }
 

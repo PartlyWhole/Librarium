@@ -101,7 +101,7 @@ export function createFolders(shell: ShellApi): Folders {
       const l = mine();
       const m = shell.records.byId();
       if (memo && memo.f === l && memo.m === m) return memo.c;
-      const all = [...m.values()].filter((r) => r.kind === kind && !def.hide?.(r));
+      const all = [...m.values()].filter((r) => r.kind === kind);
       const c = new Contents(l?.folders ?? [], all, (r) => shell.records.isHidden(r));
       memo = { f: l, m, c };
       return c;

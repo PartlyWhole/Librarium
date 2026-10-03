@@ -1,10 +1,12 @@
-/** Daily: any note can be a day. Today's page, the daily group in Notes, the day's start. */
+/**
+ * Daily: a daily note is a note that knows its day (`daily.date`), made at the top level of
+ * Notes and treated like any other. The ribbon's Today opens today's, making it if needed.
+ */
 import { h, replace } from "../../kit/dom";
 import { call } from "../../backend";
 import type { Written } from "../../generated/Written";
 import { longDate } from "../../kit/format";
 import type { ShellApi } from "../../shell/api";
-import { NOTE_GROUPS, type NoteGroup } from "../../shell/slots";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import { CalendarDays } from "lucide";
 
@@ -24,14 +26,6 @@ export function localDate(now: Date, startHour: number): string {
 
 export function daily(shell: ShellApi): void {
   const dayStart = shell.prefs.pref(DAY_START, 4);
-  shell.slot<NoteGroup>(NOTE_GROUPS).add("daily", "daily", {
-    id: "daily",
-    title: "Daily notes",
-    claims: (r) => r.kind === "note" && dateOf(r) !== null,
-    compare: (a, b) => (dateOf(b) ?? "").localeCompare(dateOf(a) ?? "") || a.id.localeCompare(b.id),
-    label: (r) => (r.title && r.title !== dateOf(r) ? r.title : longDate(dateOf(r)!)),
-  });
-
   shell.pages.add("daily", "today", {
     id: "today",
     title: "Today",

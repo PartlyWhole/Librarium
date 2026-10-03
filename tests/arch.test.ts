@@ -7,7 +7,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { mock } from "./mock/backend";
 import { createShell } from "../src/shell/shell";
-import { SHELL_SLOTS, NOTE_GROUPS } from "../src/shell/slots";
+import { SHELL_SLOTS } from "../src/shell/slots";
 import { notes } from "../src/features/notes";
 import { daily } from "../src/features/daily";
 import { library } from "../src/features/library";
@@ -33,7 +33,6 @@ it("records the interface's slot contributors", () => {
     "shell.record-actions": shell.recordActions.contributors(),
     "shell.editor-extensions": shell.editorExtensions.contributors(),
     "shell.reader-engines": shell.readerEngines.contributors(),
-    [NOTE_GROUPS]: shell.slot(NOTE_GROUPS).contributors(),
   };
   for (const s of Object.keys(slots)) expect([...SHELL_SLOTS, "shell.openers"]).toContain(s);
   const dir = path.resolve(import.meta.dirname, "../target/arch");

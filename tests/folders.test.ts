@@ -263,30 +263,35 @@ describe("the Notes and Library pages", () => {
   });
 });
 
-describe("daily notes on the Notes page", () => {
-  it("show as a group first at the top level, which opens like a folder", async () => {
+describe("daily notes", () => {
+  it("are notes at the top level of Notes, opened (or made) from the ribbon's Today", async () => {
     last?.destroy();
     mock.reset();
     mock.state.folder = "/lib";
-    seed("note", "2026-10-03", "Morning.\n", { "daily.date": "2026-10-03" });
+    seed("note", "2026-10-01", "Morning.\n", { "daily.date": "2026-10-01" });
+    seed("note", "Reading list");
     document.body.innerHTML = '<div id="app"></div>';
     const shell = createShell(document.getElementById("app")!, [notes, daily]);
     last = shell;
     await wait(60);
+    // Today: one is made at the top level, and opened; a second press opens the same one.
+    document.querySelector<HTMLElement>('.ribbon [data-page="today"]')!.click();
+    await wait(40);
+    const dailies = () => shell.records.list("note").filter((r) => r.fields["daily.date"]);
+    expect(dailies()).toHaveLength(2);
+    const today = dailies().find((r) => r.fields["daily.date"] !== "2026-10-01")!;
+    expect(shell.router.current()).toEqual({ page: "note", params: { id: today.id } });
+    expect(folderOf(today)).toBe("");
+    document.querySelector<HTMLElement>('.ribbon [data-page="today"]')!.click();
+    await wait(40);
+    expect(dailies()).toHaveLength(2);
+    // On the Notes page they are notes like any other.
     shell.router.go("notes", {});
     await wait(30);
-    // Not "No notes yet": the daily note is there, in its group.
-    expect(names()).toEqual(["Daily notes"]);
-    expect(document.querySelector<HTMLElement>(".files-empty")!.hidden).toBe(true);
-    // (Today's note was made at startup, beside this one.)
-    const n = shell.records.list("note").length;
-    expect(row("Daily notes").textContent).toContain(`Group · ${n} item`);
-    row("Daily notes").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
-    await wait(30);
-    expect(shell.router.current()).toEqual({ page: "notes", params: { group: "daily" } });
-    expect(names()).toContain("Saturday, October 3, 2026");
-    expect(names()).toHaveLength(n);
-    expect([...document.querySelectorAll(".crumb")].map((c) => c.textContent)).toEqual(["Notes", "Daily notes"]);
+    expect(names()).toEqual(expect.arrayContaining(["2026-10-01", "Reading list", today.title]));
+    expect(names()).not.toContain("Daily notes");
+    // …and can be put in a folder like any other.
+    expect(shell.recordActionsFor([today]).map((a) => a.label)).toContain("Move to folder…");
   });
 });
 

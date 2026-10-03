@@ -81,13 +81,13 @@ describe("layout", () => {
     expect(mock.state.calls.some((c) => c.method === "folder.open")).toBe(false);
   });
 
-  it("lists daily notes in their own group and others by folder", async () => {
+  it("lists notes by folder, daily notes among them at the top level (no group of their own)", async () => {
     await boot();
-    const labels = [...document.querySelectorAll(".tree-label")].map((l) => l.textContent);
-    expect(labels).toContain("Daily notes");
-    expect(labels).toContain("Thinkers");
-    expect(labels).toContain("Jacques Ellul");
-    expect(labels.indexOf("Daily notes")).toBeLessThan(labels.indexOf("Thinkers"));
+    const rows = [...document.querySelectorAll(".tree [role=treeitem]")].map((r) => `${r.getAttribute("aria-level")} ${r.textContent}`);
+    expect(rows).not.toContain("2 Daily notes");
+    expect(rows).toContain("2 Thinkers");
+    expect(rows).toContain("3 Jacques Ellul");
+    expect(rows.some((r) => /^2 \d{4}-\d{2}-\d{2}$/.test(r))).toBe(true);
   });
 
   it("every icon button has a spoken label and a tooltip", async () => {
