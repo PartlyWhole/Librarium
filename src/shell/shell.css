@@ -448,3 +448,6 @@ body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6
 .job-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .jobs-head { align-items: baseline; gap: 10px; }
 .panel-section:focus { outline: none; }
+.side-panel-head { position: sticky; top: -8px; margin: -8px -12px 0; display: flex; justify-content: flex-end; padding: 4px 4px 0; background: inherit; z-index: 1; }
+.ws-header .icon-button[aria-pressed=true] { color: var(--accent-text); }
+.ws-end { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }

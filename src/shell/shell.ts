@@ -27,7 +27,7 @@ import { Records } from "./records";
 import { Router } from "./router";
 import type { EmbedRenderer, Page, RecordAction, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
 import { contextMenu, type MenuItem } from "../kit/menu";
-import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, Command, Keyboard, Settings, FolderOpen } from "lucide";
+import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, Command, Keyboard, Settings, FolderOpen, X } from "lucide";
 
 export type Feature = (shell: ShellApi) => void;
 
@@ -229,8 +229,12 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const headerActions = h("div", { class: "ws-actions" });
   const pageHost = h("div", { class: "ws-page" });
   const pageScroll = h("div", { class: "page-scroll" }, pageHost);
-  const workspace = h("main", { class: "workspace" }, h("header", { class: "ws-header" }, h("div", { class: "ws-nav" }, back, fwd), titleEl, headerActions), pageScroll);
-  const panelEl = h("aside", { class: "side-panel", "aria-label": "Side panel" });
+  // The side panel's own button, top right (the sidebar's is top left).
+  const panelToggle = iconButton(PanelRight, "Toggle side panel", () => actions.run("shell.toggleSidePanel"), "Mod+Alt+\\");
+  const workspace = h("main", { class: "workspace" }, h("header", { class: "ws-header" }, h("div", { class: "ws-nav" }, back, fwd), titleEl, h("div", { class: "ws-end" }, headerActions, panelToggle)), pageScroll);
+  const panelBody = h("div", { class: "side-panel-body" });
+  const panelClose = h("button", { class: "icon-button", type: "button", "aria-label": "Close the side panel", title: `Close the side panel (${display("Mod+Alt+\\")})`, onclick: () => (panelOpen.set(false), panelToggle.focus()) }, icon(X, 15));
+  const panelEl = h("aside", { class: "side-panel", "aria-label": "Side panel" }, h("div", { class: "side-panel-head" }, panelClose), panelBody);
   const statusLeft = h("div", { class: "status-left", role: "status", "aria-live": "polite" });
   const statusJobs = h("div", { class: "status-jobs", role: "status", "aria-live": "polite" });
   const statusRight = h("div", { class: "status-right" });
@@ -244,6 +248,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     app.classList.toggle("with-panel", panelOpen());
     sidebarEl.hidden = !sidebarOpen();
     panelEl.hidden = !panelOpen();
+    panelToggle.setAttribute("aria-pressed", String(panelOpen()));
   });
   const theme = prefs.pref("ui.theme", "system");
   effect(() => {
@@ -331,7 +336,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     for (const d of panelDisposers) d();
     panelDisposers = [];
     const sections = sidePanel.values().filter((s) => s.applies(r));
-    panelEl.replaceChildren(
+    panelBody.replaceChildren(
       ...(sections.length
         ? sections.map((s) => {
             const body = h("div", { class: "panel-body" });
