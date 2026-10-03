@@ -98,9 +98,14 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       const items: MenuItem[] = [];
       const one = rs.length === 1 ? rs[0]! : null;
       if (one && openers.get(one.kind)) items.push({ label: "Open", run: () => shell.openRecord(one.id) });
-      const extra = recordActions.values().filter((a) => rs.every((r) => a.applies(r)));
+      const extra = recordActions
+        .values()
+        .map((a) => ({ a, on: a.partial ? rs.filter((r) => a.applies(r)) : rs.every((r) => a.applies(r)) ? rs : [] }))
+        .filter((x) => x.on.length)
+        // Destructive entries go last.
+        .sort((x, y) => Number(!!x.a.destructive) - Number(!!y.a.destructive));
       if (items.length && extra.length) items.push("separator");
-      for (const a of extra) items.push({ label: typeof a.label === "function" ? a.label(rs.length) : a.label, destructive: a.destructive, run: () => void a.run(rs) });
+      for (const { a, on } of extra) items.push({ label: typeof a.label === "function" ? a.label(on.length) : a.label, destructive: a.destructive, run: () => void a.run(on) });
       if (items.length) contextMenu(items, at, one ? one.title || "Untitled" : `${rs.length} items`);
     },
     slot<T>(id: string) {

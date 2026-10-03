@@ -68,6 +68,8 @@ export interface RecordAction {
   applies(r: RecordInfo): boolean;
   run(rs: RecordInfo[]): void | Promise<void>;
   destructive?: boolean;
+  /** With several selected, offered when it applies to some of them, and run on those. */
+  partial?: boolean;
 }
 
 /** Feature-hosted slot, offered by Notes: groups of notes shown apart in the sidebar. */

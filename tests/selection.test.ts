@@ -72,9 +72,9 @@ describe("several records at once", () => {
     essays[0]!.focus();
     essays[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "a", metaKey: true, bubbles: true }));
     expect(opts().every((o) => o.getAttribute("aria-selected") === "true")).toBe(true);
-    // The book has no snapshots: with it selected, the snapshot action isn't offered.
+    // With everything selected, the snapshot action counts only the pages that have older ones.
     essays[0]!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-    expect(menu()).toEqual(["Archive 3 items"]);
+    expect(menu()).toEqual(["Archive 3 items", "Remove older snapshots of 2 pages…"]);
     document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     // Just the two essays.
     click(essays[0]!);

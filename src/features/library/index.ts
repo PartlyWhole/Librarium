@@ -104,6 +104,7 @@ export function library(shell: ShellApi): void {
     label: (n) => (n === 1 ? "Remove older snapshots…" : `Remove older snapshots of ${n} pages…`),
     applies: (r) => r.kind === KIND && snapshotsOf(r).length > 1 && !r.read_only,
     destructive: true,
+    partial: true,
     run: (rs) => void removeSnapshots(shell, rs.map((r) => ({ id: r.id }))),
   });
   shell.openers.add("library", KIND, "item");
