@@ -347,17 +347,16 @@ mark { background: var(--selection); color: inherit; border-radius: 2px; padding
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
 body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6px; }
-.region-layer { position: absolute; inset: 0; cursor: crosshair; z-index: 5; background: rgb(0 0 0 / 4%); }
+.region-layer { position: fixed; cursor: crosshair; z-index: 50; background: rgb(0 0 0 / 6%); }
+.region-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); padding: 6px 12px; border-radius: var(--r1); background: var(--ink); color: var(--bg); font-size: var(--small); pointer-events: none; white-space: nowrap; }
 .region-box { position: absolute; display: none; border: 2px solid var(--accent); background: var(--selection); }
 .region-mark { position: absolute; border: 2px solid var(--accent); background: hsl(258 88% 66% / 12%); pointer-events: none; z-index: 3; border-radius: 2px; }
 .image-holder { position: relative; display: inline-block; }
 .reader-tools { display: inline-flex; gap: 2px; margin-left: 8px; align-items: center; }
-.tray { font-size: var(--small); color: var(--accent-text); margin-left: 6px; }
 
 /* Captures and embeds */
 .capture-quote, .embed-quote { margin: 0 0 8px; padding: 4px 0 4px 14px; border-left: 3px solid var(--accent); color: var(--ink); white-space: pre-wrap; }
 .capture-region { display: block; max-width: 100%; max-height: 320px; border: 1px solid var(--border); border-radius: var(--r1); margin: 0 0 8px; }
-.capture-dialog { max-height: 80vh; overflow: auto; }
 .words-input { width: 100%; border: 1px solid var(--border-strong); border-radius: var(--r1); padding: 8px; background: var(--bg); color: var(--ink); resize: vertical; }
 .words-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--selection); }
 .capture-part { margin: 0 0 16px; }
@@ -381,3 +380,25 @@ body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6
 .archive-row .button { flex: none; display: inline-flex; align-items: center; gap: 4px; }
 .delete-list { max-height: 200px; overflow: auto; margin: 8px 0 0; padding-left: 20px; }
 @media (max-width: 600px) { .archive-row { flex-wrap: wrap; } }
+
+/* Making a capture: the panel beside the document, the button by a selection, pending marks */
+.reader-body { flex: 1; min-height: 0; display: flex; }
+.reader-body .reader-stage { min-width: 0; }
+.reader-aside { width: 320px; flex: none; border-left: 1px solid var(--border); background: var(--bg); overflow: auto; }
+.capture-draft { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.capture-draft-head { display: flex; align-items: center; justify-content: space-between; }
+.capture-draft-head h2 { font-size: var(--small); font-weight: 600; margin: 0; }
+.draft-part { position: relative; padding-right: 22px; }
+.draft-part .capture-quote, .draft-part .capture-region { margin: 0; }
+.draft-part .remove { position: absolute; top: 0; right: 0; }
+.draft-gap { color: var(--muted); font-size: var(--small); padding-left: 17px; }
+.draft-hint { color: var(--muted); font-size: var(--tiny); margin: 0; }
+.capture-draft .words-input { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; font: inherit; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: var(--r1); background: var(--bg); color: var(--ink); }
+.capture-draft .ask-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+.selection-pop { position: fixed; z-index: 40; display: flex; gap: 2px; padding: 3px; border-radius: var(--r2, 8px); background: var(--ink); box-shadow: 0 4px 14px rgb(0 0 0 / 25%); }
+.selection-pop[hidden] { display: none; }
+.selection-pop button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--bg); font: inherit; font-size: var(--small); padding: 4px 10px; border-radius: var(--r1); cursor: pointer; }
+.selection-pop button:hover, .selection-pop button:focus-visible { background: rgb(255 255 255 / 15%); }
+.pending-mark { position: absolute; pointer-events: none; z-index: 3; background: rgb(255 196 0 / 35%); mix-blend-mode: multiply; border-radius: 2px; }
+.pending-mark.region { background: rgb(255 196 0 / 12%); border: 2px solid rgb(230 160 0); mix-blend-mode: normal; }
+@media (max-width: 760px) { .reader-aside { width: 260px; } }

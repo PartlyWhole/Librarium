@@ -121,6 +121,8 @@ export interface ReaderToolContext {
   view: import("../reader/host").ReaderView;
   /** The stored text anchors refer to. */
   text(): Promise<string>;
+  /** A column beside the document for a tool's panel (hidden while empty). */
+  aside: HTMLElement;
 }
 export interface ReaderTool {
   id: string;

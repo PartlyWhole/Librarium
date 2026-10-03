@@ -182,7 +182,10 @@ export function library(shell: ShellApi): void {
           tools.before(pick);
         }
       }
-      replace(host, toolbar, notices, stage);
+      // A column beside the document, for tools' panels (making a capture…).
+      const aside = h("aside", { class: "reader-aside", hidden: true });
+      new MutationObserver(() => (aside.hidden = !aside.childElementCount)).observe(aside, { childList: true });
+      replace(host, toolbar, notices, h("div", { class: "reader-body" }, stage, aside));
       if (!engine) {
         replace(stage, h("p", { class: "empty" }, "This kind of item can’t be shown here yet."));
         return;
@@ -202,7 +205,7 @@ export function library(shell: ShellApi): void {
             const part = web ? snap : undefined;
             const text = () => (joined ??= call<StoredJoined | null>("records.text", { id, part }).then((t) => t?.text ?? ""));
             for (const t of shell.slot<ReaderTool>(READER_TOOLS).values()) {
-              const d = t.mount(tools, { source: r, view: v, text, part });
+              const d = t.mount(tools, { source: r, view: v, text, part, aside });
               if (typeof d === "function") toolDisposers.push(d);
             }
             if (params.place) {

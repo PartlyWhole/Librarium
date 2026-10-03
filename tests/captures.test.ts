@@ -7,7 +7,7 @@ import { notes } from "../src/features/notes";
 import { library } from "../src/features/library";
 import { captures } from "../src/features/captures";
 import { READER_TOOLS, type ReaderTool } from "../src/shell/slots";
-import type { ReaderView } from "../src/reader/host";
+import type { Mark, ReaderView } from "../src/reader/host";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let last: Shell | null = null;
@@ -29,24 +29,48 @@ async function boot() {
   return { shell, src };
 }
 
-function fakeView(sel: { text: string; page: number }): ReaderView {
-  return { zoomIn() {}, zoomOut() {}, zoomReset() {}, find: async () => ({ count: 0, current: 0 }), findClear() {}, position: () => "", destroy() {}, selection: () => sel };
+type Sel = { text: string; page: number; boxes?: { page: number; x: number; y: number; w: number; h: number }[]; end?: { x: number; y: number; bottom: number } };
+
+/** A reader view that hands out the given selection, and records marks and watchers. */
+function fakeView(get: () => Sel | null, extra: Partial<ReaderView> = {}) {
+  const watchers: (() => void)[] = [];
+  const marks: { current: Mark[] } = { current: [] };
+  const view: ReaderView = {
+    zoomIn() {}, zoomOut() {}, zoomReset() {}, find: async () => ({ count: 0, current: 0 }), findClear() {}, position: () => "", destroy() {},
+    selection: () => get(),
+    watchSelection: (cb) => (watchers.push(cb), () => {}),
+    clearSelection() {},
+    setMarks: (m) => (marks.current = m),
+    ...extra,
+  };
+  return { view, marks, select: () => watchers.forEach((w) => w()) };
 }
+
+function mountTool(shell: Shell, src: { id: string }, view: ReaderView) {
+  const tool = shell.slot<ReaderTool>(READER_TOOLS).get("capture")!;
+  const toolbar = document.createElement("div");
+  const aside = document.createElement("aside");
+  document.body.append(toolbar, aside);
+  const dispose = tool.mount(toolbar, { source: shell.records.get(src.id)!, view, text: async () => "", aside }) as () => void;
+  return { toolbar, aside, dispose, capture: () => (toolbar.querySelector('[aria-label="Capture the selection"]') as HTMLButtonElement).click() };
+}
+
+const button = (root: ParentNode, text: string) => [...root.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement;
 
 describe("capturing", () => {
   it("anchors a selection in the stored text, on its page, with W3C selectors", async () => {
     const { shell, src } = await boot();
-    const tool = shell.slot<ReaderTool>(READER_TOOLS).get("capture")!;
-    const toolbar = document.createElement("div");
-    document.body.appendChild(toolbar);
     // "Technique integrates everything." appears on both pages: the selection is on page 2.
-    tool.mount(toolbar, { source: shell.records.get(src.id)!, view: fakeView({ text: "Technique integrates everything.", page: 2 }), text: async () => "" });
-    (toolbar.querySelector('[aria-label="Capture the selection"]') as HTMLButtonElement).click();
+    const { view } = fakeView(() => ({ text: "Technique integrates everything.", page: 2 }));
+    const t = mountTool(shell, src, view);
+    t.capture();
     await wait(30);
-    const dialog = document.querySelector("dialog")!;
-    expect(dialog.querySelector("blockquote")?.textContent).toBe("Technique integrates everything.");
-    (dialog.querySelector("textarea") as HTMLTextAreaElement).value = "Even here.";
-    [...dialog.querySelectorAll("button")].find((b) => b.textContent === "Save capture")!.click();
+    // No dialog: the capture waits in the panel beside the document.
+    expect(document.querySelector("dialog")).toBeNull();
+    expect(t.aside.querySelector("blockquote")?.textContent).toBe("Technique integrates everything.");
+    (t.aside.querySelector("textarea") as HTMLTextAreaElement).value = "Even here.";
+    t.aside.querySelector("textarea")!.dispatchEvent(new Event("input"));
+    button(t.aside, "Save capture").click();
     await wait(30);
     const cap = shell.records.list("capture")[0]!;
     expect(cap.fields["captures.locator"]).toBe("p. 2");
@@ -58,28 +82,103 @@ describe("capturing", () => {
     expect(quote.prefix.endsWith("art of making people act. ")).toBe(true);
     expect(pos.start).toBe([...PAGE1].length + 2 + PAGE2.indexOf("Technique"));
     expect(page.value).toBe("page=2");
+    expect(t.aside.querySelector(".capture-draft")).toBeNull();
   });
 
-  it("collects several parts into one capture", async () => {
+  it("collects several parts into one capture, in the source's order, each shown and highlighted", async () => {
     const { shell, src } = await boot();
-    const tool = shell.slot<ReaderTool>(READER_TOOLS).get("capture")!;
-    const toolbar = document.createElement("div");
-    document.body.appendChild(toolbar);
-    let sel = { text: "It avoids shock", page: 1 };
-    tool.mount(toolbar, { source: shell.records.get(src.id)!, view: { ...fakeView(sel), selection: () => sel }, text: async () => "" });
-    (toolbar.querySelector('[aria-label="Capture the selection"]') as HTMLButtonElement).click();
+    let sel: Sel | null = { text: "the art of making people act", page: 2, boxes: [{ page: 2, x: 10, y: 20, w: 50, h: 2 }] };
+    const f = fakeView(() => sel);
+    const t = mountTool(shell, src, f.view);
+    // Picked out of order: page 2 first, then page 1.
+    t.capture();
     await wait(30);
-    [...document.querySelectorAll("dialog button")].find((b) => b.textContent === "Add another part")!.dispatchEvent(new MouseEvent("click"));
+    sel = { text: "It avoids shock", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] };
+    t.capture();
+    await wait(30);
+    const quotes = [...t.aside.querySelectorAll("blockquote")].map((q) => q.textContent);
+    expect(quotes).toEqual(["It avoids shock", "the art of making people act"]);
+    expect(t.aside.querySelector(".draft-gap")?.textContent).toBe("[…]");
+    expect(t.aside.textContent).toContain("2 parts");
+    // Both are highlighted in the document while the capture is being made.
+    expect(f.marks.current.flatMap((m) => m.boxes.map((b) => b.page))).toEqual([1, 2]);
+    // A third part, then removed again.
+    sel = { text: "Propaganda", page: 2, boxes: [{ page: 2, x: 0, y: 1, w: 9, h: 2 }] };
+    t.capture();
+    await wait(30);
+    expect(t.aside.querySelectorAll("blockquote")).toHaveLength(3);
+    (t.aside.querySelectorAll('[aria-label="Remove this part"]')[1] as HTMLButtonElement).click();
     await wait(10);
-    expect(toolbar.querySelector(".tray")?.textContent).toBe("1 part · Save…");
-    sel = { text: "the art of making people act", page: 2 };
-    (toolbar.querySelector('[aria-label="Capture the selection"]') as HTMLButtonElement).click();
-    await wait(30);
-    [...document.querySelectorAll("dialog button")].find((b) => b.textContent === "Save capture")!.dispatchEvent(new MouseEvent("click"));
+    expect([...t.aside.querySelectorAll("blockquote")].map((q) => q.textContent)).toEqual(["It avoids shock", "the art of making people act"]);
+    button(t.aside, "Save capture").click();
     await wait(30);
     const cap = shell.records.list("capture")[0]!;
     expect(cap.fields["captures.parts"]).toBe(2);
-    expect(cap.fields["captures.quote"]).toBe("It avoids shock … the art of making people act");
+    expect(cap.fields["captures.quote"]).toBe("It avoids shock […] the art of making people act");
+    expect(f.marks.current).toEqual([]);
+  });
+
+  it("offers a button by the selection: Capture, then Add to capture", async () => {
+    const { shell, src } = await boot();
+    let sel: Sel | null = { text: "It avoids shock", page: 1, end: { x: 200, y: 100, bottom: 118 } };
+    const f = fakeView(() => sel);
+    const t = mountTool(shell, src, f.view);
+    const pop = () => document.querySelector(".selection-pop") as HTMLElement;
+    f.select();
+    expect(pop().hidden).toBe(false);
+    expect(pop().textContent).toBe("Capture");
+    pop().querySelector("button")!.click();
+    await wait(30);
+    expect(pop().hidden).toBe(true);
+    expect(t.aside.querySelectorAll("blockquote")).toHaveLength(1);
+    sel = { text: "the art of making people act", page: 2, end: { x: 200, y: 300, bottom: 318 } };
+    f.select();
+    expect(pop().textContent).toBe("Add to capture");
+    // Clearing the selection hides it.
+    sel = null;
+    f.select();
+    expect(pop().hidden).toBe(true);
+    t.dispose();
+    expect(document.querySelector(".selection-pop")).toBeNull();
+  });
+
+  it("captures a region, with its picture, alongside text", async () => {
+    const { shell, src } = await boot();
+    const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const f = fakeView(() => ({ text: "It avoids shock", page: 1 }), { pickRegion: async () => ({ page: 2, x: 10, y: 40, w: 30, h: 20, png }) });
+    const t = mountTool(shell, src, f.view);
+    (t.toolbar.querySelector('[aria-label="Capture a region"]') as HTMLButtonElement).click();
+    await wait(30);
+    t.capture();
+    await wait(30);
+    expect(t.aside.querySelector("img.capture-region")?.getAttribute("src")).toBe(png);
+    expect(f.marks.current.find((m) => m.region)?.boxes[0]).toEqual({ page: 2, x: 10, y: 40, w: 30, h: 20 });
+    button(t.aside, "Save capture").click();
+    await wait(30);
+    const cap = shell.records.list("capture")[0]!;
+    expect(cap.fields["captures.parts"]).toBe(2);
+    const a = anchors.get(cap.id);
+    // The text on page 1 comes before the region on page 2.
+    expect(a.parts[0].selector[0].type).toBe("TextQuoteSelector");
+    expect(a.parts[1].selector[0].refinedBy.value).toBe("xywh=percent:10,40,30,20");
+  });
+
+  it("keeps the capture being made when the item is left and opened again", async () => {
+    const { shell, src } = await boot();
+    const f = fakeView(() => ({ text: "It avoids shock", page: 1 }));
+    const t = mountTool(shell, src, f.view);
+    t.capture();
+    await wait(30);
+    t.aside.querySelector("textarea")!.value = "Keep this.";
+    t.aside.querySelector("textarea")!.dispatchEvent(new Event("input"));
+    t.dispose();
+    const again = mountTool(shell, src, fakeView(() => null).view);
+    await wait(10);
+    expect(again.aside.querySelector("blockquote")?.textContent).toBe("It avoids shock");
+    expect(again.aside.querySelector("textarea")?.value).toBe("Keep this.");
+    button(again.aside, "Discard").click();
+    await wait(10);
+    expect(again.aside.querySelector(".capture-draft")).toBeNull();
   });
 });
 
@@ -107,13 +206,12 @@ describe("embeds", () => {
 describe("the captures panel", () => {
   it("says when a capture has moved in its source", async () => {
     const { shell, src } = await boot();
-    const tool = shell.slot<ReaderTool>(READER_TOOLS).get("capture")!;
-    const toolbar = document.createElement("div");
-    tool.mount(toolbar, { source: shell.records.get(src.id)!, view: fakeView({ text: "It avoids shock and sensational events.", page: 1 }), text: async () => "" });
-    (toolbar.querySelector('[aria-label="Capture the selection"]') as HTMLButtonElement).click();
+    const t = mountTool(shell, src, fakeView(() => ({ text: "It avoids shock and sensational events.", page: 1 })).view);
+    t.capture();
     await wait(30);
-    [...document.querySelectorAll("dialog button")].find((b) => b.textContent === "Save capture")!.dispatchEvent(new MouseEvent("click"));
+    button(t.aside, "Save capture").click();
     await wait(30);
+    t.dispose();
     // The source's text is re-extracted with small differences.
     mockTexts.set(src.id, `${PAGE1.replace("sensational", "sensationnal")}\n\n${PAGE2}`);
     shell.router.go("item", { id: src.id });

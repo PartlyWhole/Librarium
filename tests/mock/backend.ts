@@ -145,7 +145,7 @@ const api: Record<string, (p: any) => unknown> = {
     return { text, segments: mockSegments.get(p.id) ?? [{ label: "", start: 0, end: [...text].length }], origin: null };
   },
   "captures.create": (p) => {
-    const quote = p.parts.map((x: { quote: string }) => x.quote).filter(Boolean).join(" … ");
+    const quote = p.parts.map((x: { quote: string }) => x.quote).filter(Boolean).join(" […] ");
     const info = seed("capture", quote.split(/\s+/).slice(0, 8).join(" ") || "A region", p.words ?? "", { "captures.source": p.source, "captures.quote": quote, "captures.parts": p.parts.length, ...(p.parts[0]?.locator ? { "captures.locator": p.parts[0].locator } : {}) });
     anchors.set(info.id, { id: info.id, source: p.source, snapshot: null, text: p.text, parts: p.parts.map((x: { selector: unknown }) => ({ selector: x.selector })) });
     return { info, seq: touch(need(info.id), "created") };

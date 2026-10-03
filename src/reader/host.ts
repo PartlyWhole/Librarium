@@ -37,8 +37,14 @@ export interface ReaderView {
   position(): string;
   /** The user's text selection, with where it is. */
   selection?(): ReaderSelection | null;
+  /** Calls `cb` whenever the user finishes making (or clearing) a selection. */
+  watchSelection?(cb: () => void): () => void;
+  /** Clears the user's text selection. */
+  clearSelection?(): void;
   /** Lets the user drag out a region; resolves with it (or null if cancelled). */
   pickRegion?(): Promise<ReaderRegion | null>;
+  /** Highlights these places (e.g. the parts of a capture being made), replacing earlier marks. */
+  setMarks?(marks: Mark[]): void;
   /** Shows a place given by W3C selectors (page, quote, region, CFI). */
   showPlace?(selectors: PlaceSelector[]): Promise<boolean>;
   destroy(): void;
@@ -51,6 +57,27 @@ export interface ReaderSelection {
   /** Spine index (EPUB). */
   chapter?: number;
   /** EPUB CFI. */
+  cfi?: string;
+  /** Where the text sits: boxes in percent of their page (or of the image). */
+  boxes?: Box[];
+  /** The selection's last line on screen (window coordinates), to place controls by it. */
+  end?: { x: number; y: number; bottom: number };
+}
+
+/** A box in percent of a page (PDF, with its 1-based page) or of an image. */
+export interface Box {
+  page?: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** A highlighted place: text boxes, a region, or (EPUB) a CFI. */
+export interface Mark {
+  id: string;
+  boxes: Box[];
+  region?: boolean;
   cfi?: string;
 }
 
@@ -93,46 +120,132 @@ export function regionOf(selectors: PlaceSelector[]): { x: number; y: number; w:
   return null;
 }
 
-/** Lets the user drag a rectangle over `host`; resolves with it in host pixels. */
-export function dragRect(host: HTMLElement): Promise<DOMRect | null> {
+/**
+ * Lets the user drag a rectangle over the visible part of `scroller`; resolves with it in
+ * window coordinates, or null on Escape or a click without a drag. The layer covers what is on
+ * screen (wherever the document is scrolled to); the wheel still scrolls the document, and the
+ * drag follows the mouse even outside the layer.
+ */
+export function dragRect(scroller: HTMLElement): Promise<DOMRect | null> {
   return new Promise((resolve) => {
     const layer = document.createElement("div");
     layer.className = "region-layer";
+    const hint = document.createElement("div");
+    hint.className = "region-hint";
+    hint.textContent = "Drag over the region to capture. Escape cancels.";
     const box = document.createElement("div");
     box.className = "region-box";
-    layer.appendChild(box);
-    host.appendChild(layer);
+    layer.append(hint, box);
+    const place = () => {
+      const b = scroller.getBoundingClientRect();
+      Object.assign(layer.style, { left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` });
+    };
+    place();
+    document.body.appendChild(layer);
     let start: { x: number; y: number } | null = null;
+    let last: { x: number; y: number } | null = null;
+    const draw = () => {
+      if (!start || !last) return;
+      const b = layer.getBoundingClientRect();
+      Object.assign(box.style, { left: `${Math.min(last.x, start.x) - b.left}px`, top: `${Math.min(last.y, start.y) - b.top}px`, width: `${Math.abs(last.x - start.x)}px`, height: `${Math.abs(last.y - start.y)}px`, display: "block" });
+    };
     const done = (r: DOMRect | null) => {
       layer.remove();
       window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("mousemove", onMove, true);
+      window.removeEventListener("mouseup", onUp, true);
+      window.removeEventListener("resize", place);
       resolve(r);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        e.stopPropagation();
         done(null);
       }
     };
-    window.addEventListener("keydown", onKey, true);
-    layer.addEventListener("mousedown", (e) => {
+    const onMove = (e: MouseEvent) => {
+      if (!start) return;
+      last = { x: e.clientX, y: e.clientY };
+      draw();
+    };
+    const onUp = (e: MouseEvent) => {
+      if (!start) return;
+      last = { x: e.clientX, y: e.clientY };
       const b = layer.getBoundingClientRect();
-      start = { x: e.clientX - b.left, y: e.clientY - b.top };
+      const x = Math.max(b.left, Math.min(start.x, last.x)), y = Math.max(b.top, Math.min(start.y, last.y));
+      const r = new DOMRect(x, y, Math.min(b.right, Math.max(start.x, last.x)) - x, Math.min(b.bottom, Math.max(start.y, last.y)) - y);
+      done(r.width > 4 && r.height > 4 ? r : null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("mousemove", onMove, true);
+    window.addEventListener("mouseup", onUp, true);
+    window.addEventListener("resize", place);
+    layer.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      start = { x: e.clientX, y: e.clientY };
+      last = start;
+      hint.hidden = true;
       e.preventDefault();
     });
-    layer.addEventListener("mousemove", (e) => {
-      if (!start) return;
-      const b = layer.getBoundingClientRect();
-      const x = e.clientX - b.left;
-      const y = e.clientY - b.top;
-      Object.assign(box.style, { left: `${Math.min(x, start.x)}px`, top: `${Math.min(y, start.y)}px`, width: `${Math.abs(x - start.x)}px`, height: `${Math.abs(y - start.y)}px`, display: "block" });
-    });
-    layer.addEventListener("mouseup", () => {
-      if (!start) return done(null);
-      const r = box.getBoundingClientRect();
-      done(r.width > 4 && r.height > 4 ? r : null);
-    });
+    // Scrolling while picking moves the document under the layer.
+    layer.addEventListener("wheel", (e) => {
+      scroller.scrollBy({ left: e.deltaX, top: e.deltaY });
+      e.preventDefault();
+    }, { passive: false });
   });
+}
+
+/** An element's box inside its border (where its absolutely placed children go). */
+export function innerRect(el: HTMLElement): DOMRect {
+  const b = el.getBoundingClientRect();
+  return new DOMRect(b.left + el.clientLeft, b.top + el.clientTop, el.clientWidth || b.width, el.clientHeight || b.height);
+}
+
+/** The boxes of a range, in percent of `over` (merged per line). */
+export function boxesIn(range: Range, over: HTMLElement, page?: number): Box[] {
+  const b = innerRect(over);
+  if (!b.width || !b.height) return [];
+  const pct = (v: number, of: number) => Math.round((v / of) * 10000) / 100;
+  const out: Box[] = [];
+  for (const r of range.getClientRects()) {
+    if (r.width < 1 || r.height < 1) continue;
+    // Only the part over this element.
+    const l = Math.max(r.left, b.left), t = Math.max(r.top, b.top), rr = Math.min(r.right, b.right), bb = Math.min(r.bottom, b.bottom);
+    if (rr <= l || bb <= t) continue;
+    const box: Box = { ...(page ? { page } : {}), x: pct(l - b.left, b.width), y: pct(t - b.top, b.height), w: pct(rr - l, b.width), h: pct(bb - t, b.height) };
+    // Neighbours on one line join, so a line is one box.
+    const prev = out[out.length - 1];
+    if (prev && Math.abs(prev.y - box.y) < 0.5 && Math.abs(prev.h - box.h) < 1 && box.x <= prev.x + prev.w + 1) {
+      const right = Math.max(prev.x + prev.w, box.x + box.w);
+      prev.x = Math.min(prev.x, box.x);
+      prev.w = right - prev.x;
+    } else out.push(box);
+  }
+  return out;
+}
+
+/** The last line of a selection on screen, to place controls by it. */
+export function endOf(range: Range): { x: number; y: number; bottom: number } | undefined {
+  const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+  const r = rects[rects.length - 1];
+  return r ? { x: r.right, y: r.top, bottom: r.bottom } : undefined;
+}
+
+/** Draws marks (percent boxes) over an element, replacing the marks drawn there before. */
+export function drawMarks(over: HTMLElement, marks: Mark[], page?: number): void {
+  over.querySelectorAll(":scope > .pending-mark").forEach((n) => n.remove());
+  if (getComputedStyle(over).position === "static") over.style.position = "relative";
+  for (const m of marks) {
+    for (const b of m.boxes) {
+      if (page !== undefined && b.page !== page) continue;
+      const el = document.createElement("div");
+      el.className = `pending-mark${m.region ? " region" : ""}`;
+      el.dataset.mark = m.id;
+      Object.assign(el.style, { left: `${b.x}%`, top: `${b.y}%`, width: `${b.w}%`, height: `${b.h}%` });
+      over.appendChild(el);
+    }
+  }
 }
 
 /** Crops a region of a canvas or image (in its own pixels) to a PNG data URL. */

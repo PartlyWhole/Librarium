@@ -42,6 +42,32 @@ async function open(engine: ReaderEngine, name: string, format: string, stored?:
   return { view, firstPaint };
 }
 
+/** Drags from one point to another (window coordinates), as a mouse would. */
+async function drag(from: { x: number; y: number }, to: { x: number; y: number }) {
+  await new Promise((r) => setTimeout(r, 50));
+  const layer = document.querySelector(".region-layer")!;
+  const at = (type: string, p: { x: number; y: number }, target: EventTarget) => target.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: p.x, clientY: p.y, button: 0 }));
+  at("mousedown", from, layer);
+  at("mousemove", { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }, window);
+  at("mouseup", to, window);
+}
+
+/** A PNG data URL's size and how many of its pixels are not white. */
+async function pngInfo(url: string): Promise<{ w: number; h: number; ink: number }> {
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const ctx = c.getContext("2d")!;
+  ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, c.width, c.height).data;
+  let ink = 0;
+  for (let i = 0; i < px.length; i += 4) if (px[i]! < 200) ink++;
+  return { w: c.width, h: c.height, ink };
+}
+
 function step(name: string) {
   document.title = `step: ${name}`;
 }
@@ -82,6 +108,47 @@ async function run() {
   results.pdfPlaceMarked = !!stage.querySelector(".region-mark") && pdf.view.position().startsWith("Page 3");
   step("pdf find");
   results.pdfFind = await pdf.view.find("Line 7 of page 42");
+
+  // Capturing: a region dragged on a page far down the document, and a selection's marks.
+  step("pdf region");
+  const scroller = stage.querySelector(".pdf-container") as HTMLElement;
+  pdf.view.zoomReset();
+  await pdf.view.showPlace?.([{ type: "FragmentSelector", value: "page=5" }]);
+  await new Promise((r) => setTimeout(r, 500));
+  const sb = scroller.getBoundingClientRect();
+  const picking = pdf.view.pickRegion!();
+  await drag({ x: sb.left + sb.width * 0.2, y: sb.top + 40 }, { x: sb.left + sb.width * 0.8, y: sb.top + 140 });
+  const region = await picking;
+  results.pdfRegionPage = region?.page ?? null;
+  if (region) {
+    const info = await pngInfo(region.png);
+    const cssWidth = sb.width * 0.6;
+    results.pdfRegionSharp = info.w >= cssWidth * 1.5;
+    results.pdfRegionInk = info.ink;
+  }
+  results.pdfRegionLayerGone = !document.querySelector(".region-layer");
+  // Escape cancels.
+  const cancelled = pdf.view.pickRegion!();
+  await new Promise((r) => setTimeout(r, 50));
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  results.pdfRegionCancelled = (await cancelled) === null;
+  step("pdf selection marks");
+  const textSpan = [...stage.querySelectorAll('.page[data-page-number="5"] .textLayer span')].find((s) => s.textContent?.includes("Line")) as HTMLElement | undefined;
+  results.pdfSelectionSpan = !!textSpan;
+  if (textSpan) {
+    const range = document.createRange();
+    range.selectNodeContents(textSpan);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+    const sel = pdf.view.selection?.();
+    results.pdfSelectionBoxes = sel?.boxes?.length ?? 0;
+    results.pdfSelectionEnd = !!sel?.end;
+    pdf.view.setMarks?.([{ id: "m", boxes: sel?.boxes ?? [] }]);
+    await new Promise((r) => setTimeout(r, 100));
+    results.pdfMarks = stage.querySelectorAll(".pending-mark").length;
+    pdf.view.setMarks?.([]);
+    results.pdfMarksCleared = stage.querySelectorAll(".pending-mark").length === 0;
+  }
   pdf.view.destroy();
 
   // EPUB: opens, finds, and its own scripts never run.
@@ -128,6 +195,13 @@ async function run() {
   results.imagePosition = img.view.position();
   img.view.zoomIn();
   results.imageZoomed = (stage.querySelector("img") as HTMLImageElement).style.width !== "";
+  step("image region");
+  await new Promise((r) => setTimeout(r, 300));
+  const ib = (stage.querySelector("img") as HTMLImageElement).getBoundingClientRect();
+  const ip = img.view.pickRegion!();
+  await drag({ x: ib.left + 10, y: ib.top + 10 }, { x: ib.left + 110, y: ib.top + 60 });
+  const ir = await ip;
+  results.imageRegion = ir ? (await pngInfo(ir.png)).w > 0 && ir.w > 0 : false;
   img.view.destroy();
 }
 

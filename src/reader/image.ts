@@ -1,6 +1,6 @@
 /** The image engine: the original image, zoomable; find searches its recognised text. */
 import { h } from "../kit/dom";
-import { cropToPng, dragRect, outlineRegion, regionOf, type ReaderEngine, type ReaderView } from "./host";
+import { boxesIn, cropToPng, drawMarks, dragRect, endOf, outlineRegion, regionOf, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 
 export const imageEngine: ReaderEngine = {
@@ -22,8 +22,10 @@ export const imageEngine: ReaderEngine = {
       requestAnimationFrame(layOut);
     };
     let lines: OcrLine[] = [];
+    let marks: Mark[] = [];
     const layOut = () => {
       if (lines.length) ocrLayer(holder, lines);
+      drawMarks(holder, marks);
     };
     img.addEventListener(
       "load",
@@ -51,7 +53,29 @@ export const imageEngine: ReaderEngine = {
       selection() {
         const sel = window.getSelection();
         const text = sel?.toString().trim() ?? "";
-        return sel && text && frame.contains(sel.anchorNode) ? { text } : null;
+        if (!sel || !text || !sel.rangeCount || !frame.contains(sel.anchorNode)) return null;
+        const range = sel.getRangeAt(0);
+        return { text, boxes: boxesIn(range, holder), end: endOf(range) };
+      },
+      watchSelection(cb) {
+        const up = () => setTimeout(cb, 0);
+        const key = (e: KeyboardEvent) => e.shiftKey && setTimeout(cb, 0);
+        const change = () => {
+          if (!window.getSelection()?.toString().trim()) cb();
+        };
+        frame.addEventListener("mouseup", up);
+        frame.addEventListener("keyup", key);
+        document.addEventListener("selectionchange", change);
+        return () => {
+          frame.removeEventListener("mouseup", up);
+          frame.removeEventListener("keyup", key);
+          document.removeEventListener("selectionchange", change);
+        };
+      },
+      clearSelection: () => window.getSelection()?.removeAllRanges(),
+      setMarks(m) {
+        marks = m;
+        drawMarks(holder, marks);
       },
       async pickRegion() {
         const r = await dragRect(frame);

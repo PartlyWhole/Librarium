@@ -60,7 +60,7 @@ pub fn create(ctx: &MethodCtx, p: CaptureParams) -> Result<Written> {
         return Err(BackendError::invalid("a capture needs at least one part"));
     }
     let quotes: Vec<&str> = p.parts.iter().map(|x| x.quote.trim()).filter(|q| !q.is_empty()).collect();
-    let quote = quotes.join(" … ");
+    let quote = quotes.join(" […] ");
     let title = if quote.is_empty() { format!("A region of {}", source.title) } else { first_words(&quote, 8) };
     // The anchor and region images go first; the record's own file is the commit point.
     let mut sidecars = vec![];

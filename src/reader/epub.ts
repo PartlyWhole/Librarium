@@ -3,7 +3,7 @@
  * iframes that allow no scripts, so a book can't reach the app.
  */
 import { h } from "../kit/dom";
-import type { ReaderEngine, ReaderView } from "./host";
+import { endOf, type Mark, type ReaderEngine, type ReaderView } from "./host";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- foliate-js has no types */
 export const epubEngine: ReaderEngine = {
@@ -12,6 +12,7 @@ export const epubEngine: ReaderEngine = {
   async open(host, src, events) {
     const t0 = performance.now();
     await import("../../vendor/foliate-js/view.js");
+    const { Overlayer } = await import("../../vendor/foliate-js/overlayer.js");
     const bytes = await src.bytes();
     const view: any = document.createElement("foliate-view");
     view.classList.add("epub-view");
@@ -29,6 +30,23 @@ export const epubEngine: ReaderEngine = {
       }
       events.moved();
     });
+    // Pending marks (a capture being made) are drawn as highlights by foliate's overlayer.
+    view.addEventListener("draw-annotation", (e: any) => {
+      const { draw, annotation } = e.detail;
+      draw(Overlayer.highlight, { color: annotation.color ?? "rgb(255 196 0 / 45%)" });
+    });
+    let marked: Mark[] = [];
+    // Selections are made inside the book's frames: listen in each as it loads.
+    const selectionWatchers = new Set<() => void>();
+    const watchDoc = (doc: Document) => {
+      const fire = () => setTimeout(() => selectionWatchers.forEach((w) => w()), 0);
+      doc.addEventListener("mouseup", fire);
+      doc.addEventListener("keyup", (e) => e.shiftKey && fire());
+      doc.addEventListener("selectionchange", () => {
+        if (!doc.getSelection()?.toString().trim()) fire();
+      });
+    };
+    view.addEventListener("load", (e: any) => e.detail?.doc && watchDoc(e.detail.doc));
     await view.open(new File([bytes], `${src.id}.epub`, { type: "application/epub+zip" }));
     view.renderer.setAttribute("flow", "scrolled");
     const styles = () => `html { font-size: ${fontSize}% !important; } body { line-height: 1.5; }`;
@@ -62,11 +80,27 @@ export const epubEngine: ReaderEngine = {
           const sel = c.doc?.getSelection?.();
           const text = sel?.toString().trim();
           if (sel && text && sel.rangeCount) {
-            const cfi = view.getCFI?.(c.index, sel.getRangeAt(0));
-            return { text, chapter: c.index, cfi };
+            const range = sel.getRangeAt(0);
+            const cfi = view.getCFI?.(c.index, range);
+            // The frame's place on screen turns the range's coordinates into the window's.
+            const fb = (c.doc.defaultView?.frameElement as HTMLElement | null)?.getBoundingClientRect();
+            const e = endOf(range);
+            return { text, chapter: c.index, cfi, end: e && fb ? { x: e.x + fb.left, y: e.y + fb.top, bottom: e.bottom + fb.top } : e };
           }
         }
         return null;
+      },
+      watchSelection(cb) {
+        selectionWatchers.add(cb);
+        return () => selectionWatchers.delete(cb);
+      },
+      clearSelection() {
+        for (const c of view.renderer?.getContents?.() ?? []) c.doc?.getSelection?.()?.removeAllRanges();
+      },
+      setMarks(marks) {
+        for (const m of marked) if (m.cfi) void view.deleteAnnotation({ value: m.cfi });
+        marked = marks.filter((m) => m.cfi);
+        for (const m of marked) void view.addAnnotation({ value: m.cfi });
       },
       async showPlace(selectors) {
         const cfi = selectors.find((s) => s.type === "FragmentSelector" && (s.value ?? "").startsWith("epubcfi("))?.value;

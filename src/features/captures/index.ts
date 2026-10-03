@@ -6,8 +6,7 @@
 import { call } from "../../backend";
 import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
-import { modal } from "../../kit/dialog";
-import { signal, effect } from "../../kit/signal";
+import { signal, effect, untracked } from "../../kit/signal";
 import { toast } from "../../kit/toast";
 import { describe, locate, locateSelection, sliceCp, toW3C, type Selector } from "../../kit/anchor";
 import { createEditor } from "../../editor/editor";
@@ -20,7 +19,8 @@ import type { RecordText } from "../../generated/RecordText";
 import type { StoredText } from "../../generated/StoredText";
 import type { Written } from "../../generated/Written";
 import { embedExtension } from "./embeds";
-import { Highlighter, Crop, Quote, FileDown } from "lucide";
+import { Highlighter, Crop, Quote, FileDown, X } from "lucide";
+import type { Box } from "../../reader/host";
 
 export const KIND = "capture";
 const F = { source: "captures.source", quote: "captures.quote", locator: "captures.locator" };
@@ -28,9 +28,33 @@ const PDF_PAGE = "http://tools.ietf.org/rfc/rfc8118";
 const MEDIA = "http://www.w3.org/TR/media-frags/";
 const CFI = "http://www.idpf.org/epub/linking/cfi/epub-cfi.html";
 
-interface PendingPart extends CapturePart {
+/** A part of the capture being made. */
+interface DraftPart extends CapturePart {
+  key: string;
+  /** A region's picture, to show while making the capture. */
   preview?: string;
+  /** Where it is in the source (page, top, offset), so parts read in the source's order. */
+  order: number[];
+  /** Where to highlight it while the capture is being made. */
+  boxes: Box[];
+  region?: boolean;
+  cfi?: string;
 }
+
+interface Draft {
+  parts: DraftPart[];
+  words: string;
+}
+
+const byOrder = (a: DraftPart, b: DraftPart) => {
+  for (let i = 0; i < Math.max(a.order.length, b.order.length); i++) {
+    const d = (a.order[i] ?? 0) - (b.order[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+};
+
+const toPart = ({ selector, quote, locator, region_png }: DraftPart): CapturePart => ({ selector, quote, locator, region_png });
 
 interface Anchor {
   id: string;
@@ -60,105 +84,212 @@ export function citation(shell: ShellApi, r: RecordInfo): string {
 
 export function captures(shell: ShellApi): void {
   shell.openers.add("captures", KIND, "capture");
-  const tray = signal<{ source: string; parts: PendingPart[] }>({ source: "", parts: [] });
-
   // ---- making a capture ---------------------------------------------------------------
-  let part: string | undefined;
-  const saveDialog = (source: RecordInfo) => {
-    const parts = tray.peek().parts;
-    const words = h("textarea", { class: "words-input", rows: 4, placeholder: "Your words (optional)", "aria-label": "Your words" });
-    const save = async () => {
-      try {
-        const stored = await call<StoredText | null>("records.text", { id: source.id, part }).catch(() => null);
-        const w = await call<Written>("captures.create", { source: source.id, snapshot: part ?? null, text: stored?.origin ?? null, parts: parts.map(({ preview: _p, ...x }) => x), words: words.value });
-        shell.records.put(w.info, w.seq);
-        tray.set({ source: "", parts: [] });
-        m.close();
-        toast("Captured.", { action: { label: "Open", run: () => shell.openRecord(w.info.id) } });
-      } catch (e) {
-        toast(String((e as { message?: string }).message ?? e));
-      }
-    };
-    const m = modal(
-      h("div", { class: "ask capture-dialog" },
-        h("h2", { class: "ask-title" }, parts.length > 1 ? `Capture (${parts.length} parts)` : "Capture"),
-        parts.map((p) => (p.preview ? h("img", { class: "capture-region", src: p.preview, alt: "The region" }) : h("blockquote", { class: "capture-quote" }, p.quote))),
-        h("p", { class: "muted small" }, `From ${source.title}${parts[0]?.locator ? `, ${parts[0].locator}` : ""}`),
-        words,
-        h("div", { class: "ask-buttons" },
-          h("button", { class: "button", onclick: () => m.close() }, "Add another part"),
-          h("button", { class: "button", onclick: () => (tray.set({ source: "", parts: [] }), m.close()) }, "Discard"),
-          h("button", { class: "button primary", onclick: () => void save() }, "Save capture"),
-        ),
-      ),
-      { label: "Capture" },
-    );
-    words.focus();
+  // Select text and a button appears by it; each choice adds a part to the capture being made,
+  // which waits in a panel beside the document, its parts highlighted in place, until it is
+  // saved. One draft per source (and snapshot); it survives leaving the item and coming back.
+  const drafts = signal(new Map<string, Draft>());
+  const keyOf = (source: string, part?: string) => `${source}|${part ?? ""}`;
+  const draftOf = (k: string) => drafts().get(k);
+  const setDraft = (k: string, d: Draft | null) => {
+    const m = new Map(drafts.peek());
+    if (d && (d.parts.length || d.words)) m.set(k, d);
+    else m.delete(k);
+    drafts.set(m);
   };
-
-  const addPart = (source: RecordInfo, part: PendingPart) => {
-    const t = tray.peek();
-    tray.set({ source: source.id, parts: t.source === source.id ? [...t.parts, part] : [part] });
-    saveDialog(source);
-  };
+  let n = 0;
+  let active: { addSelection(): Promise<void>; addRegion(): Promise<void>; save(): Promise<void> } | null = null;
 
   const tool: ReaderTool = {
     id: "capture",
     mount(toolbar, ctx) {
-      part = ctx.part;
-      const captureSelection = async () => {
-        const sel = ctx.view.selection?.();
+      const k = keyOf(ctx.source.id, ctx.part);
+      const { view } = ctx;
+      const stored = () => call<StoredText | null>("records.text", { id: ctx.source.id, part: ctx.part }).catch(() => null);
+
+      const add = (p: DraftPart) => {
+        const d = drafts.peek().get(k) ?? { parts: [], words: "" };
+        setDraft(k, { ...d, parts: [...d.parts, p].sort(byOrder) });
+      };
+
+      const addSelection = async () => {
+        const sel = view.selection?.();
         if (!sel) return shell.status.show("Select some text first.");
-        const stored = await call<StoredText | null>("records.text", { id: ctx.source.id, part: ctx.part }).catch(() => null);
-        const seg = stored && (sel.page ? stored.segments[sel.page - 1] : sel.chapter !== undefined ? stored.segments[sel.chapter] : undefined);
-        const at = stored ? locateSelection(stored.text, sel.text, seg ? { from: Number(seg.start), to: Number(seg.end) } : undefined) : null;
-        const selector: Selector[] = at && stored ? [...describe(stored.text, at.start, at.end)] : [{ type: "TextQuoteSelector", exact: sel.text, prefix: "", suffix: "" }];
+        hidePop();
+        const st = await stored();
+        const seg = st && (sel.page ? st.segments[sel.page - 1] : sel.chapter !== undefined ? st.segments[sel.chapter] : undefined);
+        const at = st ? locateSelection(st.text, sel.text, seg ? { from: Number(seg.start), to: Number(seg.end) } : undefined) : null;
+        const selector: Selector[] = at && st ? [...describe(st.text, at.start, at.end)] : [{ type: "TextQuoteSelector", exact: sel.text, prefix: "", suffix: "" }];
         if (sel.page) selector.push({ type: "FragmentSelector", value: `page=${sel.page}`, conformsTo: PDF_PAGE });
         if (sel.cfi) selector.push({ type: "FragmentSelector", value: sel.cfi, conformsTo: CFI });
-        const quote = at && stored ? sliceCp(stored.text, at.start, at.end) : sel.text;
-        addPart(ctx.source, { selector, quote, locator: seg?.label || (sel.page ? `p. ${sel.page}` : null), region_png: null });
+        const quote = at && st ? sliceCp(st.text, at.start, at.end) : sel.text;
+        const first = sel.boxes?.[0];
+        add({
+          key: `p${++n}`,
+          selector,
+          quote,
+          locator: seg?.label || (sel.page ? `p. ${sel.page}` : null),
+          region_png: null,
+          order: [first?.page ?? sel.page ?? sel.chapter ?? 0, first?.y ?? 0, at?.start ?? 0],
+          boxes: sel.boxes ?? [],
+          cfi: sel.cfi,
+        });
+        view.clearSelection?.();
         if (!at) shell.status.show("The stored text doesn’t contain that passage exactly; it was kept with its page only.", 6000);
       };
-      const captureRegion = async () => {
-        if (!ctx.view.pickRegion) return shell.status.show("Regions can’t be captured in this kind of item.");
-        shell.status.show("Drag over the region to capture. Escape cancels.", 0);
-        const r = await ctx.view.pickRegion();
-        shell.status.show("");
+
+      const addRegion = async () => {
+        if (!view.pickRegion) return shell.status.show("Regions can’t be captured in this kind of item.");
+        hidePop();
+        const r = await view.pickRegion();
         if (!r) return;
         const xywh = { type: "FragmentSelector" as const, value: `xywh=percent:${r.x},${r.y},${r.w},${r.h}`, conformsTo: MEDIA };
         const selector: Selector[] = r.page ? [{ type: "FragmentSelector", value: `page=${r.page}`, conformsTo: PDF_PAGE, refinedBy: xywh }] : [xywh];
-        addPart(ctx.source, { selector, quote: "", locator: r.page ? `p. ${r.page}` : null, region_png: r.png.replace(/^data:image\/png;base64,/, ""), preview: r.png });
+        add({
+          key: `p${++n}`,
+          selector,
+          quote: "",
+          locator: r.page ? `p. ${r.page}` : null,
+          region_png: r.png.replace(/^data:image\/png;base64,/, ""),
+          preview: r.png,
+          order: [r.page ?? 0, r.y, 0],
+          boxes: [{ ...(r.page ? { page: r.page } : {}), x: r.x, y: r.y, w: r.w, h: r.h }],
+          region: true,
+        });
       };
-      const b1 = h("button", { class: "icon-button", "aria-label": "Capture the selection", title: "Capture the selection (⇧⌘C)", onclick: () => void captureSelection() }, icon(Highlighter));
-      const b2 = ctx.view.pickRegion ? h("button", { class: "icon-button", "aria-label": "Capture a region", title: "Capture a region", onclick: () => void captureRegion() }, icon(Crop)) : null;
-      const pending = h("button", { class: "link-button tray", hidden: true, onclick: () => saveDialog(ctx.source) });
-      toolbar.append(b1, ...(b2 ? [b2] : []), pending);
-      const stop = effect(() => {
-        const t = tray();
-        const n = t.source === ctx.source.id ? t.parts.length : 0;
-        pending.hidden = n === 0;
-        pending.textContent = `${n} part${n === 1 ? "" : "s"} · Save…`;
+
+      const save = async () => {
+        const d = drafts.peek().get(k);
+        if (!d?.parts.length) return;
+        try {
+          const st = await stored();
+          const w = await call<Written>("captures.create", { source: ctx.source.id, snapshot: ctx.part ?? null, text: st?.origin ?? null, parts: d.parts.map(toPart), words: d.words });
+          shell.records.put(w.info, w.seq);
+          setDraft(k, null);
+          toast("Captured.", { action: { label: "Open", run: () => shell.openRecord(w.info.id) } });
+        } catch (e) {
+          toast(String((e as { message?: string }).message ?? e));
+        }
+      };
+
+      // The button by a selection: Capture, or Add to capture once one is being made.
+      const popLabel = h("span");
+      const pop = h("div", { class: "selection-pop", role: "toolbar", "aria-label": "Selection", hidden: true },
+        h("button", { type: "button", onmousedown: (e: Event) => e.preventDefault(), onclick: () => void addSelection() }, icon(Highlighter, 14), popLabel));
+      document.body.appendChild(pop);
+      const hidePop = () => (pop.hidden = true);
+      const showPop = () => {
+        const sel = view.selection?.();
+        if (!sel?.end) return hidePop();
+        const parts = drafts.peek().get(k)?.parts.length ?? 0;
+        popLabel.textContent = parts ? "Add to capture" : "Capture";
+        pop.hidden = false;
+        const w = pop.offsetWidth || 120;
+        const x = Math.max(8, Math.min(window.innerWidth - w - 8, sel.end.x - w / 2));
+        const below = sel.end.bottom + 8;
+        const y = below + 36 > window.innerHeight ? sel.end.y - 40 : below;
+        Object.assign(pop.style, { left: `${x}px`, top: `${y}px` });
+      };
+      const unwatch = view.watchSelection?.(showPop) ?? (() => {});
+      const onScroll = () => hidePop();
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape" && !pop.hidden) hidePop();
+      };
+      document.addEventListener("scroll", onScroll, true);
+      window.addEventListener("keydown", onKey);
+
+      // The panel beside the document.
+      const panel = h("section", { class: "capture-draft", "aria-label": "New capture" });
+      const stopPanel = effect(() => {
+        const d = draftOf(k);
+        view.setMarks?.((d?.parts ?? []).map((p) => ({ id: p.key, boxes: p.boxes, region: p.region, cfi: p.region ? undefined : p.cfi })));
+        if (!d?.parts.length) {
+          panel.remove();
+          return;
+        }
+        untracked(() => renderPanel(d));
+        if (!panel.isConnected) ctx.aside.appendChild(panel);
       });
-      active = captureSelection;
+      function renderPanel(d: Draft) {
+        const items: HTMLElement[] = [];
+        d.parts.forEach((p, i) => {
+          if (i) items.push(h("div", { class: "draft-gap", "aria-hidden": "true" }, "[…]"));
+          const remove = h("button", { class: "icon-button remove", type: "button", "aria-label": "Remove this part", title: "Remove this part", onclick: () => setDraft(k, { ...d, parts: d.parts.filter((x) => x !== p) }) }, icon(X, 14));
+          const body = p.preview ? h("img", { class: "capture-region", src: p.preview, alt: "The region" }) : h("blockquote", { class: "capture-quote" }, p.quote);
+          items.push(h("div", { class: "draft-part" }, body, remove));
+        });
+        const locs = [...new Set(d.parts.map((p) => p.locator).filter(Boolean))];
+        const words = h("textarea", { class: "words-input", rows: 3, placeholder: "Your words (optional)", "aria-label": "Your words" }) as HTMLTextAreaElement;
+        words.value = d.words;
+        words.addEventListener("input", () => {
+          const cur = drafts.peek().get(k);
+          if (cur) drafts.peek().set(k, { ...cur, words: words.value });
+        });
+        words.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            e.stopPropagation();
+            void save();
+          }
+        });
+        const hadFocus = panel.contains(document.activeElement) && document.activeElement?.classList.contains("words-input");
+        replace(panel,
+          h("div", { class: "capture-draft-head" }, h("h2", null, d.parts.length > 1 ? `New capture · ${d.parts.length} parts` : "New capture")),
+          ...items,
+          h("p", { class: "draft-hint" }, view.pickRegion ? "Select more text, or drag a region (⇧⌘R), to add to it." : "Select more text to add to it."),
+          h("p", { class: "muted small" }, `From ${ctx.source.title}${locs.length ? `, ${locs.join(", ")}` : ""}`),
+          words,
+          h("div", { class: "ask-buttons" },
+            h("button", { class: "button", type: "button", onclick: () => setDraft(k, null) }, "Discard"),
+            h("button", { class: "button primary", type: "button", title: "Save capture (⌘↩)", onclick: () => void save() }, "Save capture")),
+        );
+        if (hadFocus) words.focus();
+      }
+
+      const b1 = h("button", { class: "icon-button", "aria-label": "Capture the selection", title: "Capture the selection (⇧⌘C)", onclick: () => void addSelection() }, icon(Highlighter));
+      const b2 = view.pickRegion ? h("button", { class: "icon-button", "aria-label": "Capture a region", title: "Capture a region (⇧⌘R)", onclick: () => void addRegion() }, icon(Crop)) : null;
+      toolbar.append(b1, ...(b2 ? [b2] : []));
+      active = { addSelection, addRegion, save };
       return () => {
-        stop();
+        stopPanel();
+        unwatch();
+        document.removeEventListener("scroll", onScroll, true);
+        window.removeEventListener("keydown", onKey);
+        pop.remove();
+        panel.remove();
         active = null;
         b1.remove();
         b2?.remove();
-        pending.remove();
       };
     },
   };
-  let active: (() => Promise<void> | void) | null = null;
   shell.slot<ReaderTool>(READER_TOOLS).add("captures", "capture", tool);
+  const onItem = () => shell.router.current().page === "item";
   shell.actions.add("captures", {
     id: "captures.captureSelection",
     title: "Capture the selection",
     keys: ["Mod+Shift+C"],
-    when: () => shell.router.current().page === "item",
+    when: onItem,
     menu: { name: "edit", group: 2 },
     icon: Highlighter,
-    run: () => void active?.(),
+    run: () => void active?.addSelection(),
+  });
+  shell.actions.add("captures", {
+    id: "captures.captureRegion",
+    title: "Capture a region",
+    keys: ["Mod+Shift+R"],
+    when: onItem,
+    menu: { name: "edit", group: 2 },
+    icon: Crop,
+    run: () => void active?.addRegion(),
+  });
+  shell.actions.add("captures", {
+    id: "captures.save",
+    title: "Save the capture",
+    keys: ["Mod+Enter"],
+    when: () => onItem() && [...drafts().keys()].some((key) => key.startsWith(`${shell.router.current().params.id}|`)),
+    menu: { name: "edit", group: 2 },
+    run: () => void active?.save(),
   });
 
   // ---- embeds ---------------------------------------------------------------------------

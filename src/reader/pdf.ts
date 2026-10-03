@@ -10,7 +10,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { EventBus, PDFFindController, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { h } from "../kit/dom";
-import { cropToPng, dragRect, outlineRegion, pageAtOffset, pageOf, regionOf, type ReaderEngine, type ReaderView } from "./host";
+import { boxesIn, drawMarks, dragRect, endOf, innerRect, outlineRegion, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 
 const BASE = "/pdfjs/";
@@ -61,8 +61,15 @@ export const pdfEngine: ReaderEngine = {
         if (lines?.length) recognized.set(p.page, lines);
       }
     });
+    // Pending marks (a capture being made), redrawn as pages render.
+    let marks: Mark[] = [];
+    const drawPageMarks = (n: number) => {
+      const div = viewer.getPageView(n - 1)?.div as HTMLElement | undefined;
+      if (div) drawMarks(div, marks, n);
+    };
     eventBus.on("pagerendered", (e: { pageNumber: number }) => {
       if (marked && e.pageNumber === marked.page) drawMark(false);
+      drawPageMarks(e.pageNumber);
       const lines = recognized.get(e.pageNumber);
       const div = viewer.getPageView(e.pageNumber - 1)?.div as HTMLElement | undefined;
       if (lines && div) ocrLayer(div, lines);
@@ -138,9 +145,38 @@ export const pdfEngine: ReaderEngine = {
       selection() {
         const sel = window.getSelection();
         const text = sel?.toString().trim() ?? "";
-        if (!sel || !text || !container.contains(sel.anchorNode)) return null;
+        if (!sel || !text || !sel.rangeCount || !container.contains(sel.anchorNode)) return null;
+        const range = sel.getRangeAt(0);
         const pageEl = (sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement)?.closest<HTMLElement>(".page");
-        return { text, page: pageEl ? Number(pageEl.dataset.pageNumber) : viewer.currentPageNumber };
+        // Boxes on every page the selection crosses.
+        const boxes: Box[] = [];
+        for (const p of container.querySelectorAll<HTMLElement>(".page")) {
+          if (range.intersectsNode(p)) boxes.push(...boxesIn(range, p, Number(p.dataset.pageNumber)));
+        }
+        return { text, page: pageEl ? Number(pageEl.dataset.pageNumber) : viewer.currentPageNumber, boxes, end: endOf(range) };
+      },
+      watchSelection(cb) {
+        // When a drag or a keyboard selection ends (not at every step of it).
+        const up = () => setTimeout(cb, 0);
+        const key = (e: KeyboardEvent) => e.shiftKey && setTimeout(cb, 0);
+        const change = () => {
+          if (!window.getSelection()?.toString().trim()) cb();
+        };
+        container.addEventListener("mouseup", up);
+        container.addEventListener("keyup", key);
+        document.addEventListener("selectionchange", change);
+        return () => {
+          container.removeEventListener("mouseup", up);
+          container.removeEventListener("keyup", key);
+          document.removeEventListener("selectionchange", change);
+        };
+      },
+      clearSelection: () => window.getSelection()?.removeAllRanges(),
+      setMarks(m) {
+        marks = m;
+        for (let n = 1; n <= doc.numPages; n++) {
+          if (viewer.getPageView(n - 1)?.div?.isConnected) drawPageMarks(n);
+        }
       },
       async pickRegion() {
         const r = await dragRect(container);
@@ -152,14 +188,16 @@ export const pdfEngine: ReaderEngine = {
           const b = p.getBoundingClientRect();
           return cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom;
         });
-        const canvas = pageEl?.querySelector("canvas");
-        if (!pageEl || !canvas) return null;
-        const b = pageEl.getBoundingClientRect();
+        if (!pageEl) return null;
+        // Inside the page's border, where the page itself is drawn.
+        const b = innerRect(pageEl);
         const x = Math.max(0, r.left - b.left), y = Math.max(0, r.top - b.top);
-        const w = Math.min(b.width - x, r.width), h = Math.min(b.height - y, r.height);
-        const sx = canvas.width / b.width, sy = canvas.height / b.height;
+        const w = Math.min(b.width - x, r.right - b.left - x), h = Math.min(b.height - y, r.bottom - b.top - y);
+        if (w < 4 || h < 4) return null;
         const pct = (v: number, of: number) => Math.round((v / of) * 10000) / 100;
-        return { page: Number(pageEl.dataset.pageNumber), x: pct(x, b.width), y: pct(y, b.height), w: pct(w, b.width), h: pct(h, b.height), png: cropToPng(canvas, x * sx, y * sy, w * sx, h * sy) };
+        const n = Number(pageEl.dataset.pageNumber);
+        const box = { x: pct(x, b.width), y: pct(y, b.height), w: pct(w, b.width), h: pct(h, b.height) };
+        return { page: n, ...box, png: await renderRegion(doc, n, box) };
       },
       async showPlace(selectors) {
         await pagesReady;
@@ -186,3 +224,23 @@ export const pdfEngine: ReaderEngine = {
     return view;
   },
 };
+
+/**
+ * Renders a region of a page (percent boxes) afresh, sharp: about 2,000 px across at most,
+ * and never below twice the page's natural size.
+ */
+async function renderRegion(doc: pdfjs.PDFDocumentProxy, n: number, r: { x: number; y: number; w: number; h: number }): Promise<string> {
+  const page = await doc.getPage(n);
+  const base = page.getViewport({ scale: 1 });
+  const regionW = (base.width * r.w) / 100;
+  const scale = Math.max(2, Math.min(6, 2000 / Math.max(1, regionW)));
+  const vp = page.getViewport({ scale });
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round((vp.width * r.w) / 100));
+  c.height = Math.max(1, Math.round((vp.height * r.h) / 100));
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvas: c, canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, -(vp.width * r.x) / 100, -(vp.height * r.y) / 100], background: "#fff" }).promise;
+  return c.toDataURL("image/png");
+}
