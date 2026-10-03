@@ -100,7 +100,20 @@ export const epubEngine: ReaderEngine = {
       setMarks(marks) {
         for (const m of marked) if (m.cfi) void view.deleteAnnotation({ value: m.cfi });
         marked = marks.filter((m) => m.cfi);
-        for (const m of marked) void view.addAnnotation({ value: m.cfi });
+        // Saved captures softer than a capture being made.
+        for (const m of marked) void view.addAnnotation({ value: m.cfi, color: m.saved ? "rgb(255 196 0 / 22%)" : undefined });
+      },
+      onMarkClick(cb) {
+        const on = (e: any) => {
+          const ids = marked.filter((m) => m.saved && m.cfi === e.detail?.value).map((m) => m.id);
+          if (!ids.length) return;
+          const range = e.detail?.range as Range | undefined;
+          const r = range?.getBoundingClientRect();
+          const fb = (range?.startContainer?.ownerDocument?.defaultView?.frameElement as HTMLElement | null)?.getBoundingClientRect();
+          cb(ids, { x: (r?.right ?? 0) + (fb?.left ?? 0), y: (r?.bottom ?? 0) + (fb?.top ?? 0) });
+        };
+        view.addEventListener("show-annotation", on);
+        return () => view.removeEventListener("show-annotation", on);
       },
       async showPlace(selectors) {
         const cfi = selectors.find((s) => s.type === "FragmentSelector" && (s.value ?? "").startsWith("epubcfi("))?.value;

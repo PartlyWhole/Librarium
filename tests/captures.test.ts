@@ -35,15 +35,17 @@ type Sel = { text: string; page: number; boxes?: { page: number; x: number; y: n
 function fakeView(get: () => Sel | null, extra: Partial<ReaderView> = {}) {
   const watchers: (() => void)[] = [];
   const marks: { current: Mark[] } = { current: [] };
+  const markClicks: ((ids: string[], at: { x: number; y: number }) => void)[] = [];
   const view: ReaderView = {
     zoomIn() {}, zoomOut() {}, zoomReset() {}, find: async () => ({ count: 0, current: 0 }), findClear() {}, position: () => "", destroy() {},
     selection: () => get(),
     watchSelection: (cb) => (watchers.push(cb), () => {}),
     clearSelection() {},
     setMarks: (m) => (marks.current = m),
+    onMarkClick: (cb) => (markClicks.push(cb), () => {}),
     ...extra,
   };
-  return { view, marks, select: () => watchers.forEach((w) => w()) };
+  return { view, marks, select: () => watchers.forEach((w) => w()), clickMark: (ids: string[]) => markClicks.forEach((cb) => cb(ids, { x: 100, y: 100 })) };
 }
 
 function mountTool(shell: Shell, src: { id: string }, view: ReaderView) {
@@ -115,7 +117,8 @@ describe("capturing", () => {
     const cap = shell.records.list("capture")[0]!;
     expect(cap.fields["captures.parts"]).toBe(2);
     expect(cap.fields["captures.quote"]).toBe("It avoids shock […] the art of making people act");
-    expect(f.marks.current).toEqual([]);
+    // Once saved, both parts stay highlighted, as a saved capture.
+    expect(f.marks.current.map((m) => [m.saved, m.boxes[0]?.page])).toEqual([[true, 1], [true, 2]]);
   });
 
   it("offers a button by the selection: Capture, then Add to capture", async () => {
@@ -179,6 +182,44 @@ describe("capturing", () => {
     button(again.aside, "Discard").click();
     await wait(10);
     expect(again.aside.querySelector(".capture-draft")).toBeNull();
+  });
+});
+
+describe("saved captures in the reader", () => {
+  it("are highlighted softly where they were made, again on reopening, and open from a click", async () => {
+    const { shell, src } = await boot();
+    const sel: Sel = { text: "It avoids shock", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] };
+    const f = fakeView(() => sel);
+    const t = mountTool(shell, src, f.view);
+    t.capture();
+    await wait(30);
+    button(t.aside, "Save capture").click();
+    await wait(60);
+    const cap = shell.records.list("capture")[0]!;
+    // The anchor keeps where the part was drawn.
+    expect(anchors.get(cap.id).parts[0].boxes).toEqual([{ page: 1, x: 10, y: 5, w: 20, h: 2 }]);
+    // Drawn as saved, no longer as being made.
+    expect(f.marks.current).toEqual([{ id: `${cap.id}#0`, boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }], region: false, cfi: undefined, saved: true }]);
+    t.dispose();
+    // Opened again: there.
+    const g = fakeView(() => null);
+    const again = mountTool(shell, src, g.view);
+    await wait(30);
+    expect(g.marks.current.map((m) => m.id)).toEqual([`${cap.id}#0`]);
+    // A click on it offers to open it.
+    g.clickMark([`${cap.id}#0`]);
+    const pops = [...document.querySelectorAll(".selection-pop")].filter((p) => !(p as HTMLElement).hidden);
+    expect(pops.map((p) => p.textContent)).toEqual(["Open capture"]);
+    (pops[0]!.querySelector("button") as HTMLButtonElement).click();
+    await wait(30);
+    expect(shell.router.current()).toMatchObject({ page: "capture", params: { id: cap.id } });
+    // Archived, it isn't highlighted any more.
+    await (await import("./mock/backend")).call("archive.archive", { id: cap.id });
+    shell.hidingFields.add("test", "archive.at", "archive.at");
+    await shell.records.load();
+    await wait(30);
+    expect(g.marks.current).toEqual([]);
+    again.dispose();
   });
 });
 

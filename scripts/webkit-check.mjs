@@ -29,6 +29,7 @@ const checks = [
   ["a region dragged on a page far down a PDF is captured from that page", r.pdfRegionPage >= 4 && r.pdfRegionLayerGone === true],
   ["a captured PDF region is rendered sharp and not blank", r.pdfRegionSharp === true && r.pdfRegionInk > 50],
   ["Escape cancels picking a region", r.pdfRegionCancelled === true],
+  ["a saved capture is highlighted in a PDF, and a click on it is recognised", r.pdfSavedMark === true && r.pdfSavedMarkClicked === "cap#0"],
   ["a PDF selection has boxes on its page, and they are highlighted", r.pdfSelectionBoxes >= 1 && r.pdfSelectionEnd === true && r.pdfMarks >= 1 && r.pdfMarksCleared === true],
   ["EPUB opens", r.epubPainted === true && r.epubDocs >= 1],
   ["EPUB scripts never run", r.epubScriptRan === false],

@@ -67,8 +67,8 @@ fn a_capture_keeps_its_quote_anchor_and_region() {
             snapshot: None,
             text: Some(json!({ "file": "extracted/text-v1.json", "extractor": "pdf-extract 0.12", "version": 1 })),
             parts: vec![
-                CapturePart { selector: vec![json!({ "type": "TextQuoteSelector", "exact": "Technique integrates everything.", "prefix": "", "suffix": " It avoids" }), json!({ "type": "TextPositionSelector", "start": 0, "end": 32 }), json!({ "type": "FragmentSelector", "value": "page=1", "conformsTo": "http://tools.ietf.org/rfc/rfc8118" })], quote: "Technique integrates everything.".into(), locator: Some("p. 1".into()), region_png: None },
-                CapturePart { selector: vec![json!({ "type": "FragmentSelector", "value": "xywh=percent:10,20,30,40", "conformsTo": "http://www.w3.org/TR/media-frags/" })], quote: String::new(), locator: Some("p. 2".into()), region_png: Some(base64::engine::general_purpose::STANDARD.encode(PNG)) },
+                CapturePart { selector: vec![json!({ "type": "TextQuoteSelector", "exact": "Technique integrates everything.", "prefix": "", "suffix": " It avoids" }), json!({ "type": "TextPositionSelector", "start": 0, "end": 32 }), json!({ "type": "FragmentSelector", "value": "page=1", "conformsTo": "http://tools.ietf.org/rfc/rfc8118" })], quote: "Technique integrates everything.".into(), locator: Some("p. 1".into()), region_png: None, boxes: vec![json!({ "page": 1, "x": 10, "y": 5, "w": 30, "h": 2 })] },
+                CapturePart { selector: vec![json!({ "type": "FragmentSelector", "value": "xywh=percent:10,20,30,40", "conformsTo": "http://www.w3.org/TR/media-frags/" })], quote: String::new(), locator: Some("p. 2".into()), region_png: Some(base64::engine::general_purpose::STANDARD.encode(PNG)), boxes: vec![] },
             ],
             words: "This is why it matters.".into(),
         },
@@ -85,6 +85,19 @@ fn a_capture_keeps_its_quote_anchor_and_region() {
     let a = librarium_feature_captures::anchor(&lib.store, id).unwrap();
     assert_eq!(a["id"], id.to_string());
     assert_eq!(a["parts"][1]["region"], ".region-2.png");
+    assert_eq!(a["parts"][0]["boxes"][0]["page"], 1, "where the part is drawn is kept");
+    assert!(a["parts"][1].get("boxes").is_none());
+    // The source's captures, with where to highlight them (a region's from its selector).
+    let marks = librarium_feature_captures::for_source(&lib.store, src.id, None);
+    assert_eq!(marks.len(), 1);
+    assert_eq!(marks[0]["id"], id.to_string());
+    assert_eq!(marks[0]["parts"][0]["boxes"][0]["x"], 10);
+    assert_eq!(marks[0]["parts"][1]["region"], true);
+    assert_eq!(marks[0]["parts"][1]["boxes"][0], json!({ "x": 10.0, "y": 20.0, "w": 30.0, "h": 40.0 }));
+    assert!(
+        librarium_feature_captures::for_source(&lib.store, src.id, Some("2026-10-02T091400Z")).is_empty(),
+        "not of another snapshot"
+    );
     assert_eq!(a["text"]["extractor"], "pdf-extract 0.12");
 
     // Paired by the ID inside, not the name.
@@ -121,7 +134,13 @@ fn sidecars_are_written_before_the_record() {
             source: src.id,
             snapshot: None,
             text: None,
-            parts: vec![CapturePart { selector: vec![], quote: "q".into(), locator: None, region_png: None }],
+            parts: vec![CapturePart {
+                selector: vec![],
+                quote: "q".into(),
+                locator: None,
+                region_png: None,
+                boxes: vec![],
+            }],
             words: String::new(),
         },
     );

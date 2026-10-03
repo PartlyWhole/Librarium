@@ -45,6 +45,8 @@ export interface ReaderView {
   pickRegion?(): Promise<ReaderRegion | null>;
   /** Highlights these places (e.g. the parts of a capture being made), replacing earlier marks. */
   setMarks?(marks: Mark[]): void;
+  /** Calls `cb` with the marks clicked on (a plain click, not the end of a selection). */
+  onMarkClick?(cb: (ids: string[], at: { x: number; y: number }) => void): () => void;
   /** Shows a place given by W3C selectors (page, quote, region, CFI). */
   showPlace?(selectors: PlaceSelector[]): Promise<boolean>;
   destroy(): void;
@@ -79,6 +81,8 @@ export interface Mark {
   boxes: Box[];
   region?: boolean;
   cfi?: string;
+  /** Already saved (drawn softer), rather than part of a capture being made. */
+  saved?: boolean;
 }
 
 export interface ReaderRegion {
@@ -240,7 +244,7 @@ export function drawMarks(over: HTMLElement, marks: Mark[], page?: number): void
     for (const b of m.boxes) {
       if (page !== undefined && b.page !== page) continue;
       const el = document.createElement("div");
-      el.className = `pending-mark${m.region ? " region" : ""}`;
+      el.className = `pending-mark${m.region ? " region" : ""}${m.saved ? " saved" : ""}`;
       el.dataset.mark = m.id;
       Object.assign(el.style, { left: `${b.x}%`, top: `${b.y}%`, width: `${b.w}%`, height: `${b.h}%` });
       over.appendChild(el);
@@ -290,4 +294,22 @@ export function pageAtOffset(pages: { text: string }[], offset: number): number 
     at += len;
   }
   return Math.max(0, pages.length - 1);
+}
+
+/**
+ * Reports plain clicks on marks drawn in `over` (marks don't take clicks themselves, so text
+ * under them can still be selected): the IDs of the marks under the pointer.
+ */
+export function watchMarkClicks(over: HTMLElement, cb: (ids: string[], at: { x: number; y: number }) => void): () => void {
+  const click = (e: MouseEvent) => {
+    if (e.button !== 0 || window.getSelection()?.toString().trim()) return;
+    const ids = new Set<string>();
+    for (const m of over.querySelectorAll<HTMLElement>(".pending-mark.saved")) {
+      const r = m.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom && m.dataset.mark) ids.add(m.dataset.mark);
+    }
+    if (ids.size) cb([...ids], { x: e.clientX, y: e.clientY });
+  };
+  over.addEventListener("click", click);
+  return () => over.removeEventListener("click", click);
 }

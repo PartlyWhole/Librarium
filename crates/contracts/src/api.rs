@@ -364,6 +364,11 @@ pub struct CapturePart {
     /// A PNG of the region, base64-encoded.
     #[serde(default)]
     pub region_png: Option<String>,
+    /// Where the part is drawn, to highlight it: boxes in percent of their page (with a
+    /// 1-based `page` in a PDF) or of the image. Stored with the anchor; sources don't change.
+    #[ts(type = "{ page?: number, x: number, y: number, w: number, h: number }[]")]
+    #[serde(default)]
+    pub boxes: Vec<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]

@@ -1,6 +1,6 @@
 /** The image engine: the original image, zoomable; find searches its recognised text. */
 import { h } from "../kit/dom";
-import { boxesIn, cropToPng, drawMarks, dragRect, endOf, outlineRegion, regionOf, type Mark, type ReaderEngine, type ReaderView } from "./host";
+import { boxesIn, cropToPng, drawMarks, dragRect, endOf, outlineRegion, watchMarkClicks, regionOf, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 
 export const imageEngine: ReaderEngine = {
@@ -73,6 +73,7 @@ export const imageEngine: ReaderEngine = {
         };
       },
       clearSelection: () => window.getSelection()?.removeAllRanges(),
+      onMarkClick: (cb) => watchMarkClicks(frame, cb),
       setMarks(m) {
         marks = m;
         drawMarks(holder, marks);

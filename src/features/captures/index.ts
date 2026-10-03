@@ -54,7 +54,14 @@ const byOrder = (a: DraftPart, b: DraftPart) => {
   return 0;
 };
 
-const toPart = ({ selector, quote, locator, region_png }: DraftPart): CapturePart => ({ selector, quote, locator, region_png });
+const toPart = ({ selector, quote, locator, region_png, boxes }: DraftPart): CapturePart => ({ selector, quote, locator, region_png, boxes });
+
+/** A saved capture of a source, with where to highlight each part (captures.forSource). */
+interface SavedMarks {
+  id: string;
+  title: string;
+  parts: { boxes: Box[]; cfi: string | null; region: boolean }[];
+}
 
 interface Anchor {
   id: string;
@@ -191,18 +198,59 @@ export function captures(shell: ShellApi): void {
         Object.assign(pop.style, { left: `${x}px`, top: `${y}px` });
       };
       const unwatch = view.watchSelection?.(showPop) ?? (() => {});
-      const onScroll = () => hidePop();
+      // A click on a saved highlight offers to open its capture.
+      const markPop = h("div", { class: "selection-pop", role: "toolbar", "aria-label": "Capture", hidden: true });
+      document.body.appendChild(markPop);
+      const hideMarkPop = () => (markPop.hidden = true);
+      const unwatchMarks = view.onMarkClick?.((ids, at) => {
+        const caps = [...new Set(ids.map((id) => id.split("#")[0]!))].map((id) => saved.peek().find((c) => c.id === id)).filter((c): c is SavedMarks => !!c);
+        if (!caps.length) return;
+        hidePop();
+        replace(markPop, caps.map((c) => h("button", { type: "button", title: c.title, onmousedown: (e: Event) => e.preventDefault(), onclick: () => (hideMarkPop(), shell.openRecord(c.id)) }, icon(Quote, 14), caps.length > 1 ? `Open “${c.title.slice(0, 28)}${c.title.length > 28 ? "…" : ""}”` : "Open capture")));
+        markPop.hidden = false;
+        const w = markPop.offsetWidth || 140;
+        Object.assign(markPop.style, { left: `${Math.max(8, Math.min(window.innerWidth - w - 8, at.x - w / 2))}px`, top: `${at.y + 36 > window.innerHeight ? at.y - 44 : at.y + 12}px` });
+      }) ?? (() => {});
+      const onAway = (e: MouseEvent) => {
+        if (!markPop.hidden && !markPop.contains(e.target as Node)) hideMarkPop();
+      };
+      window.addEventListener("mousedown", onAway, true);
+      const onScroll = () => {
+        hidePop();
+        markPop.hidden = true;
+      };
       const onKey = (e: KeyboardEvent) => {
         if (e.key === "Escape" && !pop.hidden) hidePop();
+        if (e.key === "Escape" && !markPop.hidden) markPop.hidden = true;
       };
       document.addEventListener("scroll", onScroll, true);
       window.addEventListener("keydown", onKey);
 
       // The panel beside the document.
       const panel = h("section", { class: "capture-draft", "aria-label": "New capture" });
+      // Captures already made from this source (this snapshot of it), highlighted softly; kept
+      // up to date as captures are made, archived or deleted.
+      const saved = signal<SavedMarks[]>([]);
+      let asked = 0;
+      let lastSig = "";
+      const stopSaved = effect(() => {
+        const mine = shell.records.list(KIND).filter((c) => c.fields[F.source] === ctx.source.id);
+        // Ask again only when this source's captures change (not on every change elsewhere).
+        const sig = mine.map((c) => `${c.id}:${c.version}`).sort().join();
+        if (sig === lastSig) return;
+        lastSig = sig;
+        const visible = new Set(mine.map((c) => c.id));
+        const n = ++asked;
+        if (!mine.length) return void saved.set([]);
+        void call<SavedMarks[]>("captures.forSource", { source: ctx.source.id, snapshot: ctx.part ?? null }).then(
+          (list) => n === asked && saved.set(list.filter((c) => visible.has(c.id))),
+          () => {},
+        );
+      });
       const stopPanel = effect(() => {
         const d = draftOf(k);
-        view.setMarks?.((d?.parts ?? []).map((p) => ({ id: p.key, boxes: p.boxes, region: p.region, cfi: p.region ? undefined : p.cfi })));
+        const savedMarks = saved().flatMap((c) => c.parts.map((p, i) => ({ id: `${c.id}#${i}`, boxes: p.boxes, region: p.region, cfi: p.region ? undefined : (p.cfi ?? undefined), saved: true })));
+        view.setMarks?.([...savedMarks, ...(d?.parts ?? []).map((p) => ({ id: p.key, boxes: p.boxes, region: p.region, cfi: p.region ? undefined : p.cfi }))]);
         if (!d?.parts.length) {
           panel.remove();
           return;
@@ -251,6 +299,10 @@ export function captures(shell: ShellApi): void {
       toolbar.append(b1, ...(b2 ? [b2] : []));
       active = { addSelection, addRegion, save };
       return () => {
+        stopSaved();
+        unwatchMarks();
+        window.removeEventListener("mousedown", onAway, true);
+        markPop.remove();
         stopPanel();
         unwatch();
         document.removeEventListener("scroll", onScroll, true);

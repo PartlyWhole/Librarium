@@ -148,6 +148,23 @@ async function run() {
     results.pdfMarks = stage.querySelectorAll(".pending-mark").length;
     pdf.view.setMarks?.([]);
     results.pdfMarksCleared = stage.querySelectorAll(".pending-mark").length === 0;
+    // A saved capture: drawn softly, and a click on it is reported (text under it stays selectable).
+    step("pdf saved mark");
+    let clicked: string[] = [];
+    const stopClicks = pdf.view.onMarkClick?.((ids) => (clicked = ids));
+    pdf.view.setMarks?.([{ id: "cap#0", boxes: sel?.boxes ?? [], saved: true }]);
+    await new Promise((r) => setTimeout(r, 100));
+    const savedMark = stage.querySelector(".pending-mark.saved") as HTMLElement | null;
+    results.pdfSavedMark = !!savedMark && getComputedStyle(savedMark).pointerEvents === "none";
+    getSelection()!.removeAllRanges();
+    if (savedMark) {
+      const r = savedMark.getBoundingClientRect();
+      const under = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)!;
+      under.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }));
+    }
+    results.pdfSavedMarkClicked = clicked.join();
+    stopClicks?.();
+    pdf.view.setMarks?.([]);
   }
   pdf.view.destroy();
 

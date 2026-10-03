@@ -47,5 +47,10 @@ Region capture had three faults:
 - Reader engines offer `watchSelection`, `clearSelection` and `setMarks`. Selections carry
   their boxes and the position of their last line.
 - Reader tools get an `aside` column. The reader page hides it while it is empty.
-- Saved captures are not yet highlighted in the document. That would need their boxes
-  stored with the anchor. The side panel lists them.
+- Saved captures are highlighted too (2026-10-03, later). Each part stores its boxes with the
+  anchor; PDFs, saved pages and images never change, so the boxes stay right, and EPUB parts
+  use their CFI. `captures.forSource` returns a source's captures (of one snapshot), and the
+  reader draws them softer than a capture being made. Clicking a highlight offers "Open
+  capture". A region captured before boxes were stored is drawn from its selector.
+- A PDF keeps fitting the reader's width as it changes (the window, the capture panel),
+  until the user zooms.

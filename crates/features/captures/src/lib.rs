@@ -83,6 +83,9 @@ pub fn create(ctx: &MethodCtx, p: CaptureParams) -> Result<Written> {
     let mut parts = vec![];
     for (i, part) in p.parts.iter().enumerate() {
         let mut v = json!({ "selector": part.selector });
+        if !part.boxes.is_empty() {
+            v["boxes"] = json!(part.boxes);
+        }
         if let Some(b64) = &part.region_png {
             let png = base64::engine::general_purpose::STANDARD
                 .decode(b64.trim_start_matches("data:image/png;base64,"))
@@ -140,6 +143,60 @@ pub fn anchor(store: &Store, id: Id) -> Result<Value> {
     Err(BackendError::not_found("this capture's anchor can't be found"))
 }
 
+/// The captures of a source (of one snapshot of it, or of the source itself), with where to
+/// highlight each part: its stored boxes, a region's rectangle, or an EPUB part's CFI.
+pub fn for_source(store: &Store, source: Id, snapshot: Option<&str>) -> Vec<Value> {
+    let src = source.to_string();
+    let mut out = vec![];
+    for c in store.list(Some(KIND)) {
+        if c.fields.get(SOURCE).and_then(|v| v.as_str()) != Some(src.as_str()) {
+            continue;
+        }
+        let Ok(a) = anchor(store, c.id) else { continue };
+        if a["snapshot"].as_str() != snapshot {
+            continue;
+        }
+        let parts: Vec<Value> = a["parts"]
+            .as_array()
+            .map(|ps| {
+                ps.iter()
+                    .map(|p| {
+                        let sels = p["selector"].as_array().cloned().unwrap_or_default();
+                        let fragment = |prefix: &str| {
+                            sels.iter().find_map(|s| {
+                                [s["value"].as_str(), s["refinedBy"]["value"].as_str()]
+                                    .into_iter()
+                                    .flatten()
+                                    .find(|v| v.starts_with(prefix))
+                                    .map(str::to_string)
+                            })
+                        };
+                        let page = fragment("page=").and_then(|v| v[5..].parse::<u32>().ok());
+                        let cfi = fragment("epubcfi(");
+                        let region = fragment("xywh=percent:");
+                        let mut boxes = p["boxes"].as_array().cloned().unwrap_or_default();
+                        if boxes.is_empty() {
+                            if let Some(r) = &region {
+                                let n: Vec<f64> = r[13..].split(',').filter_map(|x| x.parse().ok()).collect();
+                                if n.len() == 4 {
+                                    let mut b = json!({ "x": n[0], "y": n[1], "w": n[2], "h": n[3] });
+                                    if let Some(pg) = page {
+                                        b["page"] = json!(pg);
+                                    }
+                                    boxes.push(b);
+                                }
+                            }
+                        }
+                        json!({ "boxes": boxes, "cfi": cfi, "region": region.is_some() })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.push(json!({ "id": c.id, "title": c.title, "parts": parts }));
+    }
+    out
+}
+
 /// Sidecars whose capture doesn't exist: listed, never deleted.
 pub fn orphans(store: &Store) -> Vec<OrphanSidecar> {
     let dir = store.root.join(FOLDER);
@@ -183,6 +240,15 @@ pub fn contribute_methods(r: &mut Registry<ApiMethod>) -> Result<(), DuplicateId
         Arc::new(|ctx: &MethodCtx, p: Value| {
             let p: CaptureParams = serde_json::from_value(p).map_err(|e| BackendError::invalid(e.to_string()))?;
             Ok(serde_json::to_value(create(ctx, p)?).unwrap())
+        }),
+    )?;
+    r.add(
+        ID,
+        "captures.forSource",
+        Arc::new(|ctx: &MethodCtx, p: Value| {
+            let source: Id =
+                serde_json::from_value(p["source"].clone()).map_err(|e| BackendError::invalid(e.to_string()))?;
+            Ok(Value::Array(for_source(&ctx.library.store, source, p["snapshot"].as_str())))
         }),
     )?;
     r.add(

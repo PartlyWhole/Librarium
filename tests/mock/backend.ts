@@ -149,10 +149,21 @@ const api: Record<string, (p: any) => unknown> = {
   "captures.create": (p) => {
     const quote = p.parts.map((x: { quote: string }) => x.quote).filter(Boolean).join(" […] ");
     const info = seed("capture", quote.split(/\s+/).slice(0, 8).join(" ") || "A region", p.words ?? "", { "captures.source": p.source, "captures.quote": quote, "captures.parts": p.parts.length, ...(p.parts[0]?.locator ? { "captures.locator": p.parts[0].locator } : {}) });
-    anchors.set(info.id, { id: info.id, source: p.source, snapshot: null, text: p.text, parts: p.parts.map((x: { selector: unknown }) => ({ selector: x.selector })) });
+    anchors.set(info.id, { id: info.id, source: p.source, snapshot: null, text: p.text, parts: p.parts.map((x: { selector: unknown; boxes?: unknown[] }) => ({ selector: x.selector, ...(x.boxes?.length ? { boxes: x.boxes } : {}) })) });
     return { info, seq: touch(need(info.id), "created") };
   },
   "captures.anchor": (p) => anchors.get(p.id) ?? fail("not-found", "no anchor"),
+  "captures.forSource": (p) =>
+    [...state.records.values()]
+      .filter((r) => r.info.kind === "capture" && r.info.fields["captures.source"] === p.source && (anchors.get(r.info.id)?.snapshot ?? null) === (p.snapshot ?? null))
+      .map((r) => ({
+        id: r.info.id,
+        title: r.info.title,
+        parts: (anchors.get(r.info.id)?.parts ?? []).map((part: { selector: { value?: string; refinedBy?: { value?: string } }[]; boxes?: unknown[] }) => {
+          const frag = (prefix: string) => part.selector.flatMap((s) => [s.value, s.refinedBy?.value]).find((v) => v?.startsWith(prefix));
+          return { boxes: part.boxes ?? [], cfi: frag("epubcfi(") ?? null, region: !!frag("xywh=") };
+        }),
+      })),
   "captures.updateAnchor": (p) => {
     const a = anchors.get(p.id);
     if (a) a.parts = p.parts;

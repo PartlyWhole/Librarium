@@ -10,7 +10,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { EventBus, PDFFindController, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { h } from "../kit/dom";
-import { boxesIn, drawMarks, dragRect, endOf, innerRect, outlineRegion, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
+import { boxesIn, drawMarks, dragRect, endOf, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 
 const BASE = "/pdfjs/";
@@ -80,12 +80,22 @@ export const pdfEngine: ReaderEngine = {
     });
     eventBus.on("pagechanging", () => events.moved());
     // Pages exist only after "pagesinit": anything that moves to a page waits for it.
+    // Fit to the width, and keep fitting as the reader's width changes (the window, the capture
+    // panel), until the user zooms; a width of nothing (a hidden reader) is ignored.
+    let fit = true;
+    let inited = false;
+    const refit = () => {
+      if (fit && inited && container.clientWidth > 40) viewer.currentScaleValue = "page-width";
+    };
     const pagesReady = new Promise<void>((resolve) =>
       eventBus.on("pagesinit", () => {
-        viewer.currentScaleValue = "page-width";
+        inited = true;
+        refit();
         resolve();
       }),
     );
+    const resized = new ResizeObserver(() => refit());
+    resized.observe(container);
     const data = new Uint8Array(await src.bytes());
     const task = pdfjs.getDocument({ data, ...DOCUMENT_OPTIONS });
     const doc = await task.promise;
@@ -107,9 +117,9 @@ export const pdfEngine: ReaderEngine = {
       wake();
     });
     const view: ReaderView = {
-      zoomIn: () => (viewer.currentScale = Math.min(8, viewer.currentScale * 1.2)),
-      zoomOut: () => (viewer.currentScale = Math.max(0.25, viewer.currentScale / 1.2)),
-      zoomReset: () => (viewer.currentScaleValue = "page-width"),
+      zoomIn: () => ((fit = false), (viewer.currentScale = Math.min(8, viewer.currentScale * 1.2))),
+      zoomOut: () => ((fit = false), (viewer.currentScale = Math.max(0.25, viewer.currentScale / 1.2))),
+      zoomReset: () => ((fit = true), refit()),
       async find(query, opts = {}) {
         settled = false;
         eventBus.dispatch("find", { source: view, type: opts.again ? "again" : "", query, caseSensitive: false, entireWord: false, highlightAll: true, findPrevious: !!opts.back, matchDiacritics: false });
@@ -172,6 +182,7 @@ export const pdfEngine: ReaderEngine = {
         };
       },
       clearSelection: () => window.getSelection()?.removeAllRanges(),
+      onMarkClick: (cb) => watchMarkClicks(container, cb),
       setMarks(m) {
         marks = m;
         for (let n = 1; n <= doc.numPages; n++) {
@@ -216,6 +227,7 @@ export const pdfEngine: ReaderEngine = {
         return true;
       },
       destroy() {
+        resized.disconnect();
         viewer.cleanup();
         void task.destroy();
         container.remove();
