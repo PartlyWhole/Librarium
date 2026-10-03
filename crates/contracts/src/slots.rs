@@ -34,6 +34,7 @@ slots! {
     RECORD_KINDS = "kernel.record-kinds", Kernel, "Kinds of record, with their format and folder";
     DERIVED_VIEWS = "kernel.derived-views", Kernel, "Disposable views computed from records";
     JOB_KINDS = "kernel.job-kinds", Kernel, "Kinds of background job";
+    PART_USERS = "kernel.part-users", Kernel, "Who uses which part of a record (e.g. captures of a snapshot), so it isn't removed";
     IMPORTERS = "kernel.importers", Kernel, "Importers of outside files into the store";
     API_METHODS = "kernel.api-methods", Kernel, "API calls a module offers through the API";
     PAGES = "shell.pages", Shell, "Pages shown in the workspace";

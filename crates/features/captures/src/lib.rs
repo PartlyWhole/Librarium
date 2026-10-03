@@ -40,6 +40,22 @@ pub fn contribute_kinds(k: &mut Kinds) -> Result<(), DuplicateId> {
             slugged: false,
             subfolder_field: None,
         },
+    )?;
+    // A capture of a saved page keeps the snapshot it was made from.
+    k.add_part_user(
+        ID,
+        Arc::new(|store: &Store, source: Id| {
+            let src = source.to_string();
+            store
+                .list(Some(KIND))
+                .into_iter()
+                .filter(|c| c.fields.get(SOURCE).and_then(|v| v.as_str()) == Some(src.as_str()))
+                .filter_map(|c| {
+                    let a = anchor(store, c.id).ok()?;
+                    Some((a["snapshot"].as_str()?.to_string(), c.id))
+                })
+                .collect()
+        }),
     )
 }
 

@@ -92,13 +92,16 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     openers,
     hidingFields,
     recordActions,
-    showRecordMenu(r, at) {
+    showRecordMenu(target, at) {
+      const rs = Array.isArray(target) ? target : [target];
+      if (!rs.length) return;
       const items: MenuItem[] = [];
-      if (openers.get(r.kind)) items.push({ label: "Open", run: () => shell.openRecord(r.id) });
-      const extra = recordActions.values().filter((a) => a.applies(r));
+      const one = rs.length === 1 ? rs[0]! : null;
+      if (one && openers.get(one.kind)) items.push({ label: "Open", run: () => shell.openRecord(one.id) });
+      const extra = recordActions.values().filter((a) => rs.every((r) => a.applies(r)));
       if (items.length && extra.length) items.push("separator");
-      for (const a of extra) items.push({ label: a.label, destructive: a.destructive, run: () => void a.run(r) });
-      if (items.length) contextMenu(items, at, r.title || "Untitled");
+      for (const a of extra) items.push({ label: typeof a.label === "function" ? a.label(rs.length) : a.label, destructive: a.destructive, run: () => void a.run(rs) });
+      if (items.length) contextMenu(items, at, one ? one.title || "Untitled" : `${rs.length} items`);
     },
     slot<T>(id: string) {
       let r = slots.get(id);
@@ -196,9 +199,9 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   filter.addEventListener("input", () => filterText.set(filter.value));
   const tree = new Tree("Notes and library", (id, expanded) => folded.update((f) => (expanded ? f.filter((x) => x !== id) : [...new Set([...f, id])])));
   // A record's row in the sidebar has the record's menu.
-  tree.onContext = (id, at) => {
-    const r = records.get(id);
-    if (r) shell.showRecordMenu(r, at);
+  tree.onContext = (ids, at) => {
+    const rs = ids.map((id) => records.get(id)).filter((r): r is NonNullable<typeof r> => !!r);
+    if (rs.length) shell.showRecordMenu(rs, at);
   };
   const sidebarEl = h("aside", { class: "app-sidebar", "aria-label": "Sidebar" }, h("div", { class: "sidebar-top" }, filter), h("div", { class: "sidebar-scroll" }, tree.el));
 

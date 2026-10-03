@@ -415,3 +415,17 @@ body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6
 :root[data-theme="dark"] .context-item.destructive { color: #ff8a80; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .context-item.destructive { color: #ff8a80; } }
 .context-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+
+/* Selectable lists (Library, Archive) and selected sidebar items */
+.select-list { list-style: none; margin: 0; padding: 0; }
+.select-list [role=option] { border-radius: var(--r1); outline: none; cursor: default; }
+.select-list [role=option]:hover { background: var(--hover); }
+.select-list [role=option]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.select-list [role=option].selected { background: var(--selection); }
+.select-list .item-link { margin: 0; }
+.select-list .item-link:hover { background: none; }
+.tree-item.selected { background: var(--selection); }
+.list-hint { margin: -4px 0 10px; }
+.snapshot-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; max-height: 50vh; overflow: auto; }
+.snapshot-row { gap: 8px; }
+.snapshot-row .muted { margin-left: auto; }

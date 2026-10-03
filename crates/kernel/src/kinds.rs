@@ -41,10 +41,17 @@ pub type TextSource = std::sync::Arc<
         + Sync,
 >;
 
+/// Says which parts of a record (e.g. a web page's snapshots) other records use, as
+/// `(part, user)` pairs: such parts are never removed.
+pub type PartUser = std::sync::Arc<
+    dyn Fn(&crate::store::Store, librarium_contracts::Id) -> Vec<(String, librarium_contracts::Id)> + Send + Sync,
+>;
+
 pub struct Kinds {
     pub kinds: Registry<RecordKindDef>,
     pub slug_fields: Registry<SlugField>,
     pub text_sources: Registry<TextSource>,
+    pub part_users: Registry<PartUser>,
 }
 
 impl Default for Kinds {
@@ -59,6 +66,7 @@ impl Kinds {
             kinds: Registry::new(slots::RECORD_KINDS),
             slug_fields: Registry::new("kernel.slug-fields"),
             text_sources: Registry::new("kernel.text-sources"),
+            part_users: Registry::new(slots::PART_USERS),
         }
     }
     pub fn add(&mut self, contributor: &str, def: RecordKindDef) -> Result<(), DuplicateId> {
@@ -87,6 +95,20 @@ impl Kinds {
     /// Contributes the text of a kind's records (keyed by kind).
     pub fn add_text_source(&mut self, contributor: &str, kind: &str, f: TextSource) -> Result<(), DuplicateId> {
         self.text_sources.add(contributor, kind, f)
+    }
+
+    /// Declares which parts of records this contributor's records use.
+    pub fn add_part_user(&mut self, contributor: &str, f: PartUser) -> Result<(), DuplicateId> {
+        self.part_users.add(contributor, contributor, f)
+    }
+
+    /// The parts of a record in use, with the records using them.
+    pub fn parts_in_use(
+        &self,
+        store: &crate::store::Store,
+        id: librarium_contracts::Id,
+    ) -> Vec<(String, librarium_contracts::Id)> {
+        self.part_users.iter().flat_map(|e| (e.value)(store, id)).collect()
     }
 
     pub fn slug_fields_for(&self, kind: &str) -> Vec<&str> {

@@ -8,6 +8,7 @@
 //!   never re-runs extraction (or, later, recognition).
 
 pub mod checks;
+pub mod snapshots;
 
 use librarium_contracts::api::Written;
 use librarium_contracts::{BackendError, ErrorCode, Id, Result};
@@ -216,6 +217,23 @@ struct FileParams {
 }
 
 pub fn contribute_methods(r: &mut Registry<ApiMethod>) -> Result<(), DuplicateId> {
+    r.add(
+        ID,
+        "library.removeSnapshots.prepare",
+        Arc::new(|ctx: &MethodCtx, p: Value| {
+            let reqs: Vec<snapshots::Request> =
+                serde_json::from_value(p["items"].clone()).map_err(|e| BackendError::invalid(e.to_string()))?;
+            snapshots::prepare(ctx, &reqs)
+        }),
+    )?;
+    r.add(
+        ID,
+        "library.removeSnapshots",
+        Arc::new(|ctx: &MethodCtx, p: Value| {
+            let token = p["token"].as_str().ok_or_else(|| BackendError::invalid("no confirmation"))?;
+            snapshots::remove(ctx, token)
+        }),
+    )?;
     r.add(
         ID,
         "library.import",

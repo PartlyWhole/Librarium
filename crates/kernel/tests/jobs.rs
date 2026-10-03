@@ -178,7 +178,10 @@ fn a_one_at_a_time_kind_leaves_the_other_runner_free() {
     std::thread::sleep(Duration::from_millis(50));
     let q = hs.jobs.enqueue("test.quick", "q", json!({})).unwrap();
     assert_eq!(hs.jobs.wait(q.id, Duration::from_secs(2)).unwrap().state, JobState::Done, "the quick job didn't wait");
-    assert_eq!(hs.jobs.get(s2.id).unwrap().state, JobState::Queued, "the second slow job waits its turn");
+    // Exactly one slow job runs; the other waits its turn.
+    let states = [hs.jobs.get(s1.id).unwrap().state, hs.jobs.get(s2.id).unwrap().state];
+    assert_eq!(states.iter().filter(|s| **s == JobState::Running).count(), 1, "{states:?}");
+    assert_eq!(states.iter().filter(|s| **s == JobState::Queued).count(), 1, "{states:?}");
     *release.lock().unwrap() = true;
     for s in [s1, s2] {
         assert_eq!(hs.jobs.wait(s.id, Duration::from_secs(5)).unwrap().state, JobState::Done);

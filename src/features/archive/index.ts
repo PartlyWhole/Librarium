@@ -6,10 +6,11 @@
  */
 import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
-import { isMenuKey, menuPointFor } from "../../kit/menu";
+import { Selection } from "../../kit/selection";
+import { selectList } from "../../kit/selectlist";
 import { ask } from "../../kit/dialog";
 import { toast } from "../../kit/toast";
-import { effect } from "../../kit/signal";
+import { effect, untracked } from "../../kit/signal";
 import { count } from "../../kit/format";
 import { call } from "../../backend";
 import type { ShellApi } from "../../shell/api";
@@ -39,40 +40,37 @@ const isArchived = (r: RecordInfo | undefined) => r?.fields[AT] != null;
 export function archive(shell: ShellApi): void {
   shell.hidingFields.add("archive", AT, AT);
 
-  /** Archives a record, offering Undo (which expects the version archiving produced). */
-  async function archiveRecord(id: string): Promise<void> {
-    try {
-      const w = await call<Written>("archive.archive", { id });
-      shell.records.put(w.info, w.seq);
-      const title = w.info.title || "Untitled";
-      shell.undo.done(`Archived “${title}”`, {
-        label: `archive “${title}”`,
-        undo: async () => {
-          const back = await call<Written>("archive.restore", { id, base_version: w.info.version });
-          shell.records.put(back.info, back.seq);
-        },
-      });
-    } catch (e) {
-      toast(message(e));
+  /**
+   * Archives (or restores) records, offering one Undo for all of them; each undo expects the
+   * version the change produced, and refuses for a record that changed since.
+   */
+  async function setArchived(ids: string[], archive: boolean): Promise<void> {
+    const [doIt, undoIt] = archive ? ["archive.archive", "archive.restore"] : ["archive.restore", "archive.archive"];
+    const done: Written[] = [];
+    for (const id of ids) {
+      try {
+        const w = await call<Written>(doIt, { id });
+        shell.records.put(w.info, w.seq);
+        done.push(w);
+      } catch (e) {
+        toast(message(e));
+      }
     }
-  }
-
-  async function restoreRecord(id: string): Promise<void> {
-    try {
-      const w = await call<Written>("archive.restore", { id });
-      shell.records.put(w.info, w.seq);
-      const title = w.info.title || "Untitled";
-      shell.undo.done(`Restored “${title}”`, {
-        label: `restore “${title}”`,
-        undo: async () => {
-          const back = await call<Written>("archive.archive", { id, base_version: w.info.version });
+    if (!done.length) return;
+    const what = done.length === 1 ? `“${done[0]!.info.title || "Untitled"}”` : count(done.length, "item");
+    const verb = archive ? "Archived" : "Restored";
+    shell.undo.done(`${verb} ${what}`, {
+      label: `${archive ? "archive" : "restore"} ${what}`,
+      undo: async () => {
+        for (const w of done) {
+          const back = await call<Written>(undoIt, { id: w.info.id, base_version: w.info.version });
           shell.records.put(back.info, back.seq);
-        },
-      });
-    } catch (e) {
-      toast(message(e));
-    }
+        }
+      },
+    });
   }
+  const archiveRecord = (id: string) => setArchived([id], true);
+  const restoreRecord = (id: string) => setArchived([id], false);
 
   /**
    * The second step. The backend lists exactly what would go and hands back a single-use token;
@@ -109,9 +107,11 @@ export function archive(shell: ShellApi): void {
   }
 
   // Right-click (or the menu key) on a record, anywhere it is listed.
-  shell.recordActions.add("archive", "archive", { label: "Archive", applies: (r) => !isArchived(r) && !r.read_only, run: (r) => archiveRecord(r.id) });
-  shell.recordActions.add("archive", "restore", { label: "Restore from archive", applies: (r) => isArchived(r), run: (r) => restoreRecord(r.id) });
-  shell.recordActions.add("archive", "delete", { label: "Delete permanently…", destructive: true, applies: (r) => isArchived(r), run: (r) => deletePermanently([r.id]) });
+  const ids = (rs: RecordInfo[]) => rs.map((r) => r.id);
+  const many = (one: string, several: (n: number) => string) => (n: number) => (n === 1 ? one : several(n));
+  shell.recordActions.add("archive", "archive", { label: many("Archive", (n) => `Archive ${n} items`), applies: (r) => !isArchived(r) && !r.read_only, run: (rs) => setArchived(ids(rs), true) });
+  shell.recordActions.add("archive", "restore", { label: many("Restore from archive", (n) => `Restore ${n} items`), applies: (r) => isArchived(r), run: (rs) => setArchived(ids(rs), false) });
+  shell.recordActions.add("archive", "delete", { label: many("Delete permanently…", (n) => `Delete ${n} items permanently…`), destructive: true, applies: (r) => isArchived(r), run: (rs) => deletePermanently(ids(rs)) });
 
   const currentId = () => shell.router.current().params.id ?? "";
 
@@ -143,31 +143,37 @@ export function archive(shell: ShellApi): void {
     icon: Archive,
     ribbon: 4,
     render(host) {
+      const selection = new Selection();
       return effect(() => {
         const list = [...shell.records.byId().values()].filter(isArchived).sort((a, b) => String(b.fields[AT]).localeCompare(String(a.fields[AT])));
-        if (!list.length) {
-          replace(host, h("h1", { class: "page-title" }, "Archive"), h("p", { class: "empty" }, "Nothing is archived. Archived notes and items wait here until you restore them or delete them permanently."));
-          return;
-        }
-        replace(
-          host,
-          h("h1", { class: "page-title" }, "Archive"),
-          h("p", { class: "muted" }, "Archived records are hidden from lists and search. Deleting here is permanent."),
-          h(
-            "ul",
-            { class: "item-list archive-list", "aria-label": "Archived records" },
-            list.map((r) =>
-              h(
-                "li",
-                { class: "archive-row", oncontextmenu: (e: MouseEvent) => (e.preventDefault(), shell.showRecordMenu(r, { x: e.clientX, y: e.clientY })) },
-                h("a", { href: "#", class: "item-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(r.id)), onkeydown: (e: KeyboardEvent) => isMenuKey(e) && (e.preventDefault(), shell.showRecordMenu(r, menuPointFor(e.target as Element))) }, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, `${r.kind} · archived ${new Date(String(r.fields[AT])).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`)),
-                h("button", { class: "button", type: "button", onclick: () => void restoreRecord(r.id) }, icon(ArchiveRestore, 14), "Restore"),
-                h("button", { class: "button destructive", type: "button", onclick: () => void deletePermanently([r.id]) }, icon(Trash2, 14), "Delete permanently…"),
-              ),
-            ),
-          ),
-          list.length > 1 ? h("p", null, h("button", { class: "button destructive", type: "button", onclick: () => void deletePermanently(list.map((r) => r.id)) }, `Delete all ${list.length} permanently…`)) : null,
-        );
+        untracked(() => {
+          if (!list.length) {
+            replace(host, h("h1", { class: "page-title" }, "Archive"), h("p", { class: "empty" }, "Nothing is archived. Archived notes and items wait here until you restore them or delete them permanently."));
+            return;
+          }
+          const when = (r: RecordInfo) => new Date(String(r.fields[AT])).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+          replace(
+            host,
+            h("h1", { class: "page-title" }, "Archive"),
+            h("p", { class: "muted" }, "Archived records are hidden from lists and search. Deleting here is permanent. Select several with ⌘-click or ⇧-click; right-click for what you can do with them."),
+            selectList({
+              label: "Archived records",
+              className: "item-list archive-list",
+              items: list,
+              selection,
+              id: (r) => r.id,
+              render: (r) =>
+                h("div", { class: "archive-row" },
+                  h("span", { class: "item-link" }, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, `${r.kind} · archived ${when(r)}`)),
+                  h("button", { class: "button", type: "button", tabindex: "-1", onclick: () => void restoreRecord(r.id) }, icon(ArchiveRestore, 14), "Restore"),
+                  h("button", { class: "button destructive", type: "button", tabindex: "-1", onclick: () => void deletePermanently([r.id]) }, icon(Trash2, 14), "Delete permanently…"),
+                ),
+              open: (r) => shell.openRecord(r.id),
+              menu: (rs, at) => shell.showRecordMenu(rs, at),
+            }),
+            list.length > 1 ? h("p", null, h("button", { class: "button destructive", type: "button", onclick: () => void deletePermanently(list.map((r) => r.id)) }, `Delete all ${list.length} permanently…`)) : null,
+          );
+        });
       });
     },
   });

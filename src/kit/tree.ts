@@ -4,8 +4,11 @@
  *
  * Virtualized: rows are flat `treeitem`s carrying aria-level/setsize/posinset (a form the APG
  * allows), and only the rows in view are in the DOM, so 10,000 notes stay fast.
+ *
+ * Items (rows without children) can be selected several at a time: ⌘-click, ⇧-click, ⇧↑/⇧↓.
  */
 import { isMenuKey, menuPointFor } from "./menu";
+import { Selection } from "./selection";
 import { h } from "./dom";
 import { icon, type IconNode } from "./icon";
 
@@ -40,11 +43,13 @@ export class Tree {
   private typeaheadTimer: ReturnType<typeof setTimeout> | undefined;
   private scroller: HTMLElement | null = null;
   private onScroll = () => this.paint();
-  /** Asked for a node's context menu (right-click, the menu key or ⇧F10). */
-  onContext: ((id: string, at: { x: number; y: number }) => void) | null = null;
+  /** Asked for a context menu for these items (right-click, the menu key or ⇧F10). */
+  onContext: ((ids: string[], at: { x: number; y: number }) => void) | null = null;
+  /** The selected items. */
+  readonly selection = new Selection();
 
   constructor(label: string, private onToggle: (id: string, expanded: boolean) => void) {
-    this.el = h("div", { class: "tree", role: "tree", "aria-label": label });
+    this.el = h("div", { class: "tree", role: "tree", "aria-label": label, "aria-multiselectable": "true" });
     this.el.addEventListener("keydown", (e) => this.key(e));
     this.el.addEventListener("focusin", (e) => {
       const it = (e.target as HTMLElement).closest<HTMLElement>("[role=treeitem]");
@@ -93,9 +98,12 @@ export class Tree {
   private row(f: Flat, i: number): HTMLElement {
     const n = f.node;
     const hasChildren = !!n.children;
+    const item = !hasChildren && !n.placeholder;
+    const selected = item && this.selection.ids.peek().has(n.id);
     const el = h("div", {
       role: n.placeholder ? "none" : "treeitem",
-      class: `tree-item ${n.placeholder ? "placeholder" : ""} ${n.current ? "current" : ""} level-${Math.min(f.level, 2)}`,
+      class: `tree-item ${n.placeholder ? "placeholder" : ""} ${n.current ? "current" : ""} ${selected ? "selected" : ""} level-${Math.min(f.level, 2)}`,
+      "aria-selected": item ? String(selected) : undefined,
       "aria-level": n.placeholder ? undefined : String(f.level),
       "aria-setsize": n.placeholder ? undefined : String(f.size),
       "aria-posinset": n.placeholder ? undefined : String(f.pos),
@@ -110,19 +118,43 @@ export class Tree {
       h("span", { class: "tree-label" }, n.label),
     );
     if (!n.placeholder) {
-      el.addEventListener("click", () => {
+      el.addEventListener("click", (e) => {
+        if (hasChildren) {
+          this.focus(i);
+          this.onToggle(n.id, !n.expanded);
+          return;
+        }
+        const plain = this.selection.click(n.id, this.items(), { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey });
         this.focus(i);
-        if (hasChildren) this.onToggle(n.id, !n.expanded);
-        else n.onActivate?.();
+        if (plain) n.onActivate?.();
       });
       el.addEventListener("contextmenu", (e) => {
         if (!this.onContext) return;
         e.preventDefault();
-        this.focus(i);
-        this.onContext(n.id, { x: e.clientX, y: e.clientY });
+        const ids = item ? this.selection.forMenu(n.id, this.items()) : [n.id];
+        this.focusedId = n.id;
+        this.markSelection();
+        el.focus({ preventScroll: true });
+        this.onContext(ids, { x: e.clientX, y: e.clientY });
       });
     }
     return el;
+  }
+
+  /** Updates the selected rows' marks without rebuilding them. */
+  private markSelection(): void {
+    const s = this.selection.ids.peek();
+    for (const el of this.el.querySelectorAll<HTMLElement>("[role=treeitem]")) {
+      if (el.getAttribute("aria-selected") === null) continue;
+      const on = s.has(el.dataset.id ?? "");
+      el.setAttribute("aria-selected", String(on));
+      el.classList.toggle("selected", on);
+    }
+  }
+
+  /** The selectable items, in order. */
+  private items(): string[] {
+    return this.flat.filter((f) => !f.node.children && !f.node.placeholder).map((f) => f.node.id);
   }
 
   private focus(i: number): void {
@@ -144,7 +176,11 @@ export class Tree {
       const it = [...this.el.querySelectorAll<HTMLElement>("[role=treeitem]")].find((x) => x.dataset.id === this.focusedId);
       if (it) {
         e.preventDefault();
-        this.onContext(this.focusedId, menuPointFor(it));
+        const isItem = this.items().includes(this.focusedId);
+        const ids = isItem ? this.selection.forMenu(this.focusedId, this.items()) : [this.focusedId];
+        // Mark the rows in place: the menu gives focus back to this very row.
+        this.markSelection();
+        this.onContext(ids, menuPointFor(it));
         return;
       }
     }
@@ -154,12 +190,27 @@ export class Tree {
     if (!cur) return;
     const go = (x: { i: number } | undefined) => x && this.focus(x.i);
     const n = cur.f.node;
+    // ⇧↑/⇧↓ extend the selection over items.
+    const extend = (x: { f: Flat; i: number } | undefined) => {
+      if (!x) return;
+      const items = this.items();
+      if (items.includes(n.id) && this.selection.ids.peek().size === 0) this.selection.set([n.id], n.id);
+      if (items.includes(x.f.node.id)) this.selection.extendTo(x.f.node.id, items);
+      go(x);
+    };
     switch (e.key) {
       case "ArrowDown":
-        go(vis[k + 1]);
+        if (e.shiftKey) extend(vis[k + 1]);
+        else go(vis[k + 1]);
         break;
       case "ArrowUp":
-        go(vis[k - 1]);
+        if (e.shiftKey) extend(vis[k - 1]);
+        else go(vis[k - 1]);
+        break;
+      case "Escape":
+        if (this.selection.ids.peek().size <= 1) return;
+        this.selection.set(this.items().includes(n.id) ? [n.id] : [], n.id);
+        this.paint();
         break;
       case "Home":
         go(vis[0]);

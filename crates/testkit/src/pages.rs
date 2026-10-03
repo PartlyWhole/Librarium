@@ -15,8 +15,13 @@ pub struct FixturePages {
 
 impl FixturePages {
     pub fn with(self, url: &str, status: u16, html: &str) -> Self {
-        self.pages.lock().unwrap().insert(url.into(), (status, html.into()));
+        self.put(url, status, html);
         self
+    }
+
+    /// Changes what a page answers (the page changed since it was saved).
+    pub fn put(&self, url: &str, status: u16, html: &str) {
+        self.pages.lock().unwrap().insert(url.into(), (status, html.into()));
     }
 }
 

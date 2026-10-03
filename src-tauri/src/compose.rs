@@ -150,6 +150,7 @@ pub fn slot_contributors() -> Vec<(String, Vec<(String, String)>)> {
     vec![
         (k.kinds.slot().to_string(), k.kinds.contributors()),
         (k.slug_fields.slot().to_string(), k.slug_fields.contributors()),
+        (k.part_users.slot().to_string(), k.part_users.contributors()),
         (librarium_contracts::slots::API_METHODS.to_string(), methods().contributors()),
         (
             librarium_contracts::slots::DERIVED_VIEWS.to_string(),

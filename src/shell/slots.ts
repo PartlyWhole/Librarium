@@ -60,12 +60,13 @@ export interface SettingsSection {
   render(host: HTMLElement): (() => void) | void;
 }
 
-/** shell.record-actions: an entry in a record's context menu. */
+/** shell.record-actions: an entry in a record's context menu (for one record or several). */
 export interface RecordAction {
-  label: string;
-  /** Whether it is offered for this record. */
+  /** The menu label, given how many records it acts on. */
+  label: string | ((n: number) => string);
+  /** Whether it is offered for this record (with several, for every one of them). */
   applies(r: RecordInfo): boolean;
-  run(r: RecordInfo): void | Promise<void>;
+  run(rs: RecordInfo[]): void | Promise<void>;
   destructive?: boolean;
 }
 
@@ -101,8 +102,8 @@ export interface ShellApi {
   hidingFields: Registry<string>;
   /** shell.record-actions: what a record's context menu offers (Archive, Restore…). */
   recordActions: Registry<RecordAction>;
-  /** Opens a record's context menu at a point (right-click, the menu key or ⇧F10). */
-  showRecordMenu(r: RecordInfo, at: { x: number; y: number }): void;
+  /** Opens the context menu of a record, or of several selected, at a point. */
+  showRecordMenu(rs: RecordInfo | RecordInfo[], at: { x: number; y: number }): void;
   /** A feature-hosted slot by its ID (defined in slots.ts). */
   slot<T>(id: string): Registry<T>;
   router: Router;

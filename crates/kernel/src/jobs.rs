@@ -366,7 +366,8 @@ impl Inner {
             .collect();
         let mut queued: Vec<&mut JobInfo> =
             jobs.values_mut().filter(|j| j.state == JobState::Queued && !busy.contains(&j.kind)).collect();
-        queued.sort_by_key(|j| j.created_ms);
+        // Oldest first; jobs made in the same millisecond keep the order of their IDs.
+        queued.sort_by_key(|j| (j.created_ms, j.id));
         let j = queued.into_iter().next()?;
         j.state = JobState::Running;
         j.attempts += 1;

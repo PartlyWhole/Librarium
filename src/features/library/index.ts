@@ -2,9 +2,10 @@
 import { call, onFileDrop, pickFiles, readBytes } from "../../backend";
 import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
-import { effect, signal } from "../../kit/signal";
+import { effect, signal, untracked } from "../../kit/signal";
 import { toast } from "../../kit/toast";
-import { isMenuKey, menuPointFor } from "../../kit/menu";
+import { Selection } from "../../kit/selection";
+import { selectList } from "../../kit/selectlist";
 import { count } from "../../kit/format";
 import type { ShellApi } from "../../shell/api";
 import { READER_TOOLS, type ReaderTool } from "../../shell/slots";
@@ -15,7 +16,7 @@ import type { ReaderView, StoredText } from "../../reader/host";
 import { pdfEngine } from "../../reader/pdf";
 import { imageEngine } from "../../reader/image";
 import { epubEngine } from "../../reader/epub";
-import { modal } from "../../kit/dialog";
+import { ask, modal } from "../../kit/dialog";
 import { BookOpen, Globe, FileText, Image as ImageIcon, Library as LibraryIcon, Plus, ZoomIn, ZoomOut, Maximize, ChevronUp, ChevronDown } from "lucide";
 
 const KIND = "item";
@@ -43,7 +44,68 @@ function snapshotLabel(at: string): string {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+type Snapshot = { at: string; checks?: { kind: string; reason: string }[]; "final-url"?: string };
+const snapshotsOf = (r: RecordInfo): Snapshot[] => (Array.isArray(r.fields["library.snapshots"]) ? (r.fields["library.snapshots"] as Snapshot[]) : []);
+
+interface RemovalPreview {
+  token: string;
+  count: number;
+  items: { id: string; title: string; remove: string[]; protected: { at: string; by: string[] }[]; kept: number }[];
+}
+
+/**
+ * Removes snapshots of saved pages, in two steps: the backend lists what would go (never the
+ * last one, never one a capture was made from) with a single-use token, and only the user's
+ * explicit confirmation sends it back. Cancel is the default button.
+ */
+export async function removeSnapshots(shell: ShellApi, items: { id: string; snapshots?: string[] }[]): Promise<boolean> {
+  let p: RemovalPreview;
+  try {
+    p = await call<RemovalPreview>("library.removeSnapshots.prepare", { items });
+  } catch (e) {
+    toast(String((e as { message?: string }).message ?? e));
+    return false;
+  }
+  const pages = p.items.filter((i) => i.remove.length);
+  const protectedN = p.items.reduce((n, i) => n + i.protected.length, 0);
+  const keptNote = protectedN ? h("p", { class: "muted small" }, `${count(protectedN, "snapshot")} ${protectedN === 1 ? "is" : "are"} kept because captures were made from ${protectedN === 1 ? "it" : "them"}.`) : null;
+  if (!p.count) {
+    await ask("Nothing to remove", h("div", null, h("p", null, "Each page keeps at least one snapshot."), keptNote), [{ label: "OK", value: true, primary: true }]);
+    return false;
+  }
+  const title = pages.length === 1 ? `Remove ${count(p.count, "snapshot")} of “${pages[0]!.title || "Untitled"}”?` : `Remove ${count(p.count, "snapshot")} from ${count(pages.length, "page")}?`;
+  const ok = await ask(
+    title,
+    h("div", null,
+      h("p", null, "Their PDFs and text are deleted from the library folder. It can’t be undone. Each page keeps at least one snapshot."),
+      keptNote,
+      pages.length > 1 ? h("ul", { class: "delete-list" }, pages.map((i) => h("li", null, `${i.title || "Untitled"} (${i.remove.length})`))) : null,
+    ),
+    [
+      { label: "Cancel", value: false },
+      { label: p.count === 1 ? "Remove snapshot" : "Remove snapshots", value: true, destructive: true },
+    ],
+  );
+  if (!ok) return false;
+  try {
+    const r = await call<{ removed: number; skipped: { id: string; reason: string }[] }>("library.removeSnapshots", { token: p.token });
+    shell.status.show(`Removed ${count(r.removed, "snapshot")}.`);
+    for (const s of r.skipped) toast(`Not removed from ${shell.records.get(s.id)?.title || "a page"}: ${s.reason}.`);
+    return true;
+  } catch (e) {
+    toast(String((e as { message?: string }).message ?? e));
+    return false;
+  }
+}
+
 export function library(shell: ShellApi): void {
+  const manageSnapshots = (r: RecordInfo, showing: string) => manageSnapshotsDialog(shell, r, showing);
+  shell.recordActions.add("library", "remove-older-snapshots", {
+    label: (n) => (n === 1 ? "Remove older snapshots…" : `Remove older snapshots of ${n} pages…`),
+    applies: (r) => r.kind === KIND && snapshotsOf(r).length > 1 && !r.read_only,
+    destructive: true,
+    run: (rs) => void removeSnapshots(shell, rs.map((r) => ({ id: r.id }))),
+  });
   shell.openers.add("library", KIND, "item");
   for (const e of [pdfEngine, epubEngine, imageEngine]) shell.readerEngines.add("library", e.id, e);
 
@@ -142,14 +204,33 @@ export function library(shell: ShellApi): void {
     ribbon: 2,
     render(host, _p, ctx) {
       ctx.setHeaderActions([h("button", { class: "icon-button", "aria-label": "Add to library", title: "Add to library", onclick: () => shell.actions.run("library.add") }, icon(Plus))]);
+      // The selection outlives re-renders (a record changing re-renders the list).
+      const selection = new Selection();
       return effect(() => {
         const items = shell.records.list(KIND).sort((a, b) => a.title.localeCompare(b.title));
-        replace(
-          host,
-          h("h1", { class: "page-title" }, "Library"),
-          items.length
-            ? h("ul", { class: "item-list" }, items.map((i) => h("li", { oncontextmenu: (e: MouseEvent) => (e.preventDefault(), shell.showRecordMenu(i, { x: e.clientX, y: e.clientY })) }, h("a", { href: "#", class: "item-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(i.id)), onkeydown: (e: KeyboardEvent) => isMenuKey(e) && (e.preventDefault(), shell.showRecordMenu(i, menuPointFor(e.target as Element))) }, icon(iconFor(i), 16), h("span", null, i.title || "Untitled"), h("span", { class: "muted small" }, i.fields["library.pages"] ? count(Number(i.fields["library.pages"]), formatOf(i) === "epub" ? "chapter" : "page") : "")))))
-            : h("p", { class: "empty" }, "No library items yet. Add PDFs, images or EPUBs, or drop them on the window."),
+        const detail = (i: RecordInfo) => {
+          const snaps = Array.isArray(i.fields["library.snapshots"]) ? (i.fields["library.snapshots"] as unknown[]).length : 0;
+          if (snaps > 1) return count(snaps, "snapshot");
+          return i.fields["library.pages"] ? count(Number(i.fields["library.pages"]), formatOf(i) === "epub" ? "chapter" : "page") : "";
+        };
+        untracked(() =>
+          replace(
+            host,
+            h("h1", { class: "page-title" }, "Library"),
+            items.length ? h("p", { class: "muted small list-hint" }, `${count(items.length, "item")}. Select several with ⌘-click or ⇧-click; right-click for what you can do with them.`) : null,
+            items.length
+              ? selectList({
+                  label: "Library items",
+                  className: "item-list",
+                  items,
+                  selection,
+                  id: (i) => i.id,
+                  render: (i) => h("span", { class: "item-link" }, icon(iconFor(i), 16), h("span", null, i.title || "Untitled"), h("span", { class: "muted small" }, detail(i))),
+                  open: (i) => shell.openRecord(i.id),
+                  menu: (rs, at) => shell.showRecordMenu(rs, at),
+                })
+              : h("p", { class: "empty" }, "No library items yet. Add PDFs, images or EPUBs, or drop them on the window."),
+          ),
         );
       });
     },
@@ -212,7 +293,8 @@ export function library(shell: ShellApi): void {
         for (const c of current?.checks ?? []) notices.appendChild(h("p", { class: "notice" }, `About this snapshot: ${c.reason}`));
         if (snapshots.length > 1) {
           const pick = h("select", { "aria-label": "Snapshot", onchange: () => shell.router.go("item", { id, snapshot: pick.value }, { replace: true }) }, snapshots.map((s) => h("option", { value: s.at, selected: s.at === snap }, snapshotLabel(s.at))));
-          tools.before(pick);
+          const manage = h("button", { class: "link-button small", type: "button", onclick: () => void manageSnapshots(r, snap) }, "Snapshots…");
+          tools.before(pick, manage);
         }
       }
       // A column beside the document, for tools' panels (making a capture…).
@@ -328,4 +410,30 @@ export function savedAddresses(items: RecordInfo[]): Set<string> {
     for (const u of [p?.source, p?.["final-url"]]) if (u) out.add(normalizeAddress(u));
   }
   return out;
+}
+
+/** "Snapshots…": tick the snapshots of a page to remove. */
+async function manageSnapshotsDialog(shell: ShellApi, r: RecordInfo, showing: string): Promise<void> {
+  const snaps = snapshotsOf(r);
+  const latest = snaps[snaps.length - 1]?.at;
+  const boxes = snaps.map((s) => h("input", { type: "checkbox", value: s.at, "aria-label": snapshotLabel(s.at) }) as HTMLInputElement);
+  const rows = snaps.map((s, i) =>
+    h("label", { class: "check-row snapshot-row" }, boxes[i]!, h("span", null, snapshotLabel(s.at)),
+      h("span", { class: "muted small" }, [s.at === latest ? "latest" : "", s.at === showing ? "showing" : "", ...(s.checks ?? []).map((c) => c.kind)].filter(Boolean).join(" · "))),
+  );
+  const chosen = await ask<string[]>(
+    `Snapshots of “${r.title || "Untitled"}”`,
+    h("div", null, h("p", { class: "muted small" }, "Tick the snapshots to remove. A page keeps at least one, and snapshots that captures were made from stay."), h("div", { class: "snapshot-list" }, rows)),
+    [
+      { label: "Cancel", value: [] },
+      { label: "Remove ticked…", value: ["__ticked__"], destructive: true },
+    ],
+  );
+  if (!chosen?.length) return;
+  const ticked = boxes.filter((b) => b.checked).map((b) => b.value);
+  if (!ticked.length) return toast("Nothing was ticked.");
+  if (await removeSnapshots(shell, [{ id: r.id, snapshots: ticked }])) {
+    // Show what remains (the snapshot being shown may be gone).
+    if (ticked.includes(showing)) shell.router.go("item", { id: r.id }, { replace: true });
+  }
 }

@@ -46,6 +46,8 @@ const state = {
   confirmations: new Map<string, [string, string][]>(),
   /** Files deleted permanently (paths), for tests. */
   deleted: [] as string[],
+  /** Pending snapshot removals: token → [item, snapshots]. */
+  snapshotRemovals: new Map<string, [string, string[]][]>(),
 };
 
 const listeners = new Map<string, Set<(p: unknown) => void>>();
@@ -161,6 +163,33 @@ const api: Record<string, (p: any) => unknown> = {
   "export.write": (p) => (exports.set(p.path, p.text), null),
   "jobs.list": () => ({ running: state.jobs.filter((j) => j.state === "running" || j.state === "queued"), failed: state.jobs.filter((j) => j.state === "failed"), recent: state.jobs.filter((j) => j.state === "done"), resumed: null }),
   "index.rebuild": () => ({ id: "0192f3a4-7c1e-7b2a-9f00-0000000000ff", kind: "index.rebuild", key: "all", state: "queued", title: "Rebuilding the index", attempts: 0, error: null, progress: null, message: null, payload: null, created_ms: 0, updated_ms: 0 }),
+  "library.removeSnapshots.prepare": (p: { items: { id: string; snapshots?: string[] }[] }) => {
+    const items = p.items.map((it) => {
+      const r = need(it.id);
+      const all = ((r.info.fields["library.snapshots"] as { at: string }[] | undefined) ?? []).map((s) => s.at);
+      let remove = it.snapshots ? all.filter((a) => it.snapshots!.includes(a)) : all.slice(0, -1);
+      if (remove.length === all.length) remove = remove.slice(0, -1);
+      return { id: it.id, title: r.info.title, remove, protected: [], kept: all.length - remove.length };
+    });
+    const token = `token-${state.idn++}`;
+    state.snapshotRemovals.set(token, items.map((i) => [i.id, i.remove]));
+    return { token, count: items.reduce((n, i) => n + i.remove.length, 0), items };
+  },
+  "library.removeSnapshots": (p: { token?: string }) => {
+    const c = p.token ? state.snapshotRemovals.get(p.token) : undefined;
+    if (!c) fail("invalid-input", "That confirmation has expired. Nothing was removed.");
+    state.snapshotRemovals.delete(p.token!);
+    let removed = 0;
+    for (const [id, gone] of c) {
+      const r = need(id);
+      const keep = (r.info.fields["library.snapshots"] as { at: string }[]).filter((s) => !gone.includes(s.at));
+      r.info.fields["library.snapshots"] = keep;
+      r.info.fields["library.snapshot"] = keep[keep.length - 1]?.at;
+      removed += gone.length;
+      touch(r, "updated");
+    }
+    return { removed, skipped: [] };
+  },
   "archive.archive": (p) => setArchived(p, "2026-10-02T10:00:00Z"),
   "archive.restore": (p) => setArchived(p, null),
   "archive.list": () => [...state.records.values()].filter(archivedAt).map((r) => r.info),
@@ -337,6 +366,7 @@ export const mock = {
     state.failSave = null;
     state.jobs = [];
     state.confirmations.clear();
+    state.snapshotRemovals.clear();
     state.deleted = [];
     state.inspect = { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false };
   },
