@@ -84,6 +84,14 @@ export function jobsUi(shell: ShellApi): void {
       h("div", { class: "row tight" }, buttons.map(([label, run]) => h("button", { class: "link-button", onclick: run }, label))));
   };
   const act = (method: string, id: string) => void call(method, { id }).then(load, (e) => toast(String(e?.message ?? e)));
+  /** Stops every running and waiting job (waiting ones at once, running ones at their next step). */
+  const cancelAll = async () => {
+    const list = jobs.peek().running;
+    // Waiting jobs first, so none starts while the others are being cancelled.
+    const order = [...list.filter((j) => j.state === "queued"), ...list.filter((j) => j.state !== "queued")];
+    await actAll("jobs.cancel", order);
+    shell.status.show(`Cancelled ${list.length} ${list.length === 1 ? "job" : "jobs"}.`);
+  };
   const actAll = async (method: string, list: JobInfo[]) => {
     for (const j of list) await call(method, { id: j.id }).catch((e) => toast(String(e?.message ?? e)));
     await load();
@@ -100,7 +108,13 @@ export function jobsUi(shell: ShellApi): void {
         replace(
           host,
           l.running.length + l.failed.length + l.recent.length === 0 ? h("p", { class: "muted" }, "No jobs.") : null,
-          l.running.length ? h("ul", { class: "jobs" }, l.running.map((j) => row(j, [["Cancel", () => act("jobs.cancel", j.id)]]))) : null,
+          l.running.length
+            ? [
+                h("div", { class: "row tight jobs-head" }, h("h3", { class: "panel-subtitle" }, `Running and waiting (${l.running.length})`),
+                  l.running.length > 1 ? h("button", { class: "link-button", onclick: () => void cancelAll() }, "Cancel all") : null),
+                h("ul", { class: "jobs" }, l.running.map((j) => row(j, [["Cancel", () => act("jobs.cancel", j.id)]]))),
+              ]
+            : null,
           l.failed.length
             ? [
                 h("div", { class: "row tight jobs-head" }, h("h3", { class: "panel-subtitle" }, `Failed (${l.failed.length})`),
@@ -114,6 +128,14 @@ export function jobsUi(shell: ShellApi): void {
       });
     },
   }, 100);
+
+  shell.actions.add("shell", {
+    id: "shell.cancelAllJobs",
+    title: "Cancel all jobs",
+    when: () => jobs().running.length > 0,
+    menu: { name: "file", group: 8 },
+    run: () => void cancelAll(),
+  });
 
   shell.actions.add("shell", {
     id: "shell.rebuildIndex",
