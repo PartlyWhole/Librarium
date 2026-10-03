@@ -244,9 +244,12 @@ pub fn contribute_methods(r: &mut Registry<ApiMethod>) -> Result<(), DuplicateId
     Ok(())
 }
 
-/// Extracts text in the worker and stores it beside the original. Idempotent: an existing
-/// extraction by the same extractor version is kept.
-fn extract(ctx: &JobCtx, p: &Value) -> Result<()> {
+/// A page with fewer visible characters than this is treated as a scan and recognised.
+const SCAN_CHARS: usize = 16;
+
+/// Extracts text in the worker (recognising images and scanned pages) and stores it beside the
+/// original. Idempotent: an existing extraction is kept, so recognition never runs twice.
+fn extract(recognizer: &dyn librarium_contracts::ports::TextRecognizer, ctx: &JobCtx, p: &Value) -> Result<()> {
     let id: Id = p["id"].as_str().and_then(|s| s.parse().ok()).ok_or_else(|| BackendError::invalid("no id"))?;
     let store = &ctx.library.store;
     let Some(e) = store.get(id) else { return Ok(()) };
@@ -264,12 +267,53 @@ fn extract(ctx: &JobCtx, p: &Value) -> Result<()> {
     };
     let out = ctx.worker.call(method, json!({ "path": path }), timeout)?;
     ctx.check_cancelled()?;
-    let pages = out["pages"].as_array().or_else(|| out["chapters"].as_array()).map(|a| a.len());
-    let stored = if format == "image" {
-        json!({ "extractor": "none", "version": 0, "pages": [], "image": out })
-    } else {
-        out.clone()
+    let stored = match format.as_str() {
+        "image" => {
+            ctx.progress(None, Some("Recognising text"));
+            let r = recognizer.recognize_image(&path)?;
+            json!({ "extractor": format!("{} {}", r.extractor, r.version), "version": 1, "pages": r.pages, "image": out })
+        }
+        "pdf" => {
+            let mut v = out.clone();
+            let scans: Vec<u32> = v["pages"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter(|pg| {
+                            pg["text"].as_str().unwrap_or("").chars().filter(|c| !c.is_whitespace()).count()
+                                < SCAN_CHARS
+                        })
+                        .filter_map(|pg| pg["page"].as_u64().map(|n| n as u32))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !scans.is_empty() {
+                ctx.progress(
+                    None,
+                    Some(&format!(
+                        "Recognising text on {} scanned page{}",
+                        scans.len(),
+                        if scans.len() == 1 { "" } else { "s" }
+                    )),
+                );
+                let r = recognizer.recognize_pdf_pages(&path, &scans)?;
+                if let Some(pages) = v["pages"].as_array_mut() {
+                    for rp in &r.pages {
+                        if let Some(pg) = pages.iter_mut().find(|pg| pg["page"].as_u64() == Some(rp.page as u64)) {
+                            pg["text"] = json!(rp.text);
+                            pg["lines"] = json!(rp.lines);
+                            pg["recognized"] = json!(true);
+                        }
+                    }
+                }
+                v["extractor"] =
+                    json!(format!("{} + {} {}", out["extractor"].as_str().unwrap_or(""), r.extractor, r.version));
+            }
+            v
+        }
+        _ => out.clone(),
     };
+    let pages = stored["pages"].as_array().or_else(|| stored["chapters"].as_array()).map(|a| a.len());
     let bytes = serde_json::to_vec_pretty(&stored).unwrap();
     let version = e.hash.clone();
     let mut fields: Vec<(String, Option<FmValue>)> = vec![(TEXT.into(), Some(FmValue::Str(TEXT_FILE.into())))];
@@ -295,16 +339,19 @@ fn extract(ctx: &JobCtx, p: &Value) -> Result<()> {
         .or_else(|e| if e.code == ErrorCode::Conflict { Ok(()) } else { Err(e) })
 }
 
-pub fn contribute_jobs(r: &mut Registry<JobKind>) -> Result<(), DuplicateId> {
+pub fn contribute_jobs(
+    r: &mut Registry<JobKind>,
+    recognizer: Arc<dyn librarium_contracts::ports::TextRecognizer>,
+) -> Result<(), DuplicateId> {
     r.add(
         ID,
         "library.extract",
         JobKind {
             kind: "library.extract".into(),
             title: "Reading an item’s text".into(),
-            noun: "text extractions".into(),
+            noun: "text recognitions".into(),
             resumable: true,
-            run: Arc::new(extract),
+            run: Arc::new(move |ctx: &JobCtx, p: &Value| extract(&*recognizer, ctx, p)),
             trigger: None,
         },
     )

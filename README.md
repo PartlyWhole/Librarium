@@ -87,3 +87,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-03 | How captures anchor, and how places are found again (found, moved, lost). | [0025](docs/decisions/0025-anchors.md) |
 | 2026-10-03 | Captures meets the reader and editor through reader tools, places and embeds. | [0026](docs/decisions/0026-feature-meeting-points.md) |
 | 2026-10-03 | How web pages are saved: a hidden WebKit window, createPDF, page checks, snapshots. | [0027](docs/decisions/0027-saving-web-pages.md) |
+| 2026-10-03 | Text recognition with Apple Vision in the worker, stored and selectable. | [0028](docs/decisions/0028-text-recognition.md) |

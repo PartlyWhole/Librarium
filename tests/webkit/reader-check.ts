@@ -30,12 +30,13 @@ async function inked(name: string, wasm: boolean): Promise<number> {
   return n;
 }
 
-async function open(engine: ReaderEngine, name: string, format: string) {
+async function open(engine: ReaderEngine, name: string, format: string, stored?: string) {
   stage.replaceChildren();
   let firstPaint = -1;
   let painted!: () => void;
   const paint = new Promise<void>((r) => (painted = r));
-  const src: ReaderSource = { id: name, format, title: name, bytes: () => fixture(name), text: async () => null };
+  const text = async () => (stored ? JSON.parse(new TextDecoder().decode(await fixture(stored))) : null);
+  const src: ReaderSource = { id: name, format, title: name, bytes: () => fixture(name), text };
   const view = await engine.open(stage, src, { moved() {}, firstPaint: (ms) => ((firstPaint = ms), painted()) });
   await Promise.race([paint, new Promise((r) => setTimeout(r, 10_000))]);
   return { view, firstPaint };
@@ -97,6 +98,28 @@ async function run() {
   results.epubFind = await epub.view.find("generosity");
   epub.view.zoomIn();
   epub.view.destroy();
+
+  // Recognised text: findable and selectable, in an image and a scanned PDF.
+  step("ocr image");
+  const ocrImg = await open(imageEngine, "words.png", "image", "words.ocr.json");
+  await new Promise((r) => setTimeout(r, 500));
+  results.ocrImageLines = stage.querySelectorAll(".ocr-layer span").length;
+  results.ocrImageFind = await ocrImg.view.find("generosity");
+  const span = [...stage.querySelectorAll(".ocr-layer span")].find((s) => s.textContent?.includes("Gravity"));
+  if (span) {
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+  }
+  results.ocrImageSelection = ocrImg.view.selection?.()?.text ?? null;
+  ocrImg.view.destroy();
+  step("ocr scan");
+  const scan = await open(pdfEngine, "scan.pdf", "pdf", "scan.ocr.json");
+  await new Promise((r) => setTimeout(r, 800));
+  results.ocrScanLines = stage.querySelectorAll(".ocr-layer span").length;
+  results.ocrScanFind = await scan.view.find("quote exactly");
+  scan.view.destroy();
 
   // Image: opens and zooms.
   step("image");

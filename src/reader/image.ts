@@ -1,6 +1,7 @@
 /** The image engine: the original image, zoomable; find searches its recognised text. */
 import { h } from "../kit/dom";
 import { cropToPng, dragRect, outlineRegion, regionOf, type ReaderEngine, type ReaderView } from "./host";
+import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 
 export const imageEngine: ReaderEngine = {
   id: "image",
@@ -10,30 +11,48 @@ export const imageEngine: ReaderEngine = {
     const bytes = await src.bytes();
     const url = URL.createObjectURL(new Blob([bytes]));
     const img = h("img", { class: "image-view", alt: src.title, src: url, draggable: false });
-    const frame = h("div", { class: "image-container", tabindex: "0", "aria-label": `${src.title}, image` }, img);
+    // The holder sizes to the image, so recognised text and regions sit on it.
+    const holder = h("div", { class: "image-holder" }, img);
+    const frame = h("div", { class: "image-container", tabindex: "0", "aria-label": `${src.title}, image` }, holder);
     host.appendChild(frame);
     let scale = 1;
     const apply = () => {
       img.style.width = scale === 1 ? "" : `${img.naturalWidth * scale}px`;
       img.style.maxWidth = scale === 1 ? "100%" : "none";
+      requestAnimationFrame(layOut);
     };
-    img.addEventListener("load", () => events.firstPaint(performance.now() - t0), { once: true });
+    let lines: OcrLine[] = [];
+    const layOut = () => {
+      if (lines.length) ocrLayer(holder, lines);
+    };
+    img.addEventListener(
+      "load",
+      () => {
+        events.firstPaint(performance.now() - t0);
+        void src.text().then((t) => {
+          lines = ((t?.pages?.[0] as { lines?: OcrLine[] } | undefined)?.lines ?? []) as OcrLine[];
+          layOut();
+        });
+      },
+      { once: true },
+    );
     const view: ReaderView = {
       zoomIn: () => ((scale = Math.min(8, (scale === 1 ? img.clientWidth / (img.naturalWidth || 1) : scale) * 1.25)), apply()),
       zoomOut: () => ((scale = Math.max(0.1, (scale === 1 ? img.clientWidth / (img.naturalWidth || 1) : scale) / 1.25)), apply()),
       zoomReset: () => ((scale = 1), apply()),
       async find(query) {
         // Images are searchable through their recognised text.
-        const t = await src.text();
-        const all = (t?.pages ?? []).map((p) => p.text).join("\n").toLowerCase();
-        const q = query.toLowerCase();
-        let count = 0;
-        for (let i = all.indexOf(q); q && i >= 0; i = all.indexOf(q, i + q.length)) count++;
-        return { count, current: count ? 1 : 0 };
+        const hits = ocrFind(holder, query);
+        hits[0]?.scrollIntoView({ block: "center" });
+        return { count: hits.length, current: hits.length ? 1 : 0 };
       },
-      findClear() {},
+      findClear: () => void ocrFind(holder, ""),
       position: () => (img.naturalWidth ? `${img.naturalWidth} × ${img.naturalHeight}` : ""),
-      selection: () => null,
+      selection() {
+        const sel = window.getSelection();
+        const text = sel?.toString().trim() ?? "";
+        return sel && text && frame.contains(sel.anchorNode) ? { text } : null;
+      },
       async pickRegion() {
         const r = await dragRect(frame);
         if (!r) return null;
@@ -47,17 +66,13 @@ export const imageEngine: ReaderEngine = {
       },
       async showPlace(selectors) {
         const region = regionOf(selectors);
-        if (!region) return false;
-        const wrap = img.parentElement!;
-        let holder = wrap.querySelector<HTMLElement>(".image-holder");
-        if (!holder) {
-          holder = document.createElement("div");
-          holder.className = "image-holder";
-          img.replaceWith(holder);
-          holder.appendChild(img);
+        if (region) {
+          outlineRegion(holder, region).scrollIntoView({ block: "center" });
+          return true;
         }
-        outlineRegion(holder, region).scrollIntoView({ block: "center" });
-        return true;
+        const quote = selectors.find((s) => s.type === "TextQuoteSelector")?.exact;
+        if (quote) return ocrFind(holder, quote.split("\n")[0]!.slice(0, 80)).length > 0;
+        return false;
       },
       destroy() {
         URL.revokeObjectURL(url);

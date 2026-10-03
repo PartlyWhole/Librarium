@@ -306,3 +306,36 @@ pub mod pagesaver {
         );
     }
 }
+
+pub mod recognizer {
+    use librarium_contracts::ports::TextRecognizer;
+    use std::path::Path;
+
+    /// The TextRecognizer contract, on the fixture image and scanned PDF.
+    pub fn run(r: &dyn TextRecognizer) {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/library");
+        let img = r.recognize_image(&dir.join("words.png")).expect("recognise the image");
+        assert_eq!(img.pages.len(), 1);
+        let t = &img.pages[0].text;
+        for want in [
+            "Gravity and grace are two forces.",
+            "Attention is the rarest form of generosity.",
+            "We read slowly and quote exactly.",
+        ] {
+            assert!(t.contains(want), "{want:?} in {t:?}");
+        }
+        let lines = &img.pages[0].lines;
+        assert_eq!(lines.len(), 3);
+        assert!(lines.windows(2).all(|w| w[0].y < w[1].y), "top to bottom");
+        assert!(lines
+            .iter()
+            .all(|l| (0.0..=1.0).contains(&l.x) && (0.0..=1.0).contains(&l.y) && l.w > 0.0 && l.h > 0.0));
+        let scan = r.recognize_pdf_pages(&dir.join("scan.pdf"), &[1]).expect("recognise the scan");
+        assert_eq!(scan.pages[0].page, 1);
+        assert!(scan.pages[0].text.contains("rarest form of generosity"));
+        assert!(
+            r.recognize_pdf_pages(&dir.join("scan.pdf"), &[99]).map(|x| x.pages.is_empty()).unwrap_or(true),
+            "pages past the end are skipped"
+        );
+    }
+}

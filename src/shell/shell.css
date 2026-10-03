@@ -369,3 +369,8 @@ body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6
 .embed-cite { color: var(--muted); text-decoration: none; }
 .embed-cite:hover { color: var(--accent-text); text-decoration: underline; }
 .cm-embed { display: block; white-space: normal; cursor: default; }
+.ocr-layer { position: absolute; inset: 0; z-index: 2; line-height: 1; overflow: hidden; }
+.ocr-layer span { position: absolute; color: transparent; white-space: pre; transform-origin: 0 0; cursor: text; }
+.ocr-layer span::selection { background: var(--selection); }
+.ocr-layer span.ocr-hit { background: hsl(258 88% 66% / 25%); }
+.ocr-layer br { display: none; }

@@ -11,6 +11,7 @@ import { EventBus, PDFFindController, PDFLinkService, PDFViewer } from "pdfjs-di
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { h } from "../kit/dom";
 import { cropToPng, dragRect, outlineRegion, pageAtOffset, pageOf, regionOf, type ReaderEngine, type ReaderView } from "./host";
+import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 
 const BASE = "/pdfjs/";
 pdfjs.GlobalWorkerOptions.workerSrc = `${BASE}pdf.worker.min.mjs`;
@@ -51,8 +52,20 @@ export const pdfEngine: ReaderEngine = {
         if (scroll) m.scrollIntoView({ block: "center" });
       }
     };
+    // Recognised text of scanned pages, laid over them so it can be selected and found.
+    const recognized = new Map<number, OcrLine[]>();
+    const text = src.text();
+    void text.then((t) => {
+      for (const p of t?.pages ?? []) {
+        const lines = (p as { lines?: OcrLine[] }).lines;
+        if (lines?.length) recognized.set(p.page, lines);
+      }
+    });
     eventBus.on("pagerendered", (e: { pageNumber: number }) => {
       if (marked && e.pageNumber === marked.page) drawMark(false);
+      const lines = recognized.get(e.pageNumber);
+      const div = viewer.getPageView(e.pageNumber - 1)?.div as HTMLElement | undefined;
+      if (lines && div) ocrLayer(div, lines);
       if (!painted && e.pageNumber === viewer.currentPageNumber) {
         painted = true;
         events.firstPaint(performance.now() - t0);
@@ -86,7 +99,6 @@ export const pdfEngine: ReaderEngine = {
       settled = e.state !== 3; // 3: still searching
       wake();
     });
-    const text = src.text();
     const view: ReaderView = {
       zoomIn: () => (viewer.currentScale = Math.min(8, viewer.currentScale * 1.2)),
       zoomOut: () => (viewer.currentScale = Math.max(0.25, viewer.currentScale / 1.2)),
@@ -101,6 +113,18 @@ export const pdfEngine: ReaderEngine = {
             waiters.push(r);
             setTimeout(r, 100);
           });
+        }
+        // Scanned pages: their recognised text.
+        if (lastFind.count === 0 && recognized.size) {
+          const q = query.toLowerCase();
+          const page = [...recognized.entries()].find(([, ls]) => ls.some((l) => l.text.toLowerCase().includes(q)))?.[0];
+          if (page) {
+            viewer.currentPageNumber = page;
+            await new Promise((r) => setTimeout(r, 200));
+            const hits = ocrFind(container, query);
+            hits[0]?.scrollIntoView({ block: "center" });
+            return { count: Math.max(1, hits.length), current: 1 };
+          }
         }
         return lastFind;
       },

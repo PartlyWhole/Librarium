@@ -45,7 +45,6 @@ pub fn views() -> Vec<(String, Arc<dyn librarium_kernel::views::DerivedView>)> {
 pub fn job_kinds() -> librarium_kernel::registry::Registry<librarium_kernel::jobs::JobKind> {
     let mut r = librarium_kernel::jobs::registry();
     librarium_feature_links::contribute_jobs(&mut r).expect("links jobs");
-    librarium_feature_library::contribute_jobs(&mut r).expect("library jobs");
     r
 }
 
@@ -59,6 +58,22 @@ pub fn methods() -> librarium_kernel::registry::Registry<librarium_kernel::metho
     librarium_feature_library::contribute_methods(&mut r).expect("library methods");
     librarium_feature_captures::contribute_methods(&mut r).expect("captures methods");
     r
+}
+
+/// Only for listing contributions (the architecture report).
+struct NoRecognizer;
+
+impl librarium_contracts::ports::TextRecognizer for NoRecognizer {
+    fn recognize_image(&self, _p: &Path) -> librarium_contracts::Result<librarium_contracts::ports::Recognized> {
+        Err(librarium_contracts::BackendError::internal("no recognizer"))
+    }
+    fn recognize_pdf_pages(
+        &self,
+        _p: &Path,
+        _pages: &[u32],
+    ) -> librarium_contracts::Result<librarium_contracts::ports::Recognized> {
+        Err(librarium_contracts::BackendError::internal("no recognizer"))
+    }
 }
 
 /// Where page saving isn't available (tests and tools without Tauri's WebKit).
@@ -92,6 +107,8 @@ impl App {
         let mut methods = methods();
         librarium_feature_library::contribute_page_methods(&mut methods).expect("page saving");
         let worker: Arc<dyn WorkerHost> = Arc::new(ProcessWorkerHost::new(worker_binary, WORKER_MEMORY_CEILING));
+        let recognizer: Arc<dyn librarium_contracts::ports::TextRecognizer> =
+            Arc::new(librarium_recognizer_vision::VisionRecognizer::new(worker.clone()));
         let api = Arc::new(Api::new(Deps {
             worker,
             fs: Arc::new(MacFs),
@@ -109,6 +126,7 @@ impl App {
             views: Arc::new(views),
             job_kinds: Arc::new(move || {
                 let mut r = job_kinds();
+                librarium_feature_library::contribute_jobs(&mut r, recognizer.clone()).expect("library jobs");
                 librarium_feature_library::contribute_page_jobs(&mut r, page_saver.clone()).expect("page saving");
                 r
             }),
@@ -138,6 +156,8 @@ pub fn slot_contributors() -> Vec<(String, Vec<(String, String)>)> {
         ),
         (librarium_contracts::slots::JOB_KINDS.to_string(), {
             let mut r = job_kinds();
+            librarium_feature_library::contribute_jobs(&mut r, Arc::new(NoRecognizer)).expect("library jobs");
+            librarium_feature_library::contribute_page_jobs(&mut r, Arc::new(NoPageSaver)).expect("page jobs");
             librarium_kernel::hosts::kernel_job_kinds(&mut r);
             r.contributors()
         }),

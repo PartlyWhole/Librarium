@@ -30,6 +30,9 @@ const checks = [
   ["EPUB scripts never run", r.epubScriptRan === false],
   ["EPUB finds", r.epubFind?.count >= 1],
   ["image opens and zooms", r.imagePainted === true && r.imageZoomed === true],
+  ["recognised words in an image can be found", r.ocrImageLines === 3 && r.ocrImageFind?.count === 1],
+  ["recognised words in an image can be selected (and so captured)", r.ocrImageSelection === "Gravity and grace are two forces."],
+  ["recognised words on a scanned page can be found", r.ocrScanLines === 3 && r.ocrScanFind?.count >= 1],
 ];
 let failed = 0;
 for (const [name, ok] of checks) {

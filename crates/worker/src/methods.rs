@@ -11,6 +11,14 @@ pub fn call(method: &str, params: Value) -> Result<Value, BackendError> {
     match method {
         "pdf.text" => crate::pdf::text(&path(&params)?),
         "pdf.info" => crate::pdf::info(&path(&params)?),
+        "ocr.image" => crate::vision::image(&path(&params)?),
+        "ocr.pdf" => {
+            let pages: Vec<u32> = params["pages"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect())
+                .unwrap_or_default();
+            crate::vision::pdf(&path(&params)?, &pages)
+        }
         "epub.parse" => crate::epub::parse(&path(&params)?),
         "image.info" => {
             let p = path(&params)?;

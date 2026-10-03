@@ -14,6 +14,7 @@ use std::os::fd::FromRawFd;
 mod epub;
 mod methods;
 mod pdf;
+mod vision;
 
 fn main() {
     // SAFETY: duplicating and redirecting our own standard descriptors at startup.

@@ -17,5 +17,11 @@ serde.workspace = true
 serde_json.workspace = true
 zip = { version = "8", default-features = false, features = ["deflate"] }
 
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSURL", "NSDictionary", "NSError", "NSData"] }
+objc2-vision = { version = "0.3", features = ["VNRequest", "VNRecognizeTextRequest", "VNRequestHandler", "VNObservation", "VNTypes", "objc2-core-foundation", "objc2-core-graphics", "objc2-image-io"] }
+objc2-core-foundation = { version = "0.3", features = ["CFCGTypes", "CFURL", "CFString"] }
+objc2-core-graphics = { version = "0.3", features = ["CGImage", "CGPDFDocument", "CGPDFPage", "CGContext", "CGBitmapContext", "CGColorSpace", "CGDataProvider"] }
+
 [lints]
 workspace = true

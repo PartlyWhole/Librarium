@@ -323,3 +323,41 @@ pub struct SavedPage {
 pub trait PageSaver: Send + Sync {
     fn save(&self, url: &str, timeout: Duration) -> Result<SavedPage>;
 }
+
+// ---------------------------------------------------------------------------------------------
+// TextRecognizer
+
+/// A recognised line: its text, and where it is (fractions of the page, origin top left).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecognizedLine {
+    pub text: String,
+    pub confidence: f32,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecognizedPage {
+    /// 1-based.
+    pub page: u32,
+    pub text: String,
+    pub lines: Vec<RecognizedLine>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Recognized {
+    /// e.g. "apple-vision".
+    pub extractor: String,
+    pub version: u32,
+    pub pages: Vec<RecognizedPage>,
+}
+
+/// Recognises text in images and scanned pages. The real adapter uses Apple Vision in the
+/// worker; results are stored, so recognition never runs twice for the same file.
+pub trait TextRecognizer: Send + Sync {
+    fn recognize_image(&self, path: &Path) -> Result<Recognized>;
+    /// The given 1-based pages of a PDF, rendered and recognised.
+    fn recognize_pdf_pages(&self, path: &Path, pages: &[u32]) -> Result<Recognized>;
+}
