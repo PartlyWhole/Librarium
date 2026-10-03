@@ -7,6 +7,8 @@
 //!   `extracted/text-v1.json`, stamped with the extractor's version, so rebuilding the index
 //!   never re-runs extraction (or, later, recognition).
 
+pub mod checks;
+
 use librarium_contracts::api::Written;
 use librarium_contracts::{BackendError, ErrorCode, Id, Result};
 use librarium_kernel::frontmatter::FmValue;
@@ -30,6 +32,11 @@ pub const ORIGINAL: &str = "library.original";
 pub const TEXT: &str = "library.text";
 pub const PAGES: &str = "library.pages";
 pub const TEXT_FILE: &str = "extracted/text-v1.json";
+/// The latest snapshot of a saved web page (its folder name under `snapshots/`).
+pub const SNAPSHOT: &str = "library.snapshot";
+/// Every snapshot: `[{at, sha256, final-url, status, checks}]`.
+pub const SNAPSHOTS: &str = "library.snapshots";
+pub const PAGE_EXTRACTOR: &str = "webkit-page 1";
 
 pub fn contribute_kinds(k: &mut Kinds) -> Result<(), DuplicateId> {
     k.add(
@@ -43,7 +50,7 @@ pub fn contribute_kinds(k: &mut Kinds) -> Result<(), DuplicateId> {
             subfolder_field: None,
         },
     )?;
-    k.add_text_source(ID, KIND, Arc::new(item_text))
+    k.add_text_source(ID, KIND, Arc::new(|s: &Store, e: &Entry, part: Option<&str>| item_text(s, e, part)))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,7 +169,10 @@ pub fn stored_text(store: &Store, e: &Entry) -> Option<Value> {
 
 /// Text for derived views and anchors: pages (or chapters) joined by blank lines, from stored
 /// files only, with a segment for each.
-pub fn item_text(store: &Store, e: &Entry) -> Option<librarium_contracts::api::StoredText> {
+pub fn item_text(store: &Store, e: &Entry, part: Option<&str>) -> Option<librarium_contracts::api::StoredText> {
+    if e.field_str(FORMAT) == Some("web") {
+        return snapshot_text(store, e, part);
+    }
     let v = stored_text(store, e)?;
     let (parts, pages) = match v["pages"].as_array() {
         Some(p) => (p, true),
@@ -297,6 +307,151 @@ pub fn contribute_jobs(r: &mut Registry<JobKind>) -> Result<(), DuplicateId> {
             run: Arc::new(extract),
             trigger: None,
         },
+    )
+}
+
+// ---- saved web pages -----------------------------------------------------------------------
+
+/// A snapshot's text (`snapshots/<at>/text.json`): the latest one, or the one named.
+pub fn snapshot_text(store: &Store, e: &Entry, part: Option<&str>) -> Option<librarium_contracts::api::StoredText> {
+    let at = part.map(str::to_string).or_else(|| e.field_str(SNAPSHOT).map(str::to_string))?;
+    if at.contains(['/', '.']) {
+        return None;
+    }
+    let v: Value = serde_json::from_slice(
+        &store.fs.read(&store.record_dir(e).join("snapshots").join(&at).join("text.json")).ok()?,
+    )
+    .ok()?;
+    let text = v["text"].as_str().unwrap_or("").to_string();
+    let end = text.chars().count() as u64;
+    Some(librarium_contracts::api::StoredText {
+        text,
+        segments: vec![librarium_contracts::api::TextSegment { label: String::new(), start: 0, end }],
+        origin: Some(
+            json!({ "file": format!("snapshots/{at}/text.json"), "extractor": v["extractor"], "version": v["version"], "snapshot": at }),
+        ),
+    })
+}
+
+/// The item already saved from this address, if any (saving again adds a snapshot to it).
+pub fn item_for_url(store: &Store, url: &str) -> Option<Entry> {
+    let norm = |u: &str| u.trim_end_matches('/').split('#').next().unwrap_or("").to_string();
+    let want = norm(url);
+    store.list(Some(KIND)).into_iter().find(|e| {
+        let p = e.fields.get("provenance");
+        [p.and_then(|p| p["source"].as_str()), p.and_then(|p| p["final-url"].as_str())]
+            .iter()
+            .flatten()
+            .any(|u| norm(u) == want)
+    })
+}
+
+/// Saves a web page: a faithful PDF and its clean text, as a new item or a new snapshot.
+fn save_page(saver: &dyn librarium_contracts::ports::PageSaver, ctx: &JobCtx, p: &Value) -> Result<()> {
+    let url = p["url"].as_str().ok_or_else(|| BackendError::invalid("no address"))?.to_string();
+    let store = &ctx.library.store;
+    ctx.progress(None, Some("Loading the page"));
+    let page = saver.save(&url, Duration::from_secs(90))?;
+    ctx.check_cancelled()?;
+    let checks = checks::check(&page);
+    let now_ms = store.clock.now_ms();
+    let at = librarium_kernel::time::iso_compact(now_ms);
+    let now = librarium_kernel::time::iso_utc(now_ms);
+    let sha = sha256(&page.pdf);
+    let snapshot =
+        json!({ "at": at, "sha256": sha, "final-url": page.final_url, "status": page.status, "checks": checks });
+    let text = json!({ "extractor": PAGE_EXTRACTOR, "version": 1, "title": page.title, "final_url": page.final_url, "status": page.status, "language": page.language, "images": page.images, "checks": checks, "text": page.text });
+    let existing = item_for_url(store, &url).or_else(|| item_for_url(store, &page.final_url));
+    // Idempotent: the job's own snapshot (same key, same PDF) is not added twice.
+    if let Some(e) = &existing {
+        if e.fields.get(SNAPSHOTS).and_then(|v| v.as_array()).is_some_and(|a| a.iter().any(|s| s["sha256"] == sha)) {
+            return Ok(());
+        }
+    }
+    let id = existing.as_ref().map(|e| e.id).unwrap_or_else(|| store.ids.next_id());
+    let stage = store.stage_dir(id).join("snapshot");
+    store.stage_file(&stage, "page.pdf", &page.pdf)?;
+    store.stage_file(&stage, "text.json", &serde_json::to_vec_pretty(&text).unwrap())?;
+    ctx.progress(Some(0.9), Some("Storing the snapshot"));
+    match existing {
+        Some(e) => {
+            let version = e.hash.clone();
+            let mut all = e.fields.get(SNAPSHOTS).and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            all.push(snapshot);
+            let at2 = at.clone();
+            ctx.library.write(Lane::Background, move |tx| -> Result<()> {
+                tx.import_into(id, &stage, &format!("snapshots/{at2}"))?;
+                // record.json is the commit point.
+                tx.set_fields(
+                    id,
+                    Some(&version),
+                    &[
+                        (SNAPSHOTS.into(), Some(FmValue::Other(Value::Array(all)))),
+                        (SNAPSHOT.into(), Some(FmValue::Str(at2.clone()))),
+                    ],
+                )?;
+                Ok(())
+            })?;
+        }
+        None => {
+            let title = if page.title.trim().is_empty() { url.clone() } else { page.title.clone() };
+            let record = json!({
+                "id": id,
+                "kind": KIND,
+                "kind-version": 1,
+                "created": now,
+                "title": title,
+                "provenance": { "source": url, "final-url": page.final_url, "author": page.author, "publication": page.publication, "published": page.published, "saved-at": now, "saved-with": format!("Librarium {} (WebKit)", env!("CARGO_PKG_VERSION")) },
+                FORMAT: "web",
+                SNAPSHOT: at,
+                SNAPSHOTS: [snapshot],
+            });
+            let dir = store.stage_dir(id);
+            let snap_dir = dir.join("snapshots").join(&at);
+            store.fs.create_dir_all(snap_dir.parent().unwrap()).map_err(|e| BackendError::io(e.to_string()))?;
+            store.fs.rename(&stage, &snap_dir).map_err(|e| BackendError::io(e.to_string()))?;
+            let mut rj = serde_json::to_vec_pretty(&record).unwrap();
+            rj.push(b'\n');
+            store.stage_file(&dir, "record.json", &rj)?;
+            ctx.library.write(Lane::Background, move |tx| tx.import_staged(KIND, &dir, &title))?;
+        }
+    }
+    Ok(())
+}
+
+/// The job that saves pages, with the saver it uses.
+pub fn contribute_page_jobs(
+    r: &mut Registry<JobKind>,
+    saver: Arc<dyn librarium_contracts::ports::PageSaver>,
+) -> Result<(), DuplicateId> {
+    r.add(
+        ID,
+        "library.savePage",
+        JobKind {
+            kind: "library.savePage".into(),
+            title: "Saving a web page".into(),
+            noun: "saves".into(),
+            resumable: true,
+            run: Arc::new(move |ctx: &JobCtx, p: &Value| save_page(&*saver, ctx, p)),
+            trigger: None,
+        },
+    )
+}
+
+/// `library.savePage {url}`: queues a save (one job per address at a time).
+pub fn contribute_page_methods(m: &mut Registry<ApiMethod>) -> Result<(), DuplicateId> {
+    m.add(
+        ID,
+        "library.savePage",
+        Arc::new(|ctx: &MethodCtx, p: Value| {
+            let url = p["url"]
+                .as_str()
+                .map(str::trim)
+                .filter(|u| u.starts_with("http://") || u.starts_with("https://"))
+                .ok_or_else(|| BackendError::invalid("That isn’t a web address (it should start with https://)."))?;
+            let jobs = ctx.jobs.ok_or_else(|| BackendError::new(ErrorCode::NotReady, "Jobs are starting."))?;
+            Ok(serde_json::to_value(jobs.enqueue("library.savePage", url, json!({ "url": url }))?).unwrap())
+        }),
     )
 }
 

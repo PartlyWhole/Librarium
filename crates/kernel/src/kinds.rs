@@ -33,9 +33,12 @@ pub struct SlugField {
     pub field: String,
 }
 
-/// Gives a non-Markdown kind's text to derived views (from stored files only).
+/// Gives a non-Markdown kind's text to derived views and anchors (from stored files only).
+/// The optional part picks one version of it (a web page's snapshot); `None` is the latest.
 pub type TextSource = std::sync::Arc<
-    dyn Fn(&crate::store::Store, &crate::store::Entry) -> Option<librarium_contracts::api::StoredText> + Send + Sync,
+    dyn Fn(&crate::store::Store, &crate::store::Entry, Option<&str>) -> Option<librarium_contracts::api::StoredText>
+        + Send
+        + Sync,
 >;
 
 pub struct Kinds {

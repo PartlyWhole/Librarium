@@ -291,3 +291,35 @@ pub trait Desktop: Send + Sync {
     /// Shows a file or folder in Finder.
     fn reveal(&self, path: &Path) -> Result<()>;
 }
+
+// ---------------------------------------------------------------------------------------------
+// PageSaver
+
+/// What a saved web page gives: a faithful PDF and the page's clean text and metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SavedPage {
+    /// The address after redirects.
+    pub final_url: String,
+    /// The HTTP status of the page, when the browser reports it.
+    pub status: Option<u16>,
+    pub title: String,
+    pub author: Option<String>,
+    /// The site or publication.
+    pub publication: Option<String>,
+    pub published: Option<String>,
+    pub language: Option<String>,
+    /// The readable text (the article, or the page's main content).
+    pub text: String,
+    /// All visible text, for checks.
+    pub visible_text: String,
+    /// The page's HTML, truncated, for checks.
+    pub html: String,
+    /// Images visible on the page (loaded, not tiny).
+    pub images: u32,
+    pub pdf: Vec<u8>,
+}
+
+/// Saves a web page from its address. The real adapter uses WebKit in the app's webview.
+pub trait PageSaver: Send + Sync {
+    fn save(&self, url: &str, timeout: Duration) -> Result<SavedPage>;
+}

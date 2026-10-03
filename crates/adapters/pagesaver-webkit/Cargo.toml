@@ -1,6 +1,6 @@
 [package]
 name = "librarium-pagesaver-webkit"
-description = "PageSaver port: WebKit through the system webview."
+description = "PageSaver port: WebKit through the system webview (WKWebView.createPDF)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,13 @@ publish.workspace = true
 librarium-contracts.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tauri.workspace = true
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSData", "NSError", "NSDictionary"] }
+objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKPDFConfiguration", "WKContentWorld", "WKFrameInfo", "block2", "objc2-core-foundation", "objc2-app-kit"] }
+objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
+objc2-pdf-kit = { version = "0.3", features = ["PDFDocument", "PDFPage"] }
+block2 = "0.6"
 
 [lints]
 workspace = true

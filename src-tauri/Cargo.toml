@@ -31,6 +31,7 @@ librarium-feature-captures = { path = "../crates/features/captures" }
 librarium-feature-library = { path = "../crates/features/library" }
 librarium-feature-search = { path = "../crates/features/search" }
 librarium-feature-links = { path = "../crates/features/links" }
+librarium-pagesaver-webkit = { path = "../crates/adapters/pagesaver-webkit" }
 serde.workspace = true
 serde_json.workspace = true
 tauri = { workspace = true, features = [] }

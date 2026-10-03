@@ -10,6 +10,7 @@ fn path(params: &Value) -> Result<std::path::PathBuf, BackendError> {
 pub fn call(method: &str, params: Value) -> Result<Value, BackendError> {
     match method {
         "pdf.text" => crate::pdf::text(&path(&params)?),
+        "pdf.info" => crate::pdf::info(&path(&params)?),
         "epub.parse" => crate::epub::parse(&path(&params)?),
         "image.info" => {
             let p = path(&params)?;

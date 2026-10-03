@@ -353,8 +353,13 @@ impl Store {
 
     /// A record's text with its segments (pages, chapters); Markdown is one segment.
     pub fn stored_text(&self, e: &Entry) -> Option<librarium_contracts::api::StoredText> {
+        self.stored_text_of(e, None)
+    }
+
+    /// Like [`Store::stored_text`], for one part (a snapshot) of the record.
+    pub fn stored_text_of(&self, e: &Entry, part: Option<&str>) -> Option<librarium_contracts::api::StoredText> {
         if let Some(src) = self.kinds.text_sources.get(&e.kind) {
-            return src(self, e);
+            return src(self, e, part);
         }
         let def = self.kinds.get(&e.kind)?;
         if def.format != Format::Markdown {
@@ -934,6 +939,30 @@ impl<'a> Tx<'a> {
         s.fs.flush_dir(target.parent().unwrap(), self.dur.flush()).map_err(|e| io_err(e, "flushing"))?;
         let bytes = s.fs.read(&target.join("record.json")).map_err(|e| io_err(e, "reading"))?;
         self.indexed(&rel, &bytes, ChangeOp::Created)
+    }
+
+    /// Moves a staged folder into a folder record (e.g. a new snapshot of a web page), with one
+    /// rename; across volumes, staged beside the library first. `record.json` is the commit
+    /// point and should be updated after.
+    pub fn import_into(&self, id: Id, stage: &Path, rel_dir: &str) -> Result<PathBuf> {
+        let s = self.store;
+        let e = self.writable(id)?;
+        if rel_dir.split('/').any(|p| p.is_empty() || p == ".." || p.starts_with('.')) {
+            return Err(BackendError::invalid(format!("not a folder of a record: {rel_dir:?}")));
+        }
+        let target = s.record_dir(&e).join(rel_dir);
+        s.fs.create_dir_all(target.parent().unwrap()).map_err(|err| io_err(err, "creating the folder"))?;
+        if let Err(err) = s.fs.rename_exclusive(stage, &target) {
+            if err.raw_os_error() != Some(libc_exdev()) {
+                return Err(io_err(err, "moving into place"));
+            }
+            let near = s.root.join(".librarium/staging").join(format!("{id}-{}", s.ids.next_id()));
+            copy_tree(&*s.fs, stage, &near).map_err(|err| io_err(err, "staging beside the library"))?;
+            s.fs.rename_exclusive(&near, &target).map_err(|err| io_err(err, "moving into place"))?;
+            let _ = remove_tree(&*s.fs, stage);
+        }
+        s.fs.flush_dir(target.parent().unwrap(), self.dur.flush()).map_err(|err| io_err(err, "flushing"))?;
+        Ok(target)
     }
 
     /// Writes a file inside a folder record (e.g. its extracted text), safely. The record's own

@@ -113,6 +113,8 @@ export interface ShellApi {
 export const READER_TOOLS = "library.reader-tools";
 export interface ReaderToolContext {
   source: RecordInfo;
+  /** The version of the source shown (a web page's snapshot), if any. */
+  part?: string;
   view: import("../reader/host").ReaderView;
   /** The stored text anchors refer to. */
   text(): Promise<string>;

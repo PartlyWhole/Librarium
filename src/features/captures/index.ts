@@ -35,6 +35,7 @@ interface PendingPart extends CapturePart {
 interface Anchor {
   id: string;
   source: string;
+  snapshot?: string | null;
   parts: { selector: Selector[]; region?: string }[];
 }
 
@@ -42,7 +43,7 @@ export type PartStatus = { status: "found" | "moved" | "lost" | "region"; start?
 
 /** Locates every part of a capture in its source's stored text. */
 export async function statuses(anchor: Anchor): Promise<PartStatus[]> {
-  const stored = await call<StoredText | null>("records.text", { id: anchor.source }).catch(() => null);
+  const stored = await call<StoredText | null>("records.text", { id: anchor.source, part: anchor.snapshot ?? undefined }).catch(() => null);
   return anchor.parts.map((p) => {
     const hasQuote = p.selector.some((s) => s.type === "TextQuoteSelector" && s.exact);
     if (!hasQuote) return { status: "region" };
@@ -62,13 +63,14 @@ export function captures(shell: ShellApi): void {
   const tray = signal<{ source: string; parts: PendingPart[] }>({ source: "", parts: [] });
 
   // ---- making a capture ---------------------------------------------------------------
+  let part: string | undefined;
   const saveDialog = (source: RecordInfo) => {
     const parts = tray.peek().parts;
     const words = h("textarea", { class: "words-input", rows: 4, placeholder: "Your words (optional)", "aria-label": "Your words" });
     const save = async () => {
       try {
-        const stored = await call<StoredText | null>("records.text", { id: source.id }).catch(() => null);
-        const w = await call<Written>("captures.create", { source: source.id, snapshot: null, text: stored?.origin ?? null, parts: parts.map(({ preview: _p, ...x }) => x), words: words.value });
+        const stored = await call<StoredText | null>("records.text", { id: source.id, part }).catch(() => null);
+        const w = await call<Written>("captures.create", { source: source.id, snapshot: part ?? null, text: stored?.origin ?? null, parts: parts.map(({ preview: _p, ...x }) => x), words: words.value });
         shell.records.put(w.info, w.seq);
         tray.set({ source: "", parts: [] });
         m.close();
@@ -103,10 +105,11 @@ export function captures(shell: ShellApi): void {
   const tool: ReaderTool = {
     id: "capture",
     mount(toolbar, ctx) {
+      part = ctx.part;
       const captureSelection = async () => {
         const sel = ctx.view.selection?.();
         if (!sel) return shell.status.show("Select some text first.");
-        const stored = await call<StoredText | null>("records.text", { id: ctx.source.id }).catch(() => null);
+        const stored = await call<StoredText | null>("records.text", { id: ctx.source.id, part: ctx.part }).catch(() => null);
         const seg = stored && (sel.page ? stored.segments[sel.page - 1] : sel.chapter !== undefined ? stored.segments[sel.chapter] : undefined);
         const at = stored ? locateSelection(stored.text, sel.text, seg ? { from: Number(seg.start), to: Number(seg.end) } : undefined) : null;
         const selector: Selector[] = at && stored ? [...describe(stored.text, at.start, at.end)] : [{ type: "TextQuoteSelector", exact: sel.text, prefix: "", suffix: "" }];
@@ -160,6 +163,8 @@ export function captures(shell: ShellApi): void {
 
   // ---- embeds ---------------------------------------------------------------------------
   const placeOf = (anchor: Anchor | null) => (anchor?.parts[0] ? JSON.stringify(anchor.parts[0].selector) : undefined);
+  /** Where to open a capture's source: its place, in the snapshot it came from. */
+  const where = (anchor: Anchor | null, selector?: Selector[]): Record<string, string> => ({ place: selector ? JSON.stringify(selector) : (placeOf(anchor) ?? ""), ...(anchor?.snapshot ? { snapshot: anchor.snapshot } : {}) });
   shell.embeds.add("captures", KIND, {
     kind: KIND,
     render(r, open) {
@@ -167,7 +172,7 @@ export function captures(shell: ShellApi): void {
       const src = String(r.fields[F.source] ?? "");
       const cite = h("a", { href: "#", class: "embed-cite", onclick: (e: Event) => {
         e.preventDefault();
-        void call<Anchor>("captures.anchor", { id: r.id }).then((a) => open(src, { place: placeOf(a) ?? "" }), () => open(src));
+        void call<Anchor>("captures.anchor", { id: r.id }).then((a) => open(src, where(a)), () => open(src));
       } }, `— ${citation(shell, r)}`);
       const regionN = Number(r.fields["captures.parts"] ?? 0);
       const block = h("figure", { class: "embed" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite));
@@ -207,14 +212,14 @@ export function captures(shell: ShellApi): void {
         anchor?.parts.forEach((p, i) => {
           const s = st[i];
           const quote = p.selector.find((x) => x.type === "TextQuoteSelector") as { exact: string } | undefined;
-          const show = () => shell.openRecord(src, { place: JSON.stringify(p.selector) });
+          const show = () => shell.openRecord(src, where(anchor, p.selector));
           const body = quote ? h("blockquote", { class: "capture-quote" }, quote.exact) : h("img", { class: "capture-region", alt: "The captured region" });
           if (!quote) void call<string>("captures.region", { id, n: i + 1 }).then((d) => ((body as HTMLImageElement).src = d), () => {});
           const badge = s?.status === "moved" ? h("span", { class: "badge moved" }, "moved — check it") : s?.status === "lost" ? h("span", { class: "badge lost" }, "lost") : null;
           const confirm = s?.status === "moved" ? h("button", { class: "link-button", onclick: () => void confirmMoved(id, anchor, i, src).then(() => shell.router.go("capture", { id }, { replace: true })) }, "This is the place") : null;
           partsEl.appendChild(h("div", { class: "capture-part" }, body, h("div", { class: "row tight" }, h("button", { class: "link-button", onclick: show }, "Show in the source"), badge, confirm)));
         });
-        const cite = h("p", { class: "muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(src, { place: placeOf(anchor) ?? "" })) }, citation(shell, r)));
+        const cite = h("p", { class: "muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(src, where(anchor))) }, citation(shell, r)));
         const editorHost = h("div", { class: "editor-host" });
         replace(host, h("h1", { class: "page-title" }, r.title || "Capture"), partsEl, cite, h("h2", { class: "list-heading" }, "Your words"), editorHost);
         const session = new NoteSession(id, r.version, t.body, {
@@ -252,7 +257,7 @@ export function captures(shell: ShellApi): void {
         for (const c of list.sort((a, b) => (a.created ?? "").localeCompare(b.created ?? ""))) {
           const status = h("span", { class: "badge" });
           const li = h("li", null, h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(c.id)) }, c.title || "Capture"), " ", status, h("div", { class: "row tight" },
-            h("button", { class: "link-button", onclick: () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, { place: placeOf(a) ?? "" })) }, "Show"),
+            h("button", { class: "link-button", onclick: () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, where(a))) }, "Show"),
             h("button", { class: "link-button", onclick: () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note.")) }, "Copy embed")));
           ul.appendChild(li);
           void call<Anchor>("captures.anchor", { id: c.id }).then(statuses).then((s) => {
@@ -288,7 +293,7 @@ export function captures(shell: ShellApi): void {
 
 /** The user confirms a moved part's new place: the anchor now points there. */
 async function confirmMoved(id: string, anchor: Anchor, i: number, src: string): Promise<void> {
-  const stored = await call<StoredText | null>("records.text", { id: src });
+  const stored = await call<StoredText | null>("records.text", { id: src, part: anchor.snapshot ?? undefined });
   if (!stored) return;
   const loc = locate(stored.text, anchor.parts[i]!.selector);
   if (loc.start === undefined) return;

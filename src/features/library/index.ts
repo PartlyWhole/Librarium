@@ -14,7 +14,8 @@ import type { ReaderView, StoredText } from "../../reader/host";
 import { pdfEngine } from "../../reader/pdf";
 import { imageEngine } from "../../reader/image";
 import { epubEngine } from "../../reader/epub";
-import { BookOpen, FileText, Image as ImageIcon, Library as LibraryIcon, Plus, ZoomIn, ZoomOut, Maximize, ChevronUp, ChevronDown } from "lucide";
+import { modal } from "../../kit/dialog";
+import { BookOpen, Globe, FileText, Image as ImageIcon, Library as LibraryIcon, Plus, ZoomIn, ZoomOut, Maximize, ChevronUp, ChevronDown } from "lucide";
 
 const KIND = "item";
 const EXTENSIONS = ["pdf", "epub", "png", "jpg", "jpeg", "gif", "webp", "heic", "tif", "tiff"];
@@ -25,12 +26,20 @@ function formatOf(r: RecordInfo): string {
 
 function iconFor(r: RecordInfo) {
   const f = formatOf(r);
-  return f === "image" ? ImageIcon : f === "epub" ? BookOpen : FileText;
+  return f === "image" ? ImageIcon : f === "epub" ? BookOpen : f === "web" ? Globe : FileText;
 }
 
 interface ImportResult {
   imported: Written[];
   failed: { path: string; error: string }[];
+}
+
+function snapshotLabel(at: string): string {
+  // "2026-10-02T091400Z" → a short local date and time.
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(at);
+  if (!m) return at;
+  const d = new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!, +m[6]!));
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function library(shell: ShellApi): void {
@@ -51,6 +60,33 @@ export function library(shell: ShellApi): void {
       toast(String((e as { message?: string }).message ?? e));
     }
   };
+
+  shell.actions.add("library", {
+    id: "library.savePage",
+    title: "Save a web page…",
+    when: () => shell.folder()?.state === "open",
+    menu: { name: "file", group: 1 },
+    icon: Globe,
+    run: () => {
+      const input = h("input", { class: "combo-input", type: "url", placeholder: "https://…", "aria-label": "The page’s address", spellcheck: false });
+      const go = async () => {
+        const url = input.value.trim();
+        if (!url) return;
+        try {
+          await call("library.savePage", { url });
+          m.close();
+          shell.status.show(`Saving ${url}…`);
+        } catch (e) {
+          toast(String((e as { message?: string }).message ?? e));
+        }
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.isComposing) void go();
+      });
+      const m = modal(h("div", { class: "ask" }, h("h2", { class: "ask-title" }, "Save a web page"), h("p", { class: "muted small" }, "Librarium keeps a faithful PDF of the page and its clean text, with where and when it came from."), input, h("div", { class: "ask-buttons" }, h("button", { class: "button", onclick: () => m.close() }, "Cancel"), h("button", { class: "button primary", onclick: () => void go() }, "Save"))), { label: "Save a web page" });
+      input.focus();
+    },
+  });
 
   shell.actions.add("library", {
     id: "library.add",
@@ -99,7 +135,11 @@ export function library(shell: ShellApi): void {
       }
       ctx.setTitle(r.title || "Untitled");
       host.classList.add("reader-page");
-      const engine = shell.readerEngines.values().find((e) => e.formats.includes(formatOf(r)));
+      // A saved web page reads as its snapshot's PDF.
+      const web = formatOf(r) === "web";
+      const snapshots = (Array.isArray(r.fields["library.snapshots"]) ? r.fields["library.snapshots"] : []) as { at: string; checks?: { kind: string; reason: string }[]; "final-url"?: string }[];
+      const snap = params.snapshot ?? String(r.fields["library.snapshot"] ?? "");
+      const engine = shell.readerEngines.values().find((e) => e.formats.includes(web ? "pdf" : formatOf(r)));
       const stage = h("div", { class: "reader-stage" });
       const pos = h("span", { class: "reader-pos muted small", "aria-live": "polite" });
       const findInput = h("input", { class: "find-input", type: "search", placeholder: "Find", "aria-label": "Find in this item", spellcheck: false });
@@ -133,13 +173,22 @@ export function library(shell: ShellApi): void {
         btn(ZoomOut, "Zoom out", () => view?.zoomOut()), btn(Maximize, "Fit to width", () => view?.zoomReset()), btn(ZoomIn, "Zoom in", () => view?.zoomIn()),
         pos, tools, h("span", { class: "spacer" }), findInput, findCount, btn(ChevronUp, "Previous match", () => void find(true, true)), btn(ChevronDown, "Next match", () => void find(true)));
       const toolDisposers: (() => void)[] = [];
-      replace(host, toolbar, stage);
+      const notices = h("div", { class: "reader-notices" });
+      if (web) {
+        const current = snapshots.find((s) => s.at === snap);
+        for (const c of current?.checks ?? []) notices.appendChild(h("p", { class: "notice" }, `This snapshot may not be the page itself: ${c.reason}`));
+        if (snapshots.length > 1) {
+          const pick = h("select", { "aria-label": "Snapshot", onchange: () => shell.router.go("item", { id, snapshot: pick.value }, { replace: true }) }, snapshots.map((s) => h("option", { value: s.at, selected: s.at === snap }, snapshotLabel(s.at))));
+          tools.before(pick);
+        }
+      }
+      replace(host, toolbar, notices, stage);
       if (!engine) {
         replace(stage, h("p", { class: "empty" }, "This kind of item can’t be shown here yet."));
         return;
       }
       void engine
-        .open(stage, { id, format: formatOf(r), title: r.title, bytes: () => readBytes(id), text: () => call<StoredText | null>("library.text", { id }) }, {
+        .open(stage, { id, format: web ? "pdf" : formatOf(r), title: r.title, bytes: () => readBytes(id, web ? `snapshots/${snap}/page.pdf` : undefined), text: () => (web ? Promise.resolve(null) : call<StoredText | null>("library.text", { id })) }, {
           moved: () => (pos.textContent = view?.position() ?? ""),
           firstPaint: (ms) => console.info(`reader: first page of ${formatOf(r)} in ${Math.round(ms)} ms`),
         })
@@ -150,9 +199,10 @@ export function library(shell: ShellApi): void {
             pos.textContent = v.position();
             // Tools from other modules (capturing…), given this item and its stored text.
             let joined: Promise<string> | null = null;
-            const text = () => (joined ??= call<StoredJoined | null>("records.text", { id }).then((t) => t?.text ?? ""));
+            const part = web ? snap : undefined;
+            const text = () => (joined ??= call<StoredJoined | null>("records.text", { id, part }).then((t) => t?.text ?? ""));
             for (const t of shell.slot<ReaderTool>(READER_TOOLS).values()) {
-              const d = t.mount(tools, { source: r, view: v, text });
+              const d = t.mount(tools, { source: r, view: v, text, part });
               if (typeof d === "function") toolDisposers.push(d);
             }
             if (params.place) {

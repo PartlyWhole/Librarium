@@ -36,3 +36,27 @@ pub fn normalize(t: &str) -> String {
     }
     out.trim().to_string()
 }
+
+/// Pages and drawn images (image XObjects used by the pages).
+pub fn info(path: &Path) -> Result<Value, BackendError> {
+    let doc =
+        lopdf::Document::load(path).map_err(|e| BackendError::invalid(format!("the PDF couldn’t be read: {e}")))?;
+    let mut images = 0u32;
+    for (_, page) in doc.get_pages() {
+        let (resources, _) = doc.get_page_resources(page).unwrap_or((None, vec![]));
+        if let Some(res) = resources {
+            if let Ok(xobjects) =
+                res.get(b"XObject").and_then(|o| doc.dereference(o).map(|(_, o)| o)).and_then(|o| o.as_dict())
+            {
+                for (_, v) in xobjects.iter() {
+                    if let Ok((_, lopdf::Object::Stream(s))) = doc.dereference(v) {
+                        if s.dict.get(b"Subtype").and_then(|t| t.as_name()).is_ok_and(|n| n == b"Image") {
+                            images += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(json!({ "pages": doc.get_pages().len(), "images": images }))
+}

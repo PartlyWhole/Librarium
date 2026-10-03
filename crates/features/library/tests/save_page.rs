@@ -1,0 +1,119 @@
+//! Saving web pages on the test adapters: a new item, then a snapshot; checks; provenance.
+use librarium_contracts::api::JobState;
+use librarium_contracts::ports::{ChangeSource, FileSystem, IndexEngine};
+use librarium_kernel::hosts::{HostEvents, Hosts};
+use librarium_kernel::kinds::Kinds;
+use librarium_kernel::library::{IndexFactory, Library, LibraryPorts, OpenOptions};
+use librarium_testkit::changes::ScriptedChanges;
+use librarium_testkit::clock::FixedClock;
+use librarium_testkit::ids::SequenceIds;
+use librarium_testkit::memfs::MemFs;
+use librarium_testkit::memindex::MemIndex;
+use librarium_testkit::pages::FixturePages;
+use librarium_testkit::versions::RecordingVersions;
+use librarium_testkit::worker::FakeWorkerHost;
+use serde_json::json;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+
+fn fixture(f: &str) -> String {
+    std::fs::read_to_string(format!("{}/../../../tests/fixtures/pages/{f}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+#[test]
+fn saving_again_adds_a_snapshot_with_its_checks() {
+    let fs = Arc::new(MemFs::new());
+    fs.create_dir_all(Path::new("/lib")).unwrap();
+    let clock = Arc::new(FixedClock::new());
+    let mut k = Kinds::new();
+    librarium_feature_library::contribute_kinds(&mut k).unwrap();
+    let index = MemIndex::new();
+    let factory: IndexFactory = Arc::new(move |_p: &Path| Arc::new(index.clone()) as Arc<dyn IndexEngine>);
+    let lib = Arc::new(
+        Library::open(
+            Path::new("/lib"),
+            Path::new("/app"),
+            LibraryPorts {
+                fs: fs.clone() as Arc<dyn FileSystem>,
+                clock: clock.clone(),
+                ids: Arc::new(SequenceIds::new()),
+                versions: Arc::new(RecordingVersions::default()),
+                index: factory.clone(),
+                changes: Arc::new(ScriptedChanges::new()) as Arc<dyn ChangeSource>,
+            },
+            k,
+            OpenOptions { tick: Duration::from_secs(3600), ..Default::default() },
+        )
+        .unwrap(),
+    );
+    let url = "https://quarterly.example/on-technique";
+    let pages = Arc::new(FixturePages::default().with(url, 200, &fixture("article.html")));
+    let mut jobs = librarium_kernel::jobs::registry();
+    librarium_feature_library::contribute_page_jobs(&mut jobs, pages.clone()).unwrap();
+    let hosts = Hosts::start(
+        lib.clone(),
+        &factory,
+        Arc::new(FakeWorkerHost::new()),
+        vec![],
+        jobs,
+        HostEvents { indexed: Box::new(|_| {}), job: Box::new(|_| {}) },
+    )
+    .unwrap();
+
+    let save = || {
+        let j = hosts.jobs.enqueue("library.savePage", url, json!({ "url": url })).unwrap();
+        let j = hosts.jobs.wait(j.id, Duration::from_secs(10)).unwrap();
+        assert_eq!(j.state, JobState::Done, "{j:?}");
+    };
+    save();
+    let items = lib.store.list(Some("item"));
+    assert_eq!(items.len(), 1);
+    let item = &items[0];
+    assert_eq!(item.title, "On Technique — The Quarterly");
+    assert_eq!(item.fields["library.format"], "web");
+    let prov = &item.fields["provenance"];
+    assert_eq!(prov["source"], url);
+    assert_eq!(prov["author"], "A. Writer");
+    assert_eq!(prov["publication"], "The Quarterly");
+    assert_eq!(prov["published"], "2026-09-30T08:00:00Z");
+    assert!(prov["saved-with"].as_str().unwrap().contains("WebKit"));
+    let at1 = item.field_str("library.snapshot").unwrap().to_string();
+    let dir = lib.store.record_dir(item);
+    assert!(fs.read(&dir.join("snapshots").join(&at1).join("page.pdf")).unwrap().starts_with(b"%PDF"));
+    let t1 = lib.store.stored_text(item).unwrap();
+    assert!(t1.text.contains("Technique integrates everything."));
+    assert_eq!(t1.origin.unwrap()["snapshot"], at1);
+    assert_eq!(item.fields["library.snapshots"][0]["checks"], json!([]));
+
+    // The page changes (now behind a paywall); saving again adds a snapshot to the same item.
+    clock.advance_ms(60_000);
+    let p2 = fixture("paywall-text.html");
+    let pages_again = Arc::new(FixturePages::default().with(url, 200, &p2));
+    let mut jobs2 = librarium_kernel::jobs::registry();
+    librarium_feature_library::contribute_page_jobs(&mut jobs2, pages_again).unwrap();
+    hosts.stop();
+    let hosts = Hosts::start(
+        lib.clone(),
+        &factory,
+        Arc::new(FakeWorkerHost::new()),
+        vec![],
+        jobs2,
+        HostEvents { indexed: Box::new(|_| {}), job: Box::new(|_| {}) },
+    )
+    .unwrap();
+    let j = hosts.jobs.enqueue("library.savePage", url, json!({ "url": url })).unwrap();
+    assert_eq!(hosts.jobs.wait(j.id, Duration::from_secs(10)).unwrap().state, JobState::Done);
+    let items = lib.store.list(Some("item"));
+    assert_eq!(items.len(), 1, "one item, two snapshots");
+    let item = &items[0];
+    let snaps = item.fields["library.snapshots"].as_array().unwrap();
+    assert_eq!(snaps.len(), 2);
+    assert_eq!(snaps[1]["checks"][0]["kind"], "paywall");
+    let at2 = item.field_str("library.snapshot").unwrap();
+    assert_ne!(at2, at1);
+    // Each snapshot's text stays readable; captures keep to the one they came from.
+    assert!(lib.store.stored_text_of(item, Some(&at1)).unwrap().text.contains("Technique integrates everything."));
+    assert!(lib.store.stored_text(item).unwrap().text.contains("City Life"));
+    hosts.stop();
+}

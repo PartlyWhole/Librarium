@@ -563,12 +563,16 @@ impl Api {
             }
             methods::RECORDS_TEXT => {
                 // The text derived views and anchors refer to (from stored files only).
+                #[derive(serde::Deserialize)]
+                struct TextParams {
+                    id: Id,
+                    #[serde(default)]
+                    part: Option<String>,
+                }
                 let lib = self.library()?;
-                let e = lib
-                    .store
-                    .get(params::<IdParams>(p)?.id)
-                    .ok_or_else(|| BackendError::not_found("no such record"))?;
-                to_json(lib.store.stored_text(&e))
+                let p: TextParams = params(p)?;
+                let e = lib.store.get(p.id).ok_or_else(|| BackendError::not_found("no such record"))?;
+                to_json(lib.store.stored_text_of(&e, p.part.as_deref()))
             }
             methods::EXPORT_WRITE => {
                 let p: librarium_contracts::api::ExportParams = params(p)?;

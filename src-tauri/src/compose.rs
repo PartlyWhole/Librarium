@@ -61,8 +61,36 @@ pub fn methods() -> librarium_kernel::registry::Registry<librarium_kernel::metho
     r
 }
 
+/// Where page saving isn't available (tests and tools without Tauri's WebKit).
+pub struct NoPageSaver;
+
+impl librarium_contracts::ports::PageSaver for NoPageSaver {
+    fn save(
+        &self,
+        _url: &str,
+        _timeout: std::time::Duration,
+    ) -> librarium_contracts::Result<librarium_contracts::ports::SavedPage> {
+        Err(librarium_contracts::BackendError::new(
+            librarium_contracts::ErrorCode::NotReady,
+            "Saving web pages isn’t available here.",
+        ))
+    }
+}
+
 impl App {
+    /// Composes the app without page saving (for tests and tools).
     pub fn compose(worker_binary: PathBuf, app_support: PathBuf, logs_dir: PathBuf) -> App {
+        Self::compose_with(worker_binary, app_support, logs_dir, Arc::new(NoPageSaver))
+    }
+
+    pub fn compose_with(
+        worker_binary: PathBuf,
+        app_support: PathBuf,
+        logs_dir: PathBuf,
+        page_saver: Arc<dyn librarium_contracts::ports::PageSaver>,
+    ) -> App {
+        let mut methods = methods();
+        librarium_feature_library::contribute_page_methods(&mut methods).expect("page saving");
         let worker: Arc<dyn WorkerHost> = Arc::new(ProcessWorkerHost::new(worker_binary, WORKER_MEMORY_CEILING));
         let api = Arc::new(Api::new(Deps {
             worker,
@@ -77,9 +105,13 @@ impl App {
             logs_dir,
             desktop: Arc::new(librarium_system::MacDesktop),
             open_options: OpenOptions::default(),
-            methods: methods(),
+            methods,
             views: Arc::new(views),
-            job_kinds: Arc::new(job_kinds),
+            job_kinds: Arc::new(move || {
+                let mut r = job_kinds();
+                librarium_feature_library::contribute_page_jobs(&mut r, page_saver.clone()).expect("page saving");
+                r
+            }),
         }));
         let transport = Arc::new(TauriTransport::new(Arc::new(Handler(api.clone()))));
         api.set_sink(transport.clone());

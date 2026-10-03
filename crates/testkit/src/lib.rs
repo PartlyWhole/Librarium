@@ -8,6 +8,7 @@ pub mod faultfs;
 pub mod ids;
 pub mod memfs;
 pub mod memindex;
+pub mod pages;
 pub mod suites;
 pub mod versions;
 pub mod worker;

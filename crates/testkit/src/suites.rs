@@ -278,3 +278,31 @@ pub mod versions {
         assert!(v.history("never/written.md").unwrap().is_empty());
     }
 }
+
+pub mod pagesaver {
+    use librarium_contracts::ports::PageSaver;
+    use std::time::Duration;
+
+    /// The PageSaver contract, against the fixture pages served at `base`
+    /// (`article.html`, and `missing.html` answering 404).
+    pub fn run(saver: &dyn PageSaver, base: &str) {
+        let p = saver.save(&format!("{base}/article.html"), Duration::from_secs(60)).expect("save the article");
+        assert!(p.pdf.starts_with(b"%PDF"), "a PDF");
+        assert_eq!(p.title, "On Technique — The Quarterly");
+        assert!(p.text.contains("Technique integrates everything."), "{}", p.text);
+        assert!(p.visible_text.contains("Attention is the rarest"), "{}", p.visible_text);
+        assert_eq!(p.author.as_deref(), Some("A. Writer"));
+        assert_eq!(p.publication.as_deref(), Some("The Quarterly"));
+        assert_eq!(p.published.as_deref(), Some("2026-09-30T08:00:00Z"));
+        assert!(p.final_url.ends_with("/article.html"));
+        assert!(p.images >= 1, "the picture is seen");
+        assert!(p.html.contains("<article>"));
+        let e =
+            saver.save(&format!("{base}/missing.html"), Duration::from_secs(60)).expect("an error page is still saved");
+        assert!(e.status == Some(404) || e.title.contains("404"), "{:?} {}", e.status, e.title);
+        assert!(
+            saver.save("file:///etc/passwd", Duration::from_secs(5)).is_err()
+                || !saver.save("file:///etc/passwd", Duration::from_secs(5)).unwrap().text.contains("root:")
+        );
+    }
+}

@@ -8,6 +8,7 @@ pub mod compose;
 use compose::App;
 use librarium_contracts::rpc::{RpcNotification, RpcRequest, RpcResponse};
 use serde_json::json;
+use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::{Manager, PhysicalPosition, PhysicalSize, WindowEvent};
 
@@ -62,7 +63,8 @@ pub fn run() {
             std::panic::set_hook(Box::new(|info| log::error!("panic: {info}")));
             let app_support = app.path().app_data_dir()?;
             let logs = app.path().app_log_dir()?;
-            let composed = App::compose(compose::worker_binary()?, app_support, logs);
+            let saver = Arc::new(librarium_pagesaver_webkit::WebKitPageSaver::new(app.handle().clone()));
+            let composed = App::compose_with(compose::worker_binary()?, app_support, logs, saver);
             match composed.api.worker_ping() {
                 Ok(p) => log::info!("worker {} answered (pid {}) in {} µs", p.worker_version, p.pid, p.round_trip_us),
                 Err(e) => log::error!("worker did not answer: {e}"),
