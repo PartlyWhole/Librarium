@@ -185,6 +185,10 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         saveTimer = setTimeout(() => store?.set(PLACE(src.id), loc.serialize()), 800);
       },
       textSelected: () => watchers.forEach((w) => w()),
+      // A click or tap on the page doesn't turn it (only the arrows, keys and swipes do); links
+      // in the book are handled before this.
+      click: () => true,
+      tap: () => true,
       // Links out of the book: the app asks before opening them in the browser.
       handleLocator: (loc) => {
         if (/^https?:|^mailto:/i.test(loc.href)) document.dispatchEvent(new CustomEvent("open-link", { detail: { url: loc.href, text: loc.title ?? "" } }));
@@ -376,7 +380,9 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         }
         st.at = opts.back ? (st.at - 1 + st.results.length) % st.results.length : (st.at + 1) % st.results.length;
         const r = st.results[st.at]!;
-        await go(new Locator({ href: hrefOf(r.path), type: r.type, locations: new LocatorLocations({}), text: new LocatorText({ before: r.before, highlight: r.highlight, after: r.after }) }));
+        const shown = await showRange(r.path, (doc) => findInDoc(doc, st.query)[r.nth] ?? null);
+        // If the page's text differs from the stored chapter (rare), let Readium look for it.
+        if (!shown) await go(new Locator({ href: hrefOf(r.path), type: r.type, locations: new LocatorLocations({}), text: new LocatorText({ before: r.before, highlight: r.highlight, after: r.after }) }));
         draw();
         return { count: st.results.length, current: st.at + 1 };
       },
@@ -420,7 +426,17 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         const item = spot && spot.index >= 0 ? book.spine[spot.index] : undefined;
         if (!item) return false;
         const exact = quote?.exact?.replace(/\s+/g, " ").trim();
-        await go(new Locator({ href: hrefOf(item.href), type: item.type, locations: new LocatorLocations({}), ...(exact ? { text: new LocatorText({ highlight: exact.slice(0, 300), before: quote?.prefix?.slice(-40), after: quote?.suffix?.slice(0, 40) }) } : {}) }));
+        // By the exact place (the CFI), else by the quote in that chapter.
+        const shown = await showRange(item.href, (doc) => {
+          try {
+            const r = spot!.range(doc);
+            if (r.toString().trim()) return r;
+          } catch {
+            /* not resolvable in this page */
+          }
+          return exact ? (findInDoc(doc, exact.slice(0, 200))[0] ?? null) : null;
+        });
+        if (!shown) await go(new Locator({ href: hrefOf(item.href), type: item.type, locations: new LocatorLocations({}), ...(exact ? { text: new LocatorText({ highlight: exact.slice(0, 300), before: quote?.prefix?.slice(-40), after: quote?.suffix?.slice(0, 40) }) } : {}) }));
         draw();
         return true;
       },
@@ -441,6 +457,48 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     };
     function go(loc: Locator): Promise<boolean> {
       return new Promise((res) => nav.go(loc, false, (ok) => res(ok)));
+    }
+    /**
+     * Shows the page with a range on it: goes to its chapter, finds the range in the page (`pick`),
+     * and moves to where it starts. Readium's own text search is only a fallback: when it misses,
+     * it lands somewhere else in the chapter.
+     */
+    async function showRange(path: string, pick: (doc: Document) => Range | null): Promise<boolean> {
+      const item = book.spine.find((x) => x.href === path);
+      if (!item) return false;
+      const href = hrefOf(path);
+      const here = () => frames().find((f) => f.index >= 0 && book.spine[f.index]!.href === path && f.el.style.visibility !== "hidden");
+      const inChapter = current && decodeURIComponent(current.href.split("#")[0]!) === path;
+      if (!inChapter || !here()) await go(new Locator({ href, type: item.type, locations: new LocatorLocations({ progression: 0 }) }));
+      let f = here();
+      for (let i = 0; !f && i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        f = here();
+      }
+      if (!f) return false;
+      const range = pick(f.doc);
+      if (!range) return false;
+      const p = progressionOf(f, range);
+      if (p > 0) await go(new Locator({ href, type: item.type, locations: new LocatorLocations({ progression: p }) }));
+      return true;
+    }
+    /**
+     * Where a range's page starts in its chapter, as Readium counts progression: the distance
+     * scrolled over the distance that can be scrolled (the whole width less one page, or the whole
+     * height less one screen).
+     */
+    function progressionOf(f: { doc: Document }, range: Range): number {
+      const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
+      const el = f.doc.scrollingElement ?? f.doc.documentElement;
+      if (settings.scroll) {
+        const room = el.scrollHeight - el.clientHeight;
+        return room > 0 ? Math.min(1, Math.max(0, (rect.top + el.scrollTop - 24) / room)) : 0;
+      }
+      const page = el.clientWidth;
+      const room = el.scrollWidth - page;
+      if (room <= 0 || page <= 0) return 0;
+      const at = Math.floor((rect.left + el.scrollLeft) / page) * page;
+      return Math.min(1, Math.max(0, (at + 0.5) / room));
     }
     return view;
   },

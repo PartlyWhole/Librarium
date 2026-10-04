@@ -307,6 +307,46 @@ async function run() {
   results.epubBookFileRan = frameDocs().some((d) => / ran$/.test(d.title));
   styledBook.view.destroy();
 
+  // A long chapter: find goes to the page each match is on; a click on the page doesn't turn it;
+  // in a wide window the page is centred.
+  step("epub long");
+  const longBook = await open(epubEngine, "long.epub", "epub");
+  await waitFor(() => frameDocs().length > 0);
+  await pause(400);
+  const shownFrame = () => [...stage.querySelectorAll("iframe")].find((f) => (f as HTMLIFrameElement).style.visibility !== "hidden" && (f as HTMLIFrameElement).contentDocument?.querySelector("p")) as HTMLIFrameElement | undefined;
+  const nowOnPage = () => {
+    const f = shownFrame();
+    const reg = (f?.contentWindow as unknown as { CSS: { highlights?: Map<string, Set<Range>> } } | null)?.CSS.highlights;
+    const r = reg?.get("lib-find-now") ? [...reg.get("lib-find-now")!][0] : undefined;
+    if (!f || !r) return false;
+    const b = r.getBoundingClientRect();
+    return b.width > 0 && b.left >= 0 && b.right <= f.clientWidth + 1;
+  };
+  const findVisible: boolean[] = [];
+  const first = await longBook.view.find("zephyrine");
+  await pause(500);
+  findVisible.push(nowOnPage());
+  for (let i = 0; i < 2; i++) {
+    await longBook.view.find("zephyrine", { again: true });
+    await pause(500);
+    findVisible.push(nowOnPage());
+  }
+  results.epubLongFind = { count: first.count, visible: findVisible };
+  longBook.view.findClear();
+  const atBefore = longBook.view.position();
+  const fdoc = shownFrame()?.contentDocument;
+  const fw = shownFrame()?.clientWidth ?? 0;
+  for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) fdoc?.body.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: fw - 20, clientY: 200, button: 0 }));
+  await pause(700);
+  results.epubClickTurned = longBook.view.position() !== atBefore;
+  stage.style.width = "1800px";
+  await pause(800);
+  const es = stage.querySelector(".epub-stage")!.getBoundingClientRect();
+  const ec = stage.querySelector(".epub-container")!.getBoundingClientRect();
+  results.epubCentred = { stage: Math.round(es.width), offset: Math.round((es.left + es.width / 2) - (ec.left + ec.width / 2)) };
+  stage.style.width = "";
+  longBook.view.destroy();
+
   step("epub fixed layout");
   const fixedBook = await open(epubEngine, "fixed.epub", "epub");
   await waitFor(() => /^Page 1 of 2/.test(fixedBook.view.position()));

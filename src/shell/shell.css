@@ -360,7 +360,8 @@ mark { background: var(--selection); color: inherit; border-radius: 2px; padding
 /* Books, after Apple Books: a running head, the page, a quiet line under it, arrows at the sides. */
 .epub-container { background: var(--book-bg, var(--bg)); display: flex; flex-direction: column; overflow: hidden; }
 /* Readium lays the book out in here (its frames fill it). */
-.epub-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+/* Readium sets the stage's width to its columns' width; the stage is centred, as in Books. */
+.epub-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; width: 100%; max-width: 100%; align-self: center; }
 /* Readium leaves its frames' size to the host: a reflowable book's frame fills the stage
    (fixed-layout pages sit in Readium's own wrappers, sized by Readium). */
 .epub-stage > iframe.readium-navigator-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }

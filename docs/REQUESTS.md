@@ -56,6 +56,32 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-033 · Book page not centred; clicks turn pages; find lands on the wrong page
+> "Page is not automatically centered (see photo) · Clicking on page should not navigate to
+> next or prev page (only clicking the arrows, or left/right key) · The find tool doesn't seem
+> to work perfectly. I searched up a word and find multiple occurrences, some occurrences move
+> to a new page where I do not see the word nor any highlight."
+
+- **Changed:**
+  - **Centring:** the page is centred in a wide window. Readium narrows its column to the line
+    length, and the column sat at the left.
+  - **Clicks:** a click on the page no longer turns it. Readium turned pages on clicks in the
+    left and right quarters. Only the arrows, the keys and swipes turn pages now; links still
+    work.
+  - **Find** goes to the page each match is on and highlights it there.
+    - It used to ask Readium to look for the match's surrounding text, which sometimes missed
+      and landed elsewhere in the chapter.
+    - Now it finds the exact match in the page and turns to the page it starts on. That needed
+      converting the position into Readium's measure: its progression is over the width that
+      can be scrolled, not the whole width.
+  - Showing a capture now uses its exact place the same way, with its quote as a fallback.
+- **Code:** `src/reader/epub/engine.ts` (`showRange`, `progressionOf`, the click listeners),
+  `src/shell/shell.css` (`.epub-stage`).
+- **Tested:** WebKit checks on a new long-chapter book: each of three matches on different
+  pages is on screen and highlighted after find; a click on the page doesn't turn it; the
+  page is centred in a wide window. The click and centring checks fail without their fixes.
+- **Left:** nothing.
+
 ### R-032 · Changing a book's text size doesn't keep the margins
 > "increasing/decreases font size for book reader does not keep padding/margins"
 

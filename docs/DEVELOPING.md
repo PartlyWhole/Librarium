@@ -180,6 +180,11 @@ combobox). Every action must be in a menu (shell test).
 - **WebKit, PDFs and saved pages**
   - In an iframe sandboxed without `allow-scripts`, WebKit runs no event listeners at all, not
     even the parent's (bug 218086). Stop a book's scripts by other means (0043, 0045).
+  - Readium's progression is the distance scrolled over the distance that can be scrolled
+    (the width less one page), and its text search can miss. To show a range, find it in the
+    page and go to its page by progression (`showRange`).
+  - Readium turns pages on clicks in the outer quarters unless the `click`/`tap` listeners
+    return true. It sets its container's width to the column; the host centres it.
   - Readium doesn't size its frames: the host's CSS must (they default to 300 × 150, which
     lays a chapter out in a tiny box with extra pages).
   - Blob-URL frames inherit the app's Content Security Policy in built copies (the dev app has
