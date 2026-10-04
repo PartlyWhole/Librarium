@@ -33,6 +33,16 @@ How urgent (optional):
 
 <!-- Write new requests here, newest at the bottom. -->
 
+### No duplicate tabs
+What I want: "Don't see in a point of duplicate tabs (two tabs of the same file/page)"
+Why / example: three tabs all showing the note 2026-10-03 (screenshot, 2026-10-03).
+
+### The side panel
+What I want: "Really don't like side panel"
+Why / example: screenshot (2026-10-03) of the panel for a note: Linked from, Links without a
+target, Outline, History and Jobs (a long list of "Refreshing link labels 2026-10-03"), all
+stacked in one column.
+
 ---
 
 ## Waiting for you
