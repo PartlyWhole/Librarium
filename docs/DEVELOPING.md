@@ -167,6 +167,8 @@ combobox). Every action must be in a menu (shell test).
   - Tauri's file-drop handler claims every drag over the window, so HTML5 drag and drop
     inside the page never drops. Use pointer events.
   - A link can navigate the whole window away; the navigation guard prevents it.
+  - The development Dock icon is `icons/icon.icns`, baked into the binary at compile time;
+    `src-tauri/build.rs` reruns when `icons/` changes so a new icon shows after the restart.
 - **WebKit, PDFs and saved pages**
   - `pdf-extract` reads nothing from WebKit's PDFs; PDFKit does.
   - Count images inside Form XObjects.
