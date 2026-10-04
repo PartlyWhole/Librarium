@@ -15,4 +15,5 @@ fn the_webkit_page_saver_passes_the_shared_suite() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stdout}\n{stderr}");
     assert!(stdout.contains("long page: Ok("), "{stdout}");
+    assert!(stdout.contains("crypto: Ok("), "Web Crypto is hidden from saved pages: {stdout}");
 }

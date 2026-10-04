@@ -46,8 +46,9 @@ Practical notes:
   GB free.
 - **Load-sensitive tests.** Under heavy load (a Rust build, Time Machine), interface tests
   time out at 5 s. Rerun on a quiet machine before believing a failure.
-- **Never run `page_probe` (src-tauri/examples) against real websites** on the user's Mac:
-  WebKit asks the keychain for a "WebCrypto Master Key" and the user denies those prompts.
+- **Never run `page_probe` (src-tauri/examples) against real websites** on the user's Mac.
+  Saving now hides Web Crypto from pages (0041), which should stop WebKit's keychain prompt
+  for a "WebCrypto Master Key", but the user denies those prompts. Use the local fixtures.
 
 ## 3. Architecture
 

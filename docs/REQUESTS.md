@@ -38,26 +38,7 @@ How urgent (optional):
 
 ## Waiting for you
 
-### R-022 · The keychain prompt while saving web pages
-> "Please explain web encryption for saved pages?"
-
-- **What it is:**
-  - Some pages run scripts that use the browser's built-in encryption (Web Crypto) to keep a
-    key, for sign-in, analytics or the like.
-  - WebKit, the engine Librarium uses to save pages, protects such keys with a "WebCrypto
-    Master Key" in your keychain, so it asks for it.
-  - The development app is rebuilt often, and the keychain treats each rebuild as a new app,
-    so it asks again. A properly built app would probably ask once (this can't be tested
-    without you).
-  - Denying is harmless: the PDF and the text are saved the same way, and keys the page tries
-    to keep would be thrown away anyway.
-- **Choose one:**
-  1. **Leave it:** keep pressing Deny.
-  2. **Click "Always Allow" once:** a harmless key in your login keychain. The development
-     app may ask again after rebuilds.
-  3. **Turn off web encryption while saving** *(recommended)*. The saving window hides Web
-     Crypto from pages, so no prompt can ever appear. The rare page that won't display at all
-     without it might save incomplete; ordinary articles don't need it.
+(nothing)
 
 ---
 
@@ -68,6 +49,24 @@ How urgent (optional):
 ---
 
 ## Done
+
+### R-022 · The keychain prompt while saving web pages
+> "Please explain web encryption for saved pages?" · "Is it dangerous to turn it off?" ·
+> "yes" (option 3: turn it off while saving)
+
+- **Changed:**
+  - Pages being saved no longer see the browser's encryption feature (Web Crypto). No page
+    can keep a key, so WebKit has no reason to ask the keychain for its "WebCrypto Master
+    Key".
+  - Only the hidden saving window is affected: not your browser, keychain, library or the
+    rest of the app. Random numbers still work.
+- **Use:** nothing to do. If a saved page ever comes out blank or incomplete, its snapshot
+  says so; save it again.
+- **Code:** `HIDE_WEB_CRYPTO` in `crates/adapters/pagesaver-webkit/src/lib.rs`; the test page
+  `tests/fixtures/pages/crypto.html`.
+- **Decision:** 0041 · **Tested:** in real WebKit, a page being saved sees no Web Crypto and
+  still has random numbers. That the prompt never appears can only be seen in the real app:
+  please say if it ever does.
 
 ### R-021 · Images in notes
 > "images stored as library items"

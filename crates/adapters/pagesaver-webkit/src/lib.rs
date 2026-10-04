@@ -193,6 +193,14 @@ fn err(m: impl Into<String>) -> BackendError {
     BackendError::io(m)
 }
 
+/// Runs in every frame before the page's own scripts: `crypto.subtle` reads as missing, so no
+/// page can make or keep a key (and WebKit never asks the keychain). `crypto.getRandomValues`
+/// stays.
+const HIDE_WEB_CRYPTO: &str = r#"(() => {
+  try { Object.defineProperty(Crypto.prototype, "subtle", { get() { return undefined; }, configurable: false }); } catch (e) {}
+  try { delete globalThis.SubtleCrypto; } catch (e) {}
+})();"#;
+
 impl WebKitPageSaver {
     pub fn new(app: AppHandle) -> Self {
         WebKitPageSaver {
@@ -223,9 +231,12 @@ impl WebKitPageSaver {
         WebviewWindowBuilder::new(&self.app, &label, WebviewUrl::External("about:blank".parse().unwrap()))
             .visible(false)
             .focused(false)
-            // An in-memory data store: nothing is kept on disk, and WebKit never asks the
-            // keychain for its WebCrypto key. It is wiped after every page.
+            // An in-memory data store: nothing is kept on disk. It is wiped after every page.
             .incognito(true)
+            // Web Crypto is hidden from the pages being saved (R-022, decision 0041): a page
+            // keeping a key makes WebKit ask the keychain for its "WebCrypto Master Key", and
+            // nothing a page keeps here survives anyway.
+            .initialization_script_for_all_frames(HIDE_WEB_CRYPTO)
             .inner_size(WIDTH, 900.0)
             .on_page_load(move |_w, p| {
                 if p.event() == PageLoadEvent::Finished && p.url().scheme() != "about" {

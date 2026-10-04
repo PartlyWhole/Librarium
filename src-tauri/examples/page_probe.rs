@@ -87,6 +87,12 @@ fn main() {
                     assert!(!p.text.contains("Explaining Wendell Berry"), "not the card: {}", p.text);
                 }));
                 println!("popup page: {popup:?}");
+                // Web Crypto is hidden from pages being saved (no keychain prompt); random numbers stay.
+                let crypto = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let p = saver.save(&format!("{base}/crypto.html"), Duration::from_secs(60)).unwrap();
+                    assert!(p.visible_text.contains("Web Crypto: hidden; random: yes"), "{}", p.visible_text);
+                }));
+                println!("crypto: {crypto:?}");
                 // Popups that come late (on reaching the end, after a delay) or float over the
                 // text are not in the PDF; the page's own sticky header is.
                 let late = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
