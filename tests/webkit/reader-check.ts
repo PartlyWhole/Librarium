@@ -108,6 +108,13 @@ async function run() {
   results.pdfPlaceMarked = !!stage.querySelector(".region-mark") && pdf.view.position().startsWith("Page 3");
   step("pdf find");
   results.pdfFind = await pdf.view.find("Line 7 of page 42");
+  // The selectable text lies exactly over the drawn page (no border between them), in words.
+  await new Promise((r) => setTimeout(r, 500));
+  const shown = [...stage.querySelectorAll(".page")].find((p) => p.querySelector(".textLayer span"));
+  const tl = shown?.querySelector(".textLayer")?.getBoundingClientRect();
+  const cv = shown?.querySelector("canvas")?.getBoundingClientRect();
+  results.pdfTextOverPage = !!tl && !!cv && Math.abs(tl.left - cv.left) < 1 && Math.abs(tl.top - cv.top) < 1 && Math.abs(tl.width - cv.width) < 1.5 && Math.abs(tl.height - cv.height) < 1.5;
+  results.pdfTextInWords = [...(shown?.querySelectorAll(".textLayer span") ?? [])].some((s) => /^Line$|^Line\s$/.test(s.textContent ?? ""));
 
   // Capturing: a region dragged on a page far down the document, and a selection's marks.
   step("pdf region");

@@ -211,22 +211,49 @@ export function boxesIn(range: Range, over: HTMLElement, page?: number): Box[] {
   const b = innerRect(over);
   if (!b.width || !b.height) return [];
   const pct = (v: number, of: number) => Math.round((v / of) * 10000) / 100;
-  const out: Box[] = [];
+  // Rectangles on screen, clipped to this element; neighbours on one line join, so a line is
+  // one box. "One line" is judged in pixels by how much they overlap vertically: in percent of
+  // a very tall page (a saved web page), whole lines are within a fraction of a percent.
+  const lines: { l: number; t: number; r: number; b: number }[] = [];
   for (const r of range.getClientRects()) {
     if (r.width < 1 || r.height < 1) continue;
-    // Only the part over this element.
     const l = Math.max(r.left, b.left), t = Math.max(r.top, b.top), rr = Math.min(r.right, b.right), bb = Math.min(r.bottom, b.bottom);
     if (rr <= l || bb <= t) continue;
-    const box: Box = { ...(page ? { page } : {}), x: pct(l - b.left, b.width), y: pct(t - b.top, b.height), w: pct(rr - l, b.width), h: pct(bb - t, b.height) };
-    // Neighbours on one line join, so a line is one box.
-    const prev = out[out.length - 1];
-    if (prev && Math.abs(prev.y - box.y) < 0.5 && Math.abs(prev.h - box.h) < 1 && box.x <= prev.x + prev.w + 1) {
-      const right = Math.max(prev.x + prev.w, box.x + box.w);
-      prev.x = Math.min(prev.x, box.x);
-      prev.w = right - prev.x;
-    } else out.push(box);
+    const prev = lines[lines.length - 1];
+    const overlap = prev ? Math.min(prev.b, bb) - Math.max(prev.t, t) : 0;
+    if (prev && overlap > 0.5 * Math.min(prev.b - prev.t, bb - t) && l <= prev.r + 2) {
+      prev.l = Math.min(prev.l, l);
+      prev.r = Math.max(prev.r, rr);
+      prev.t = Math.min(prev.t, t);
+      prev.b = Math.max(prev.b, bb);
+    } else lines.push({ l, t, r: rr, b: bb });
   }
-  return out;
+  return lines.map((x) => ({ ...(page ? { page } : {}), x: pct(x.l - b.left, b.width), y: pct(x.t - b.top, b.height), w: pct(x.r - x.l, b.width), h: pct(x.b - x.t, b.height) }));
+}
+
+/**
+ * Widens a selection made with the mouse to whole words, as Books and Kindle do: a drag that
+ * starts or ends inside a word takes the whole word. Keeps the selection's direction.
+ */
+export function snapToWords(sel: Selection | null): void {
+  if (!sel || sel.rangeCount !== 1 || sel.isCollapsed) return;
+  const r = sel.getRangeAt(0);
+  const inWord = (c: string | undefined) => !!c && /[\p{L}\p{N}\p{M}'’]/u.test(c);
+  let so = r.startOffset;
+  let eo = r.endOffset;
+  const { startContainer: sc, endContainer: ec } = r;
+  if (sc.nodeType === Node.TEXT_NODE) {
+    const t = sc.textContent ?? "";
+    while (so > 0 && inWord(t[so]) && inWord(t[so - 1])) so--;
+  }
+  if (ec.nodeType === Node.TEXT_NODE) {
+    const t = ec.textContent ?? "";
+    while (eo < t.length && inWord(t[eo - 1]) && inWord(t[eo])) eo++;
+  }
+  if (so === r.startOffset && eo === r.endOffset) return;
+  const backward = sel.anchorNode === ec && sel.anchorOffset === r.endOffset && (sel.focusNode !== ec || sel.focusOffset !== r.endOffset);
+  if (backward) sel.setBaseAndExtent(ec, eo, sc, so);
+  else sel.setBaseAndExtent(sc, so, ec, eo);
 }
 
 /** The last line of a selection on screen, to place controls by it. */

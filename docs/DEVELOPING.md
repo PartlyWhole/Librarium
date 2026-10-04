@@ -150,7 +150,8 @@ Rules that keep it honest:
   - The note page (`features/notes/page.ts`) adds autosave, the word count, and making notes
     from unresolved links. `features/notes/history.ts` is the History panel.
 - **Reader** (`src/reader/`): PDF.js (legacy build), images, EPUB through vendored foliate-js;
-  marks for captures; region capture. EPUB pages are cleaned and given a no-scripts policy
+  marks for captures; region capture. PDF text is placed word by word over a borderless page
+  (`pdf-words.ts`, 0044); mouse selections snap to words (`snapToWords`). EPUB pages are cleaned and given a no-scripts policy
   (`epub-safe.ts`, 0043); chapters turn by scrolling on, keys, and the chapter bar.
 - **Kit** (`src/kit/`): small, dependency-free pieces (signals, DOM helper, dialogs, menus,
   combobox, tree (virtualized), selection, select list, drag and drop, toasts).
@@ -176,6 +177,12 @@ combobox). Every action must be in a menu (shell test).
   - `pdf-extract` reads nothing from WebKit's PDFs; PDFKit does.
   - Count images inside Form XObjects.
   - Strip soft hyphens.
+  - PDF.js's text layer must be exactly the drawn page's size: a page border (or any CSS that
+    resizes `.page`) makes find and selection drift. PDF.js's stylesheet loads after ours.
+  - Judge "same line" in pixels, never in percent of a page: saved web pages are one page
+    thousands of pixels tall.
+  - WebKit's saved PDFs map some ligatures wrongly in PDF.js ("ff" reads as "S"), so find
+    can miss words with ligatures (R-028).
   - Popups fade in through `requestAnimationFrame` (paused when hidden), so remove dialogs
     regardless of visibility; watch only changed elements on busy pages.
 - **Signals**
@@ -187,6 +194,8 @@ combobox). Every action must be in a menu (shell test).
   - Synthetic events can't test native drag and drop, keychain prompts or Tauri's drag
     handling. Say so, and ask the user to try such things in the real app.
   - Timing tests fail under load.
+  - The app's preview pane only renders while it's on screen: PDF pages and text layers wait
+    for a screenshot there. That isn't slowness in the app.
 
 ## 8. Conventions
 

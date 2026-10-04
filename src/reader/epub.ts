@@ -7,7 +7,7 @@
  * with the previous and next chapter and the contents.
  */
 import { h } from "../kit/dom";
-import { endOf, type Mark, type ReaderEngine, type ReaderView } from "./host";
+import { endOf, snapToWords, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { isMarkup, safeMarkup } from "./epub-safe";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- foliate-js has no types */
@@ -113,7 +113,10 @@ export const epubEngine: ReaderEngine = {
     const selectionWatchers = new Set<() => void>();
     const watchDoc = (doc: Document) => {
       const fire = () => setTimeout(() => selectionWatchers.forEach((w) => w()), 0);
-      doc.addEventListener("mouseup", fire);
+      doc.addEventListener("mouseup", () => {
+        setTimeout(() => snapToWords(doc.getSelection()), 0);
+        fire();
+      });
       doc.addEventListener("keyup", (e) => e.shiftKey && fire());
       doc.addEventListener("selectionchange", () => {
         if (!doc.getSelection()?.toString().trim()) fire();

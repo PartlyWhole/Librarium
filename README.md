@@ -108,3 +108,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-04 | Web Crypto is hidden from pages being saved, so WebKit never asks the keychain. | [0041](docs/decisions/0041-no-web-crypto-when-saving.md) |
 | 2026-10-04 | The app icon is the bold kit's Evergreen & gold, padded to macOS's icon grid. | [0042](docs/decisions/0042-app-icon.md) |
 | 2026-10-04 | Book frames allow scripts (WebKit runs no listeners otherwise); book scripts are stopped by cleaning, a policy, and never loading script files. | [0043](docs/decisions/0043-epub-frames-allow-scripts.md) |
+| 2026-10-04 | A PDF's selectable text lies exactly over the page (no border) and is placed word by word with the font's widths. | [0044](docs/decisions/0044-pdf-text-placement.md) |

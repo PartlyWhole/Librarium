@@ -10,8 +10,9 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { EventBus, PDFFindController, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { h } from "../kit/dom";
-import { boxesIn, drawMarks, dragRect, endOf, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
+import { boxesIn, snapToWords, drawMarks, dragRect, endOf, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
+import { advancesOf, splitIntoWords, type Advance, type FontData } from "./pdf-words";
 
 const BASE = "/pdfjs/";
 pdfjs.GlobalWorkerOptions.workerSrc = `${BASE}pdf.worker.min.mjs`;
@@ -25,6 +26,8 @@ export const DOCUMENT_OPTIONS = {
   iccUrl: `${BASE}iccs/`,
   isEvalSupported: false,
   enableXfa: false,
+  // Fonts' widths and character maps, to place the selectable text (pdf-words.ts).
+  fontExtraProperties: true,
 };
 
 export const pdfEngine: ReaderEngine = {
@@ -39,7 +42,7 @@ export const pdfEngine: ReaderEngine = {
     const eventBus = new EventBus();
     const linkService = new PDFLinkService({ eventBus });
     const findController = new PDFFindController({ eventBus, linkService });
-    const viewer = new PDFViewer({ container, viewer: viewerEl, eventBus, linkService, findController, removePageBorders: false, textLayerMode: 1, annotationMode: pdfjs.AnnotationMode.ENABLE });
+    const viewer = new PDFViewer({ container, viewer: viewerEl, eventBus, linkService, findController, removePageBorders: true, textLayerMode: 1, annotationMode: pdfjs.AnnotationMode.ENABLE });
     linkService.setViewer(viewer);
     let painted = false;
     // A region to outline survives page re-renders (PDF.js clears unknown children).
@@ -67,6 +70,9 @@ export const pdfEngine: ReaderEngine = {
       const div = viewer.getPageView(n - 1)?.div as HTMLElement | undefined;
       if (div) drawMarks(div, marks, n);
     };
+    // Selectable text where the printed words are (pdf-words.ts); set up before each page
+    // draws, and so before its text layer.
+    eventBus.on("pagerender", (e: { source?: { pdfPage?: unknown } }) => placeWords(e.source?.pdfPage));
     eventBus.on("pagerendered", (e: { pageNumber: number }) => {
       if (marked && e.pageNumber === marked.page) drawMark(false);
       drawPageMarks(e.pageNumber);
@@ -167,7 +173,11 @@ export const pdfEngine: ReaderEngine = {
       },
       watchSelection(cb) {
         // When a drag or a keyboard selection ends (not at every step of it).
-        const up = () => setTimeout(cb, 0);
+        const up = () =>
+          setTimeout(() => {
+            snapToWords(window.getSelection());
+            cb();
+          }, 0);
         const key = (e: KeyboardEvent) => e.shiftKey && setTimeout(cb, 0);
         const change = () => {
           if (!window.getSelection()?.toString().trim()) cb();
@@ -236,6 +246,43 @@ export const pdfEngine: ReaderEngine = {
     return view;
   },
 };
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- PDF.js's page proxies are untyped here */
+const placed = new WeakSet<object>();
+/**
+ * Makes a page's text content come in words placed by their font's widths (pdf-words.ts).
+ * The fonts are loaded by then: PDF.js draws a page before its text layer.
+ */
+function placeWords(page: any): void {
+  if (!page || placed.has(page) || typeof page.streamTextContent !== "function") return;
+  placed.add(page);
+  const stream = page.streamTextContent.bind(page);
+  page.streamTextContent = (params: unknown) => {
+    const reader = stream(params).getReader();
+    const fonts = new Map<string, Advance | null>();
+    const advanceFor = (name: string) => {
+      if (!fonts.has(name)) {
+        let font: FontData | null;
+        try {
+          font = page.commonObjs?.has(name) ? page.commonObjs.get(name) : null;
+        } catch {
+          font = null;
+        }
+        fonts.set(name, advancesOf(font));
+      }
+      return fonts.get(name)!;
+    };
+    return new ReadableStream({
+      async pull(ctl) {
+        const { value, done } = await reader.read();
+        if (done) return ctl.close();
+        ctl.enqueue({ ...value, items: splitIntoWords(value.items, advanceFor) });
+      },
+      cancel: (why) => reader.cancel(why),
+    });
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
  * Renders a region of a page (percent boxes) afresh, sharp: about 2,000 px across at most,

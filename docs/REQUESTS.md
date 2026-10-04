@@ -33,6 +33,12 @@ How urgent (optional):
 
 <!-- Write new requests here, newest at the bottom. -->
 
+### R-028 · (found by the AI) Find misses words with "ff"/"fi" in saved pages
+While fixing R-027: in web pages saved as PDFs, PDF.js reads some ligatures wrongly
+("different" as "diSerent", "fiction" as "Pction"), so find in the reader misses them. Search
+across the library uses PDFKit's text and isn't affected. To look into: the stored text
+(PDFKit) has the right words and could correct the reader's text.
+
 
 ---
 
@@ -49,6 +55,36 @@ How urgent (optional):
 ---
 
 ## Done
+
+### R-027 · PDF find highlights off; selecting text hard; captures highlight every other line
+> "Highlighting is off (find feature) and selecting text (clicking and dragging) is not very
+> easy to use (do quick research for best practices of UI/UX for selecting text)" ·
+> "Also, capturing text highlights weirdly"
+
+- **Changed:**
+  - Find highlights sit exactly on the words. The hidden, selectable copy of the text was
+    about 2% larger than the page you see, so everything drifted towards the bottom right.
+    It now lies exactly over the page.
+  - Each word of that hidden text is placed using the PDF's own letter widths, so it lines up
+    within lines too (it was off by up to half a letter in web fonts).
+  - Dragging to select is easier to aim, since you're grabbing the letters you see. Drags snap
+    to whole words, as in Books and Kindle.
+  - Capturing several lines highlights every line (it skipped every other line on long saved
+    pages).
+  - Find shows all matches in soft yellow and the current one in orange with a ring; the
+    selection uses the app's selection colour.
+- **Use:** as before. Find with ⌘F, Return / ⇧Return for next / previous; drag to select, then
+  Capture.
+- **Code:** `src/reader/pdf.ts`, `src/reader/pdf-words.ts`, `src/reader/host.ts` (`boxesIn`,
+  `snapToWords`), `src/reader/epub.ts` (snapping), `src/shell/shell.css`.
+- **Decision:** 0044.
+- **Tested:** unit tests (word placement, line boxes on a tall page, word snapping). WebKit
+  checks: the text layer lies exactly over the page (it fails with a border) and is in words.
+  Checked by eye on your saved Thiel–Döpfner page in the preview. How dragging feels needs
+  the real app.
+- **Left:**
+  - Captures made before this keep their old boxes; re-capture to fix one.
+  - Find misses words with some ligatures in saved pages (R-028, in the Inbox).
 
 ### R-026 · EPUBs show only their first page
 > "I only see the first page of the epubs"

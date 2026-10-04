@@ -25,6 +25,8 @@ const checks = [
   ["first page of a 100-page PDF in under 500 ms", r.pdfFirstPageMs >= 0 && r.pdfFirstPageMs < 500],
   ["PDF zooms", r.pdfZoomed === true],
   ["PDF finds", r.pdfFind?.count >= 1],
+  ["PDF: the selectable text lies exactly over the drawn page", r.pdfTextOverPage === true],
+  ["PDF: the selectable text is placed word by word", r.pdfTextInWords === true],
   ["PDF shows a captured region in place", r.pdfPlace === true && r.pdfPlaceMarked === true],
   ["a region dragged on a page far down a PDF is captured from that page", r.pdfRegionPage >= 4 && r.pdfRegionLayerGone === true],
   ["a captured PDF region is rendered sharp and not blank", r.pdfRegionSharp === true && r.pdfRegionInk > 50],
