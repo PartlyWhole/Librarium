@@ -50,6 +50,24 @@ How urgent (optional):
 
 ## Done
 
+### R-025 · The app icon
+> "add this" (librarium-icon-kit.zip) · "sorry, this is better"
+> (librarium-refined-icon-kit.zip)
+
+- **Changed:**
+  - Librarium's icon is the refined kit's **Evergreen & gold** (gold book-and-house on deep
+    green), the kit's recommendation for the app icon.
+  - It is placed on macOS's icon grid, with the standard transparent margin, so it sits the
+    same size as other apps in the Dock.
+  - The welcome screen shows the mark.
+  - The whole kit is kept in the project, so another colourway is a quick swap.
+- **Use:** the development app shows it after its next rebuild. The built `Librarium.app`
+  gets it at the next `npm run build`.
+- **Code:** `assets/brand/` (the kit, `app-icon-macos.svg`, and a README on regenerating);
+  `src-tauri/icons/`; `src/kit/logo.ts`.
+- **Tested:** all interface tests pass. The icon itself shows only in the real app.
+- **Left:** to use another colourway (Parchment, Midnight, Aubergine, Terracotta), say which.
+
 ### R-022 · The keychain prompt while saving web pages
 > "Please explain web encryption for saved pages?" · "Is it dangerous to turn it off?" ·
 > "yes" (option 3: turn it off while saving)

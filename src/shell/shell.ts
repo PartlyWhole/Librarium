@@ -27,6 +27,7 @@ import { Records } from "./records";
 import { Router, sameRoute, type Route, type SavedTabs } from "./router";
 import { renderNewTab, tabBar } from "./tabs";
 import { guardLinks } from "./links";
+import { logo } from "../kit/logo";
 import { createFolders } from "./folders";
 import type { EmbedRenderer, Folders, Page, RecordAction, RecordLook, SettingsSection, SidebarSection, SidePanelSection } from "./slots";
 import { contextMenu, type MenuItem } from "../kit/menu";
@@ -573,6 +574,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       replace(host, h("h1", { class: "page-title" }, "The library couldn’t be opened"), h("p", null, st.error ?? ""), h("div", { class: "row" }, h("button", { class: "button primary", onclick: () => void chooseFolder() }, "Choose a folder…"), h("button", { class: "button", onclick: () => void refreshFolder(true) }, "Try again")));
     } else {
       replace(host,
+        logo(72),
         h("h1", { class: "page-title" }, "Welcome to Librarium"),
         h("p", null, "Everything you write and keep lives as plain files in a folder you choose, readable without this app."),
         h("div", { class: "row" }, h("button", { class: "button primary", onclick: () => void chooseFolder() }, "Choose a folder…")),

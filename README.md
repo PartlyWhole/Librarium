@@ -49,6 +49,7 @@ src/                     the interface (plain TypeScript + Vite)
   shell/ kit/ editor/ reader/ features/
 tests/                   interface-wide tests, the WebKit check page, and fixtures
 vendor/foliate-js/       the EPUB reader, pinned (see PATCHES.md)
+assets/brand/            the icon kit and the app icon's source (see its README)
 docs/decisions/          MADR-style decision records
 docs/REQUESTS.md         feature and change requests: you write them, the AI answers them there
 docs/DEVELOPING.md       the developer guide: architecture, subsystems, lessons learned
