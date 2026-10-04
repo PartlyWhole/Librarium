@@ -16,7 +16,8 @@ import { formatLink, parseLinks } from "./links";
 import { formatKeymap, wrapOnType } from "./format";
 import { hangingIndent, listKeymap } from "./lists";
 import { clipboard, clipboardKeymap } from "./clipboard";
-import { codeHighlighting, folding } from "./code";
+import { codeHighlighting } from "./code";
+import { folding } from "./folding";
 
 let active: EditorView | null = null;
 

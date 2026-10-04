@@ -62,8 +62,13 @@ The user wants writing to be first class, as in Obsidian. A comparison (in
   - Fenced blocks are highlighted (`classHighlighter`, styled only inside code blocks) for
     JS/TS, Python, Rust, JSON, CSS, HTML, SQL and shell. Each language package is loaded
     lazily and pinned.
-  - Folding has a gutter in the margin, shown on hover, and CodeMirror's fold keys. Fold
-    state stays in the editor and is never written to the file.
+  - **Folding, as in Obsidian** (`folding.ts`):
+    - A small arrow sits just left of a heading or a list item's bullet. It shows on hover or
+      while folded, and a click folds or unfolds.
+    - A folded line ends in a faint "…", and a folded item's bullet gets a ring.
+    - CodeMirror's fold keys work too.
+    - Fold state stays in the editor and is never written to the file. (A first version used a
+      gutter column, whose arrows didn't sit by nested items.)
 - **Comfort** (`stats.ts`):
   - **Counts:** words and characters (or of the selection) appear in the status bar, through a
     new `shell.status.context` that each tab's shown page sets.

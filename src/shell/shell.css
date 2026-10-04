@@ -581,12 +581,17 @@ body.dragging-items, body.dragging-items * { cursor: grabbing !important; }
   :root:not([data-theme="light"]) .cm-code-block .tok-string { color: #86efac; }
   :root:not([data-theme="light"]) .cm-code-block .tok-variableName.tok-definition, :root:not([data-theme="light"]) .cm-code-block .tok-propertyName { color: #93c5fd; }
 }
-/* The fold arrows sit in the margin, left of the text, which stays where it was. */
-.cm-editor .cm-gutters { background: transparent; border: 0; color: var(--faint); }
-.cm-editor:has(.cm-foldGutter) { margin-left: -20px; }
-.cm-foldGutter .cm-gutterElement { width: 20px; box-sizing: border-box; text-align: center; opacity: 0; transition: opacity 0.15s; cursor: pointer; }
-.cm-editor:hover .cm-foldGutter .cm-gutterElement, .cm-foldGutter .cm-gutterElement:focus-within { opacity: 1; }
-.cm-foldPlaceholder { background: var(--hover); border: 0; color: var(--muted); padding: 0 6px; border-radius: var(--r1); }
+/* Folding, as in Obsidian: an arrow just left of the bullet or heading, on hover or while folded. */
+.cm-fold-anchor { display: inline-block; position: relative; width: 0; height: 1.2em; vertical-align: text-bottom; text-indent: 0; }
+.cm-fold-arrow { position: absolute; right: 0.3em; top: 0; height: 1.2em; width: 1.1em; display: flex; align-items: center; justify-content: center; transform: rotate(90deg); font-family: var(--font-ui); font-size: 0.9em; color: var(--faint); opacity: 0; cursor: pointer; transition: opacity 0.12s, transform 0.12s; user-select: none; -webkit-user-select: none; }
+.cm-fold-anchor.folded .cm-fold-arrow { transform: none; opacity: 1; }
+.cm-line:hover .cm-fold-arrow { opacity: 1; }
+.cm-fold-arrow:hover { color: var(--ink); }
+.cm-fold-more { margin-left: 0.4em; padding: 0 0.3em; border-radius: var(--r1); color: var(--faint); cursor: pointer; letter-spacing: 0.1em; }
+.cm-fold-more:hover { background: var(--hover); color: var(--ink); }
+/* A folded item's bullet: ringed. */
+.cm-folded-line .cm-bullet { position: relative; z-index: 0; }
+.cm-folded-line .cm-bullet::before { content: ""; position: absolute; left: 50%; top: 50%; width: 1.05em; height: 1.05em; transform: translate(-50%, -50%); border-radius: 50%; background: color-mix(in srgb, var(--muted) 35%, transparent); z-index: -1; }
 .outline { list-style: none; margin: 0; padding: 0; }
 .outline-link { display: block; width: 100%; text-align: left; padding: 3px 6px; border-radius: var(--r1); color: var(--ink); text-decoration: none; }
 .outline-link:hover { background: var(--hover); }
