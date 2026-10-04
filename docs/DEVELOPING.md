@@ -195,6 +195,10 @@ combobox). Every action must be in a menu (shell test).
     can miss words with ligatures (R-028).
   - Popups fade in through `requestAnimationFrame` (paused when hidden), so remove dialogs
     regardless of visibility; watch only changed elements on busy pages.
+- **The editor**
+  - A replace widget inside a line must not be `display: block`: the line breaks into empty
+    line boxes around it, and it inherits the line's hanging indent. Embeds are inline-blocks
+    filling the rest of the line (0047).
 - **Signals**
   - An effect only re-runs for what it read on its last run. Read your signals before any
     early return (a bug once froze the folder page after a rename).

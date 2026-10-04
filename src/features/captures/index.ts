@@ -19,7 +19,8 @@ import type { RecordText } from "../../generated/RecordText";
 import type { StoredText } from "../../generated/StoredText";
 import type { Written } from "../../generated/Written";
 import { embedExtension } from "./embeds";
-import { Highlighter, Crop, Quote, FileDown, X } from "lucide";
+import { Highlighter, Crop, Quote, FileDown, X, Trash2 } from "lucide";
+import { contextMenu } from "../../kit/menu";
 import type { Box } from "../../reader/host";
 
 export const KIND = "capture";
@@ -27,6 +28,9 @@ const F = { source: "captures.source", quote: "captures.quote", locator: "captur
 const PDF_PAGE = "http://tools.ietf.org/rfc/rfc8118";
 const MEDIA = "http://www.w3.org/TR/media-frags/";
 const CFI = "http://www.idpf.org/epub/linking/cfi/epub-cfi.html";
+/** Archived records carry this field (set by the archive feature). */
+const ARCHIVED = "archive.at";
+const isArchived = (r: RecordInfo | undefined) => r?.fields[ARCHIVED] != null;
 
 /** A part of the capture being made. */
 interface DraftPart extends CapturePart {
@@ -91,6 +95,27 @@ export function citation(shell: ShellApi, r: RecordInfo): string {
 
 export function captures(shell: ShellApi): void {
   shell.openers.add("captures", KIND, "capture");
+  /**
+   * Deleting a capture moves it to the archive (with Undo), the first of the library's two steps;
+   * it is deleted for good from there. Done through the archive's own record action.
+   */
+  const deleteCapture = async (c: RecordInfo): Promise<boolean> => {
+    const archive = shell.recordActions.get("archive");
+    if (!archive || !archive.applies(c)) {
+      shell.status.show("This capture can’t be deleted here.");
+      return false;
+    }
+    await archive.run([c]);
+    return true;
+  };
+  const captureMenu = (c: RecordInfo, at: { x: number; y: number }) =>
+    contextMenu([
+      { label: "Open", run: () => shell.openRecord(c.id) },
+      { label: "Show in the source", run: () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(String(c.fields[F.source] ?? ""), where(a))) },
+      { label: "Copy embed", run: () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note.")) },
+      "separator",
+      { label: "Delete", destructive: true, run: () => void deleteCapture(c) },
+    ], at, "Capture");
   // ---- making a capture ---------------------------------------------------------------
   // Select text and a button appears by it; each choice adds a part to the capture being made,
   // which waits in a panel beside the document, its parts highlighted in place, until it is
@@ -206,7 +231,12 @@ export function captures(shell: ShellApi): void {
         const caps = [...new Set(ids.map((id) => id.split("#")[0]!))].map((id) => saved.peek().find((c) => c.id === id)).filter((c): c is SavedMarks => !!c);
         if (!caps.length) return;
         hidePop();
-        replace(markPop, caps.map((c) => h("button", { type: "button", title: c.title, onmousedown: (e: Event) => e.preventDefault(), onclick: () => (hideMarkPop(), shell.openRecord(c.id)) }, icon(Quote, 14), caps.length > 1 ? `Open “${c.title.slice(0, 28)}${c.title.length > 28 ? "…" : ""}”` : "Open capture")));
+        replace(markPop, caps.map((c) => h("button", { type: "button", title: c.title, onmousedown: (e: Event) => e.preventDefault(), onclick: () => (hideMarkPop(), shell.openRecord(c.id)) }, icon(Quote, 14), caps.length > 1 ? `Open “${c.title.slice(0, 28)}${c.title.length > 28 ? "…" : ""}”` : "Open capture")),
+          caps.length === 1 ? h("button", { type: "button", title: "Delete this capture (it goes to the archive)", onmousedown: (e: Event) => e.preventDefault(), onclick: () => {
+            hideMarkPop();
+            const r = shell.records.get(caps[0]!.id);
+            if (r) void deleteCapture(r);
+          } }, icon(Trash2, 14), "Delete") : null);
         markPop.hidden = false;
         const w = markPop.offsetWidth || 140;
         Object.assign(markPop.style, { left: `${Math.max(8, Math.min(window.innerWidth - w - 8, at.x - w / 2))}px`, top: `${at.y + 36 > window.innerHeight ? at.y - 44 : at.y + 12}px` });
@@ -234,7 +264,7 @@ export function captures(shell: ShellApi): void {
       let asked = 0;
       let lastSig = "";
       const stopSaved = effect(() => {
-        const mine = shell.records.list(KIND).filter((c) => c.fields[F.source] === ctx.source.id);
+        const mine = shell.records.list(KIND).filter((c) => c.fields[F.source] === ctx.source.id && !isArchived(c));
         // Ask again only when this source's captures change (not on every change elsewhere).
         const sig = mine.map((c) => `${c.id}:${c.version}`).sort().join();
         if (sig === lastSig) return;
@@ -358,7 +388,9 @@ export function captures(shell: ShellApi): void {
         void call<Anchor>("captures.anchor", { id: r.id }).then((a) => open(src, where(a)), () => open(src));
       } }, `— ${citation(shell, r)}`);
       const regionN = Number(r.fields["captures.parts"] ?? 0);
-      const block = h("figure", { class: "embed" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite));
+      const edit = h("button", { type: "button", class: "embed-edit", title: "Open the capture to edit it", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, "Edit");
+      const archived = isArchived(r) ? h("span", { class: "badge", title: "This capture is in the archive" }, "In the archive") : null;
+      const block = h("figure", { class: "embed" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite, archived, edit));
       if (!quote && regionN) {
         const img = h("img", { class: "capture-region", alt: "The captured region" });
         void call<string>("captures.region", { id: r.id, n: 1 }).then((src2) => (img.src = src2), () => {});
@@ -404,7 +436,11 @@ export function captures(shell: ShellApi): void {
         });
         const cite = h("p", { class: "muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(src, where(anchor))) }, citation(shell, r)));
         const editorHost = h("div", { class: "editor-host" });
-        replace(host, h("h1", { class: "page-title" }, r.title || "Capture"), partsEl, cite, h("h2", { class: "list-heading" }, "Your words"), editorHost);
+        // The title renames the capture (the quote itself stays exact).
+        let info = r;
+        const titleInput = h("input", { class: "page-title title-input", value: r.title || "", "aria-label": "Title", spellcheck: true }) as HTMLInputElement;
+        const archived = isArchived(r) ? h("p", { class: "notice" }, "This capture is in the archive.") : null;
+        replace(host, archived, titleInput, partsEl, cite, h("h2", { class: "list-heading" }, "Your words"), editorHost);
         const session = new NoteSession(id, r.version, t.body, {
           current: () => view.state.doc.toString(),
           merged: () => {},
@@ -414,7 +450,57 @@ export function captures(shell: ShellApi): void {
         });
         const view = createEditor({ parent: editorHost, doc: t.body, label: "Your words", targets: () => [], open: (x, opts) => shell.openRecord(x, {}, opts), titleOf: (x) => shell.records.get(x)?.title ?? null, onChange: () => session.changed(), onBlur: () => void session.flush(), placeholder: "Write why this matters…" });
         cleanup.push(() => (void session.close(), view.destroy()), shell.beforeClose(() => session.close()));
-        ctx.setHeaderActions([h("button", { class: "icon-button", "aria-label": "Export as W3C annotations", title: "Export as W3C annotations", onclick: () => void exportW3C(shell, r, t.body) }, icon(FileDown))]);
+        const rename = async () => {
+          const title = titleInput.value.replace(/\s+/g, " ").trim();
+          if (!title || title === info.title) {
+            titleInput.value = info.title;
+            return;
+          }
+          const before = info.title;
+          try {
+            const w = await call<Written>("records.relocate", { id, title });
+            info = w.info;
+            shell.records.put(w.info, w.seq);
+            session.rebase(w.info.version, session.savedBody);
+            ctx.setTitle(title);
+            shell.undo.done(`Renamed to “${title}”`, {
+              label: `rename to “${title}”`,
+              undo: async () => {
+                const back = await call<Written>("records.relocate", { id, title: before, base_version: w.info.version });
+                shell.records.put(back.info, back.seq);
+                if (shell.router.current.peek().params.id === id) {
+                  info = back.info;
+                  titleInput.value = before;
+                  ctx.setTitle(before);
+                  session.rebase(back.info.version, session.savedBody);
+                }
+              },
+            });
+          } catch (e) {
+            titleInput.value = info.title;
+            toast(String((e as { message?: string }).message ?? e));
+          }
+        };
+        titleInput.addEventListener("keydown", (e) => {
+          if (e.isComposing) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            view.focus();
+          } else if (e.key === "Escape") {
+            titleInput.value = info.title;
+            view.focus();
+          }
+        });
+        titleInput.addEventListener("blur", () => void rename());
+        ctx.setHeaderActions([
+          h("button", { class: "icon-button", "aria-label": "Export as W3C annotations", title: "Export as W3C annotations", onclick: () => void exportW3C(shell, r, t.body) }, icon(FileDown)),
+          isArchived(r) ? null : h("button", { class: "icon-button", "aria-label": "Delete capture", title: "Delete (it goes to the archive, where you can restore it or delete it for good)", onclick: async () => {
+            await session.flush();
+            if (await deleteCapture(shell.records.get(id) ?? info)) {
+              if (shell.router.canBack()) shell.router.back();
+            }
+          } }, icon(Trash2)),
+        ].filter((x): x is HTMLButtonElement => !!x));
       })();
       return () => {
         alive = false;
@@ -434,7 +520,7 @@ export function captures(shell: ShellApi): void {
       const src = route.params.id!;
       let alive = true;
       const stop = effect(() => {
-        const list = shell.records.list(KIND).filter((c) => c.fields[F.source] === src);
+        const list = shell.records.list(KIND).filter((c) => c.fields[F.source] === src && !isArchived(c));
         if (!list.length) return replace(host, h("p", { class: "muted" }, "Nothing captured here yet. Select a passage and choose Capture."));
         const ul = h("ul", { class: "backlinks" });
         replace(host, ul);
@@ -442,7 +528,12 @@ export function captures(shell: ShellApi): void {
           const status = h("span", { class: "badge" });
           const li = h("li", null, h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(c.id)) }, c.title || "Capture"), " ", status, h("div", { class: "row tight" },
             h("button", { class: "link-button", onclick: () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, where(a))) }, "Show"),
-            h("button", { class: "link-button", onclick: () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note.")) }, "Copy embed")));
+            h("button", { class: "link-button", onclick: () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note.")) }, "Copy embed"),
+            h("button", { class: "link-button destructive-link", onclick: () => void deleteCapture(c) }, "Delete")));
+          li.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            captureMenu(c, { x: e.clientX, y: e.clientY });
+          });
           ul.appendChild(li);
           void call<Anchor>("captures.anchor", { id: c.id }).then(statuses).then((s) => {
             if (!alive) return;
@@ -466,6 +557,7 @@ export function captures(shell: ShellApi): void {
     if (bySource?.from !== from) {
       const map = new Map<string, RecordInfo[]>();
       for (const c of shell.records.list(KIND)) {
+        if (isArchived(c)) continue;
         const src = String(c.fields[F.source] ?? "");
         if (src) map.set(src, [...(map.get(src) ?? []), c]);
       }
@@ -475,7 +567,7 @@ export function captures(shell: ShellApi): void {
     return bySource.map.get(sourceId) ?? [];
   };
   shell.slot<ItemChildren>(ITEM_CHILDREN).add("captures", "captures", {
-    children: (item) => capturesOf(item.id).map((c) => ({ id: c.id, label: c.title || "Capture", icon: Quote, current: shell.router.current().params.id === c.id, onActivate: () => shell.openRecord(c.id) })),
+    children: (item) => capturesOf(item.id).map((c) => ({ id: c.id, label: c.title || "Capture", icon: Quote, current: shell.router.current().params.id === c.id, onActivate: () => shell.openRecord(c.id), onContext: (at) => void captureMenu(c, at) })),
   });
 
   shell.settings.add("captures", "orphans", {

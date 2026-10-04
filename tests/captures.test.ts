@@ -6,6 +6,7 @@ import { createShell, type Shell } from "../src/shell/shell";
 import { notes } from "../src/features/notes";
 import { library } from "../src/features/library";
 import { captures } from "../src/features/captures";
+import { archive } from "../src/features/archive";
 import { READER_TOOLS, type ReaderTool } from "../src/shell/slots";
 import type { Mark, ReaderView } from "../src/reader/host";
 
@@ -15,7 +16,7 @@ let last: Shell | null = null;
 const PAGE1 = "Technique integrates everything. It avoids shock and sensational events.";
 const PAGE2 = "Propaganda is the art of making people act. Technique integrates everything.";
 
-async function boot() {
+async function boot(withArchive = false) {
   last?.destroy();
   mock.reset();
   mock.state.folder = "/lib";
@@ -23,7 +24,7 @@ async function boot() {
   mockTexts.set(src.id, `${PAGE1}\n\n${PAGE2}`);
   mockSegments.set(src.id, [{ label: "p. 1", start: 0, end: [...PAGE1].length }, { label: "p. 2", start: [...PAGE1].length + 2, end: [...PAGE1].length + 2 + [...PAGE2].length }]);
   document.body.innerHTML = '<div id="app"></div>';
-  const shell = createShell(document.getElementById("app")!, [notes, library, captures]);
+  const shell = createShell(document.getElementById("app")!, withArchive ? [notes, library, captures, archive] : [notes, library, captures]);
   last = shell;
   await wait(50);
   return { shell, src };
@@ -209,7 +210,7 @@ describe("saved captures in the reader", () => {
     // A click on it offers to open it.
     g.clickMark([`${cap.id}#0`]);
     const pops = [...document.querySelectorAll(".selection-pop")].filter((p) => !(p as HTMLElement).hidden);
-    expect(pops.map((p) => p.textContent)).toEqual(["Open capture"]);
+    expect(pops.map((p) => [...p.querySelectorAll("button")].map((b) => b.textContent))).toEqual([["Open capture", "Delete"]]);
     (pops[0]!.querySelector("button") as HTMLButtonElement).click();
     await wait(30);
     expect(shell.router.current()).toMatchObject({ page: "capture", params: { id: cap.id } });
@@ -235,7 +236,13 @@ describe("embeds", () => {
     view.dispatch({ selection: { anchor: view.state.doc.length } });
     const embed = view.contentDOM.querySelector(".embed")!;
     expect(embed.querySelector("blockquote")?.textContent).toBe("It avoids shock and sensational events.");
-    expect(embed.querySelector("figcaption")?.textContent).toBe("— The Technological Society, p. 1");
+    expect(embed.querySelector(".embed-cite")?.textContent).toBe("— The Technological Society, p. 1");
+    // Edit opens the capture.
+    (embed.querySelector(".embed-edit") as HTMLButtonElement).click();
+    await wait(30);
+    expect(shell.router.current()).toMatchObject({ page: "capture", params: { id: cap.id } });
+    shell.router.go("note", { id: n.id });
+    await wait(60);
 
     mock.state.savePath = "/Users/me/Desktop/Essay.md";
     shell.actions.run("notes.exportWithQuotations");
@@ -260,5 +267,70 @@ describe("the captures panel", () => {
     shell.showPanelSection("captures");
     await wait(80);
     expect(document.querySelector(".side-panel .badge.moved")?.textContent).toBe("moved");
+  });
+});
+
+describe("editing and deleting captures", () => {
+  it("deletes from a highlight's popover: the capture goes to the archive, with Undo", async () => {
+    const { shell, src } = await boot(true);
+    const f = fakeView(() => ({ text: "It avoids shock", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] }));
+    const t = mountTool(shell, src, f.view);
+    t.capture();
+    await wait(30);
+    button(t.aside, "Save capture").click();
+    await wait(60);
+    const cap = shell.records.list("capture")[0]!;
+    f.clickMark([`${cap.id}#0`]);
+    const pop = [...document.querySelectorAll(".selection-pop")].find((p) => !(p as HTMLElement).hidden)!;
+    button(pop, "Delete").click();
+    await wait(60);
+    expect(shell.records.get(cap.id)?.fields["archive.at"]).toBeTruthy();
+    expect(f.marks.current).toEqual([]);
+    expect(document.body.textContent).toContain("Undo");
+    t.dispose();
+  });
+
+  it("renames on the capture page (the quote stays exact), and deletes from its header", async () => {
+    const { shell, src } = await boot(true);
+    const cap = seed("capture", "It avoids shock and…", "Why it matters.", { "captures.source": src.id, "captures.quote": "It avoids shock and sensational events.", "captures.locator": "p. 1", "captures.parts": 1 });
+    anchors.set(cap.id, { id: cap.id, source: src.id, snapshot: null, parts: [{ selector: [{ type: "TextQuoteSelector", exact: "It avoids shock and sensational events.", prefix: "", suffix: "" }] }] });
+    await shell.records.load();
+    shell.router.go("item", { id: src.id });
+    shell.router.go("capture", { id: cap.id });
+    await wait(80);
+    const title = document.querySelector(".title-input") as HTMLInputElement;
+    expect(title.value).toBe("It avoids shock and…");
+    title.value = "On technique";
+    title.dispatchEvent(new Event("blur"));
+    await wait(60);
+    expect(shell.records.get(cap.id)?.title).toBe("On technique");
+    expect(document.querySelector(".capture-quote")?.textContent).toBe("It avoids shock and sensational events.");
+    (document.querySelector('[aria-label="Delete capture"]') as HTMLButtonElement).click();
+    await wait(80);
+    expect(shell.records.get(cap.id)?.fields["archive.at"]).toBeTruthy();
+  });
+
+  it("offers Open, Show in the source, Copy embed and Delete on a capture in the Library", async () => {
+    const { shell, src } = await boot(true);
+    const cap = seed("capture", "It avoids shock and…", "", { "captures.source": src.id, "captures.quote": "It avoids shock and sensational events.", "captures.parts": 1 });
+    await shell.records.load();
+    const children = shell.slot<{ children(item: unknown): { id: string; onContext?: (at: { x: number; y: number }) => void }[] }>("library.item-children").get("captures")!.children(shell.records.get(src.id));
+    expect(children.map((c) => c.id)).toEqual([cap.id]);
+    children[0]!.onContext!({ x: 10, y: 10 });
+    const items = [...document.querySelectorAll(".context-menu [role=menuitem]")];
+    expect(items.map((i) => i.textContent)).toEqual(["Open", "Show in the source", "Copy embed", "Delete"]);
+    (items[3] as HTMLElement).click();
+    await wait(60);
+    expect(shell.records.get(cap.id)?.fields["archive.at"]).toBeTruthy();
+    // Archived, it no longer shows under its source; a note embedding it says where it is.
+    const after = shell.slot<{ children(item: unknown): unknown[] }>("library.item-children").get("captures")!.children(shell.records.get(src.id));
+    expect(after).toEqual([]);
+    const n = seed("note", "Essay", `![[It avoids shock and…|${cap.id}]]\n\nand so on.\n`);
+    await shell.records.load();
+    shell.router.go("note", { id: n.id });
+    await wait(60);
+    const view = EditorView.findFromDOM(document.querySelector(".cm-editor") as HTMLElement)!;
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    expect(view.contentDOM.querySelector(".embed .badge")?.textContent).toBe("In the archive");
   });
 });

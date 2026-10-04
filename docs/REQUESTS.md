@@ -50,14 +50,38 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## In progress
 
+(nothing)
+
+---
+
+## Done
+
 ### R-031 · Edit and delete captures; captures in lists and quotes look wrong
 > "I want to be able to edit and delete captures. Also, the markdown support of captures is
 > pretty iffy (see screenshots) * There's always a line of space above and below the capture
 > * The margins/spacing/padding doesn't look right and is off with indents/bullet points, etc"
 
----
-
-## Done
+- **Changed:**
+  - Captures in notes sit right beside their bullet or inside their quote, aligned with the
+    text, without the empty lines above and below.
+  - **Edit:** hover a capture in a note and click Edit, or open it from the Library. Its title
+    is editable on its page (Undo works), as are "Your words". The quoted text stays exactly as
+    captured; capture again to quote differently.
+  - **Delete:** from the capture page (the bin in the header), by right-clicking a capture under
+    its book in the Library, from the Captures panel, or by clicking its highlight in a book or
+    PDF. Deleting moves it to the archive with Undo; delete it for good from the archive. Notes
+    that embed a deleted capture show "In the archive" on its card.
+- **Use:** as above. Right-click a capture in the sidebar for Open, Show in the source, Copy
+  embed and Delete.
+- **Code:** `src/features/captures/index.ts`, `src/shell/shell.css` (`.cm-embed`,
+  `.embed-edit`), `tests/captures.test.ts`.
+- **Decision:** 0047.
+- **Tested:** interface tests for every way to delete, renaming, Edit, and the archived label
+  (two existing tests updated on purpose: the popover now also offers Delete, and the caption
+  has an Edit button). The layout was checked by eye in the preview with lists, nested lists
+  and quotes.
+- **Left:** removing one part of a several-part capture (it needs region images renumbered on
+  disk); say if you want it.
 
 ### R-030 · The book reader, like Apple Books
 > "I want the UI/UX to be more like apple books"
