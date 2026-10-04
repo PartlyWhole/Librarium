@@ -3,7 +3,8 @@
 A guide for whoever works on Librarium next: what exists, where it lives, why it is shaped
 that way, and what has been learned the hard way. `BRIEF.md` is the reference for intent;
 `docs/decisions/` records each decision (the README lists them); `docs/plans/` holds work in
-progress. Read this first, then the brief.
+progress; `docs/REQUESTS.md` is where the user writes requests and each one's answer is kept.
+Read this first, then the brief.
 
 ## 1. What the app is
 

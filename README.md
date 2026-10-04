@@ -28,6 +28,7 @@ npm run dev            # builds the worker, starts Vite and opens the app
 
 ```
 BRIEF.md                 the project's reference
+CLAUDE.md                how AI sessions work here (requests, rules)
 Cargo.toml               the Cargo workspace
 crates/
   contracts/             types, IDs, events, errors, port traits, slots, API messages
@@ -49,6 +50,7 @@ src/                     the interface (plain TypeScript + Vite)
 tests/                   interface-wide tests, the WebKit check page, and fixtures
 vendor/foliate-js/       the EPUB reader, pinned (see PATCHES.md)
 docs/decisions/          MADR-style decision records
+docs/REQUESTS.md         feature and change requests: you write them, the AI answers them there
 docs/DEVELOPING.md       the developer guide: architecture, subsystems, lessons learned
 docs/plans/              plans for work in progress
 ```
