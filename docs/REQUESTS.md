@@ -50,11 +50,39 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## In progress
 
-(nothing)
+### R-031 · Edit and delete captures; captures in lists and quotes look wrong
+> "I want to be able to edit and delete captures. Also, the markdown support of captures is
+> pretty iffy (see screenshots) * There's always a line of space above and below the capture
+> * The margins/spacing/padding doesn't look right and is off with indents/bullet points, etc"
 
 ---
 
 ## Done
+
+### R-030 · The book reader, like Apple Books
+> "I want the UI/UX to be more like apple books"
+
+- **Changed:**
+  - While reading, the toolbar is out of the way. It shows when you move the pointer to the
+    top (or while finding, or while a popover is open).
+  - Above the page, the chapter's name. Below it, "N pages left in chapter" and how far through
+    the book you are. The page's colour fills the whole area, with roomier margins.
+  - Arrows at the left and right edges show while the pointer moves; a trackpad swipe turns a
+    page.
+  - **Contents** (the list button) is a popover with your chapter marked.
+  - **Aa** works like Books: smaller and larger A; White, Sepia, Gray and Night (or match the
+    app); the Mac's book fonts, each shown in its own face; Scrolling view; and under
+    Customise, line spacing, line length, one or two pages, and justified text.
+- **Use:** move to the top for the toolbar. ← → or swipe to turn; Aa for settings.
+- **Code:** `src/reader/epub/engine.ts`, `src/reader/epub/settings.ts`, `src/reader/host.ts`
+  (`immersive`, `controls`, `onPointer`, `onChromeWanted`), `src/features/library/index.ts`,
+  `src/shell/shell.css`.
+- **Decision:** 0046.
+- **Tested:** WebKit checks for immersive chrome, the arrows, the contents popover, the Night
+  theme and pages left. Checked by eye in the preview. The feel of the toolbar and swipes
+  needs the real app.
+- **Left:** a page-turn animation, and a list of a book's captures (like Books' Notes), could
+  come next.
 
 ### R-029 · A better EPUB reader (Readium)
 > "The epub reader is not great. What options do we have?" · "Go with C. I want first class

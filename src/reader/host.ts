@@ -56,6 +56,20 @@ export interface ReaderView {
   onMarkClick?(cb: (ids: string[], at: { x: number; y: number }) => void): () => void;
   /** Shows a place given by W3C selectors (page, quote, region, CFI). */
   showPlace?(selectors: PlaceSelector[]): Promise<boolean>;
+  /**
+   * Reading without chrome, as in Apple Books: the toolbar hides until the pointer comes near
+   * it (or something in it has focus). Zooming is left to the reader's own controls.
+   */
+  immersive?: boolean;
+  /** The reader's own toolbar controls: `start` go first, `end` before find. */
+  controls?: { start?: HTMLElement[]; end?: HTMLElement[] };
+  /** Calls `cb` with the pointer's place (window coordinates) as it moves over the reader. */
+  onPointer?(cb: (at: { x: number; y: number }) => void): () => void;
+  /**
+   * Whether the reader wants its chrome kept showing (a popover of its controls is open).
+   * The page asks on each change; `onChromeWanted` tells it when the answer changes.
+   */
+  onChromeWanted?(cb: (wanted: boolean) => void): () => void;
   destroy(): void;
 }
 

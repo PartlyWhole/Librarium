@@ -366,7 +366,7 @@ export function library(shell: ShellApi): void {
       findInput.addEventListener("input", () => void find());
       const tools = h("span", { class: "reader-tools" });
       const toolbar = h("div", { class: "reader-toolbar", role: "toolbar", "aria-label": "Reader" },
-        btn(ZoomOut, "Zoom out", () => view?.zoomOut()), btn(Maximize, "Fit to width", () => view?.zoomReset()), btn(ZoomIn, "Zoom in", () => view?.zoomIn()),
+        h("span", { class: "zoom-group" }, btn(ZoomOut, "Zoom out", () => view?.zoomOut()), btn(Maximize, "Fit to width", () => view?.zoomReset()), btn(ZoomIn, "Zoom in", () => view?.zoomIn())),
         pos, tools, h("span", { class: "spacer" }), findInput, findCount, btn(ChevronUp, "Previous match", () => void find(true, true)), btn(ChevronDown, "Next match", () => void find(true)));
       const toolDisposers: (() => void)[] = [];
       const notices = h("div", { class: "reader-notices" });
@@ -397,6 +397,10 @@ export function library(shell: ShellApi): void {
             if (!alive) return v.destroy();
             view = v;
             pos.textContent = v.position();
+            // The reader's own controls, and reading without chrome (Apple Books style).
+            if (v.controls?.start) toolbar.prepend(...v.controls.start);
+            if (v.controls?.end) findInput.before(...v.controls.end);
+            if (v.immersive) toolDisposers.push(immersiveChrome(host, toolbar, findInput, v));
             // Tools from other modules (capturing…), given this item and its stored text.
             let joined: Promise<string> | null = null;
             const part = web ? snap : undefined;
@@ -461,6 +465,43 @@ export function library(shell: ShellApi): void {
 }
 
 /** The distinct http(s) addresses in some text (one per line, or anywhere in it). */
+/**
+ * The toolbar of an immersive reader shows while the pointer is near the top, while something
+ * in it has focus or a find is in progress, or while the reader asks (a popover is open).
+ */
+function immersiveChrome(host: HTMLElement, toolbar: HTMLElement, findInput: HTMLInputElement, v: ReaderView): () => void {
+  host.classList.add("reader-immersive");
+  let near = false;
+  let wanted = false;
+  const update = () => host.classList.toggle("show-chrome", near || wanted || toolbar.contains(document.activeElement) || !!findInput.value.trim());
+  const at = (y: number) => {
+    near = y - host.getBoundingClientRect().top < 64;
+    update();
+  };
+  const move = (e: MouseEvent) => at(e.clientY);
+  const leave = () => {
+    near = false;
+    update();
+  };
+  host.addEventListener("mousemove", move);
+  host.addEventListener("mouseleave", leave);
+  toolbar.addEventListener("focusin", update);
+  toolbar.addEventListener("focusout", () => setTimeout(update, 0));
+  findInput.addEventListener("input", update);
+  const stopPointer = v.onPointer?.((p) => at(p.y)) ?? (() => {});
+  const stopWanted = v.onChromeWanted?.((w) => {
+    wanted = w;
+    update();
+  }) ?? (() => {});
+  return () => {
+    stopPointer();
+    stopWanted();
+    host.removeEventListener("mousemove", move);
+    host.removeEventListener("mouseleave", leave);
+    host.classList.remove("reader-immersive", "show-chrome");
+  };
+}
+
 export function webAddresses(text: string): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(/https?:\/\/[^\s<>"'\]]+/gi)) {

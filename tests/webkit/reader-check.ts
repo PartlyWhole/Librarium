@@ -192,16 +192,26 @@ async function run() {
   results.epubDocs = frameDocs().length;
   results.epubScriptRan = frameDocs().some((d) => / ran$/.test(d.title));
   results.epubPolicy = frameDocs().every((d) => [...d.querySelectorAll("meta[http-equiv=Content-Security-Policy]")].some((m) => (m.getAttribute("content") ?? "").startsWith("script-src blob:")));
-  const epubBar = stage.querySelector(".epub-bar")!;
-  const epubContents = epubBar.querySelector("select") as HTMLSelectElement;
-  results.epubContents = [...epubContents.options].map((o) => o.textContent).join("|");
+  // The book's toolbar controls (the library page puts them in its toolbar).
+  const controls = document.createElement("div");
+  controls.append(...(epub.view.controls?.start ?? []), ...(epub.view.controls?.end ?? []));
+  stage.appendChild(controls);
+  results.epubImmersive = epub.view.immersive === true;
+  const nextPage = () => (stage.querySelector('[aria-label="Next page"]') as HTMLButtonElement).click();
+  const openContents = () => (controls.querySelector('[aria-label="Contents"]') as HTMLButtonElement).click();
+  const tocItems = () => [...document.querySelectorAll<HTMLButtonElement>(".epub-toc-item")];
+  openContents();
+  results.epubContents = tocItems().map((b) => b.textContent).join("|");
+  openContents();
   results.epubStartsAt = epub.view.position();
 
   step("epub turn");
-  (epubBar.querySelector('[aria-label="Next page"]') as HTMLButtonElement).click();
+  nextPage();
   await waitFor(() => /^Chapter Two/.test(epub.view.position()));
   results.epubAfterNext = epub.view.position();
-  results.epubContentsFollows = epubContents.selectedIndex;
+  openContents();
+  results.epubContentsFollows = tocItems().findIndex((b) => b.getAttribute("aria-current") === "true");
+  openContents();
   frameDocs()[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
   await waitFor(() => /^Chapter One/.test(epub.view.position()));
   results.epubAfterLeft = epub.view.position();
@@ -216,8 +226,8 @@ async function run() {
   epub.view.findClear();
 
   step("epub selection");
-  epubContents.value = epubContents.options[0]!.value;
-  epubContents.dispatchEvent(new Event("change"));
+  openContents();
+  tocItems()[0]?.click();
   await waitFor(() => /^Chapter One/.test(epub.view.position()));
   await pause(300);
   const chapterOneDoc = frameDocs().find((d) => d.title === "Chapter One");
@@ -236,22 +246,24 @@ async function run() {
   await pause(200);
   results.epubMarkDrawn = highlights("lib-saved");
   // Showing a capture from elsewhere in the book goes to its chapter.
-  (epubBar.querySelector('[aria-label="Next page"]') as HTMLButtonElement).click();
+  nextPage();
   await waitFor(() => /^Chapter Two/.test(epub.view.position()));
   results.epubShowPlace = await epub.view.showPlace?.([{ type: "TextQuoteSelector", exact: "rarest" }, { type: "FragmentSelector", value: epubSel?.cfi ?? "" }]);
   await waitFor(() => /^Chapter One/.test(epub.view.position()));
   results.epubShownAt = epub.view.position();
 
   step("epub settings");
-  (epubBar.querySelector(".epub-aa") as HTMLButtonElement).click();
-  const epubPanel = stage.querySelector(".epub-settings");
-  (epubPanel?.querySelector('[role=radio][data-value="dark"]') as HTMLButtonElement | null)?.click();
+  (controls.querySelector(".epub-aa") as HTMLButtonElement).click();
+  const epubPanel = document.querySelector(".epub-settings");
+  (epubPanel?.querySelector('[role=radio][data-value="night"]') as HTMLButtonElement | null)?.click();
   await pause(800);
   const bookBg = frameDocs()[0] ? getComputedStyle(frameDocs()[0]!.documentElement).backgroundColor : "";
   results.epubDark = bookBg;
-  results.epubSettingsSaved = (savedPrefs.get("reader.epub") as { theme?: string } | undefined)?.theme ?? null;
+  results.epubSettingsSaved = (savedPrefs.get("reader.epub") as { theme?: string; matchApp?: boolean } | undefined)?.theme ?? null;
+  results.epubPagesLeft = stage.querySelector(".epub-left")?.textContent ?? "";
+  (controls.querySelector(".epub-aa") as HTMLButtonElement).click();
   // The place is remembered: back to Chapter Two, close, and open reopened.
-  (epubBar.querySelector('[aria-label="Next page"]') as HTMLButtonElement).click();
+  nextPage();
   await waitFor(() => /^Chapter Two/.test(epub.view.position()));
   epub.view.destroy();
   const reopened = await open(epubEngine, "notebooks.epub", "epub", undefined, epubStore);

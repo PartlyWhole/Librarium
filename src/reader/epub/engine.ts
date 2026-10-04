@@ -12,10 +12,12 @@
 import { EpubNavigator, EpubPreferences, type EpubNavigatorListeners } from "@readium/navigator";
 import { Locator, LocatorLocations, LocatorText, Link } from "@readium/shared";
 import * as CFI from "../../../vendor/foliate-js/epubcfi.js";
+import { List } from "lucide";
 import { h } from "../../kit/dom";
+import { icon } from "../../kit/icon";
 import { endOf, snapToWords, type Mark, type ReaderEngine, type ReaderView } from "../host";
 import { openBook } from "./streamer";
-import { settingsPanel, toPreferences, readSettings, type ReadingSettings } from "./settings";
+import { settingsPanel, toPreferences, readSettings, themeOf, THEMES, type ReadingSettings } from "./settings";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Readium's frame managers are internal */
 
@@ -28,18 +30,22 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     const store = src.store;
     let settings = readSettings(store);
 
-    // Layout: the book, and a bar under it (previous, contents, where, settings, next).
+    // Layout, after Apple Books: the page under a running head (the chapter), arrows at the
+    // sides that show while the pointer moves, and a quiet line under the page (pages left in
+    // the chapter, how far through the book). Contents and Aa go in the toolbar (controls),
+    // which hides while reading (immersive).
     const stage = h("div", { class: "epub-stage" });
-    const prevBtn = h("button", { class: "icon-button epub-turn", type: "button", title: "Previous page (←)", "aria-label": "Previous page", onclick: () => turn(-1) }, "‹");
-    const nextBtn = h("button", { class: "icon-button epub-turn", type: "button", title: "Next page (→)", "aria-label": "Next page", onclick: () => turn(1) }, "›");
-    const contents = h("select", { class: "epub-contents", "aria-label": "Contents", onchange: () => contents.value && goHref(contents.value) },
-      book.toc.map((t) => h("option", { value: t.href }, `${" ".repeat(t.depth)}${t.title}`)));
-    contents.hidden = !book.toc.length;
-    const where = h("span", { class: "epub-where muted small", "aria-live": "polite" });
-    const aa = h("button", { class: "epub-aa", type: "button", title: "Reading settings", "aria-label": "Reading settings", "aria-expanded": "false", onclick: () => toggleSettings() }, "Aa");
-    const bar = h("div", { class: "epub-bar", role: "navigation", "aria-label": "Book" }, prevBtn, contents, where, aa, nextBtn);
-    const frame = h("div", { class: "epub-container", tabindex: "0", "aria-label": `${src.title}, book` }, stage, bar);
+    const head = h("div", { class: "epub-head", "aria-hidden": "true" });
+    const left = h("span", { class: "epub-left" });
+    const pct = h("span", { class: "epub-pct" });
+    const foot = h("div", { class: "epub-foot", "aria-live": "polite" }, h("span"), left, pct);
+    const prevBtn = h("button", { class: "epub-arrow prev", type: "button", title: "Previous page (←)", "aria-label": "Previous page", onclick: () => nav.goLeft(false, done) }, "‹");
+    const nextBtn = h("button", { class: "epub-arrow next", type: "button", title: "Next page (→)", "aria-label": "Next page", onclick: () => nav.goRight(false, done) }, "›");
+    const frame = h("div", { class: "epub-container", tabindex: "0", "aria-label": `${src.title}, book` }, head, stage, foot, prevBtn, nextBtn);
     host.appendChild(frame);
+    const contentsBtn = h("button", { class: "icon-button", type: "button", title: "Contents", "aria-label": "Contents", "aria-expanded": "false", onclick: () => togglePopover("contents") }, icon(List));
+    contentsBtn.hidden = !book.toc.length;
+    const aa = h("button", { class: "epub-aa", type: "button", title: "Reading settings", "aria-label": "Reading settings", "aria-expanded": "false", onclick: () => togglePopover("settings") }, "Aa");
 
     // Where the reader is.
     let current: Locator | undefined;
@@ -62,6 +68,8 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
 
     // Frames and what is drawn in them.
     const watchers = new Set<() => void>();
+    const pointerWatchers = new Set<(at: { x: number; y: number }) => void>();
+    const chromeWatchers = new Set<(wanted: boolean) => void>();
     const markClickers = new Set<(ids: string[], at: { x: number; y: number }) => void>();
     let marks: Mark[] = [];
     let findState: { query: string; results: Found[]; at: number } | null = null;
@@ -129,6 +137,14 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         if (!doc.getSelection()?.toString().trim()) fire();
       });
       doc.addEventListener("keydown", onKey);
+      doc.addEventListener("wheel", onWheel, { passive: true });
+      doc.addEventListener("mousedown", () => closePopover());
+      doc.addEventListener("mousemove", (e) => {
+        const f = frames().find((x) => x.doc === doc);
+        const b = f?.el.getBoundingClientRect();
+        if (b) pointerWatchers.forEach((cb) => cb({ x: b.left + e.clientX, y: b.top + e.clientY }));
+        stirred();
+      });
       doc.addEventListener("click", (e) => {
         if (doc.getSelection()?.toString().trim()) return;
         const at = (doc as any).caretRangeFromPoint?.(e.clientX, e.clientY) as Range | null;
@@ -155,9 +171,9 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       frameLoaded: (win) => attach(win),
       positionChanged: (loc) => {
         current = loc;
-        where.textContent = describe(loc);
-        const t = tocFor(loc);
-        if (t) contents.value = t.href;
+        head.textContent = tocFor(loc)?.title ?? loc.title ?? book.title;
+        pct.textContent = loc.locations.totalProgression !== undefined ? `${Math.round(loc.locations.totalProgression * 100)}%` : "";
+        setTimeout(showLeft, 60);
         if (!painted) {
           painted = true;
           events.firstPaint(performance.now() - t0);
@@ -206,33 +222,130 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     }
     frame.addEventListener("keydown", onKey);
 
-    // Reading settings.
-    let panel: HTMLElement | null = null;
+    // Pages left in this chapter, from the layout (columns across the frame), as Books says it.
+    function showLeft() {
+      left.textContent = "";
+      if (settings.scroll || book.fixed || !current) return;
+      const path = decodeURIComponent(current.href.split("#")[0]!);
+      const f = frames().find((x) => x.index >= 0 && book.spine[x.index]!.href === path && x.el.style.visibility !== "hidden");
+      const w = f?.el.clientWidth ?? 0;
+      if (!f || !w) return;
+      const el = f.doc.scrollingElement ?? f.doc.documentElement;
+      const total = Math.max(1, Math.round(el.scrollWidth / w));
+      const at = Math.min(total - 1, el.scrollLeft > 0 ? Math.round(el.scrollLeft / w) : Math.round((current.locations.progression ?? 0) * total));
+      const n = total - 1 - at;
+      left.textContent = n === 0 ? "Last page in chapter" : n === 1 ? "1 page left in chapter" : `${n} pages left in chapter`;
+    }
+    // The page's colour reaches the edges, as in Books (head, foot and margins share it).
+    function paintChrome() {
+      const t = THEMES[themeOf(settings)];
+      frame.style.setProperty("--book-bg", t.backgroundColor);
+      frame.style.setProperty("--book-muted", `color-mix(in srgb, ${t.textColor} 55%, transparent)`);
+    }
+    paintChrome();
+    const resized = new ResizeObserver(() => showLeft());
+    resized.observe(stage);
+
+    // The arrows show while the pointer moves, then fade.
+    let stillTimer: ReturnType<typeof setTimeout> | undefined;
+    function stirred() {
+      frame.classList.add("stirred");
+      clearTimeout(stillTimer);
+      stillTimer = setTimeout(() => frame.classList.remove("stirred"), 1800);
+    }
+    frame.addEventListener("mousemove", stirred);
+    // A trackpad swipe turns one page per gesture (in pages, not when scrolling).
+    let swipe = 0;
+    let swiped = false;
+    let swipeTimer: ReturnType<typeof setTimeout> | undefined;
+    function onWheel(e: WheelEvent) {
+      if (settings.scroll || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      clearTimeout(swipeTimer);
+      swipeTimer = setTimeout(() => {
+        swipe = 0;
+        swiped = false;
+      }, 250);
+      if (swiped) return;
+      swipe += e.deltaX;
+      if (Math.abs(swipe) < 40) return;
+      swiped = true;
+      if (swipe > 0) nav.goRight(false, done);
+      else nav.goLeft(false, done);
+    }
+    frame.addEventListener("wheel", onWheel, { passive: true });
+
+    // Popovers from the toolbar: the contents, and the Aa panel.
+    let popover: { kind: "contents" | "settings"; el: HTMLElement; anchor: HTMLElement } | null = null;
     const apply = (next: ReadingSettings) => {
       settings = next;
       store?.set("reader.epub", settings);
-      void nav.submitPreferences(new EpubPreferences(toPreferences(settings)));
+      paintChrome();
+      void nav.submitPreferences(new EpubPreferences(toPreferences(settings))).then(() => setTimeout(showLeft, 120));
     };
-    function toggleSettings(open = !panel) {
-      if (!open) {
-        panel?.remove();
-        panel = null;
-        aa.setAttribute("aria-expanded", "false");
-        return;
-      }
-      panel = settingsPanel(settings, apply, () => toggleSettings(false), book.fixed);
-      frame.appendChild(panel);
-      aa.setAttribute("aria-expanded", "true");
-      panel.querySelector<HTMLElement>("button, select")?.focus();
+    function closePopover() {
+      if (!popover) return;
+      popover.el.remove();
+      popover.anchor.setAttribute("aria-expanded", "false");
+      popover = null;
+      chromeWatchers.forEach((cb) => cb(false));
     }
+    function togglePopover(kind: "contents" | "settings") {
+      const was = popover?.kind;
+      closePopover();
+      if (was === kind) return;
+      const anchor = kind === "contents" ? contentsBtn : aa;
+      const el = kind === "contents" ? contentsList() : settingsPanel(settings, apply, closePopover, book.fixed);
+      document.body.appendChild(el);
+      const r = anchor.getBoundingClientRect();
+      el.style.top = `${Math.round(r.bottom + 6)}px`;
+      if (kind === "contents") el.style.left = `${Math.max(8, Math.round(r.left))}px`;
+      else el.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
+      popover = { kind, el, anchor };
+      anchor.setAttribute("aria-expanded", "true");
+      chromeWatchers.forEach((cb) => cb(true));
+      (el.querySelector<HTMLElement>("[aria-current=true]") ?? el.querySelector<HTMLElement>("button"))?.focus();
+    }
+    function contentsList(): HTMLElement {
+      const here = current ? tocFor(current)?.href : undefined;
+      const el = h("div", { class: "epub-popover epub-toc", role: "dialog", "aria-label": "Contents" },
+        h("div", { class: "epub-toc-title" }, book.title),
+        h("ul", { class: "epub-toc-list" }, book.toc.map((t) => h("li", null, h("button", { type: "button", class: "epub-toc-item", style: `padding-left: ${12 + t.depth * 16}px`, "aria-current": t.href === here ? "true" : undefined, onclick: () => (closePopover(), goHref(t.href)) }, t.title)))));
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          closePopover();
+          contentsBtn.focus();
+        } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          const items = [...el.querySelectorAll<HTMLElement>(".epub-toc-item")];
+          const i = items.indexOf(document.activeElement as HTMLElement);
+          items[Math.max(0, Math.min(items.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
+          e.preventDefault();
+        }
+      });
+      return el;
+    }
+    const onAway = (e: MouseEvent) => {
+      if (popover && !popover.el.contains(e.target as Node) && !popover.anchor.contains(e.target as Node)) closePopover();
+    };
+    window.addEventListener("mousedown", onAway, true);
     // "Follow the app" follows the app's theme as it changes.
-    const themeWatch = new MutationObserver(() => settings.theme === "auto" && apply(settings));
+    const themeWatch = new MutationObserver(() => settings.matchApp && apply(settings));
     themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    const onScheme = () => settings.theme === "auto" && apply(settings);
+    const onScheme = () => settings.matchApp && apply(settings);
     media?.addEventListener?.("change", onScheme);
 
     const view: ReaderView = {
+      immersive: true,
+      controls: { start: [contentsBtn], end: [aa] },
+      onPointer(cb) {
+        pointerWatchers.add(cb);
+        return () => pointerWatchers.delete(cb);
+      },
+      onChromeWanted(cb) {
+        chromeWatchers.add(cb);
+        return () => chromeWatchers.delete(cb);
+      },
       zoomIn: () => apply({ ...settings, fontSize: Math.min(2.5, round(settings.fontSize + 0.1)) }),
       zoomOut: () => apply({ ...settings, fontSize: Math.max(0.6, round(settings.fontSize - 0.1)) }),
       zoomReset: () => apply({ ...settings, fontSize: 1 }),
@@ -315,6 +428,11 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         clearTimeout(saveTimer);
         if (current) store?.set(PLACE(src.id), current.serialize());
         themeWatch.disconnect();
+        resized.disconnect();
+        closePopover();
+        window.removeEventListener("mousedown", onAway, true);
+        clearTimeout(stillTimer);
+        clearTimeout(swipeTimer);
         media?.removeEventListener?.("change", onScheme);
         void nav.destroy();
         book.close();
