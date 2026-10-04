@@ -79,7 +79,7 @@ Markdown syntax, `links.ts` parses `[[label|id]]` (shared fixture with the Rust 
   Python, Rust, JSON, CSS, HTML, shell, SQL, Markdown), with a theme from the app's colours.
 - Tests: fold commands; highlighting present for a fenced block.
 
-### E6. Writing comfort ✅ when done
+### E6. Writing comfort ✅ (decision 0037 covers E1–E6)
 
 - **Word and character count** for the open note (and for the selection when there is one),
   in the status bar.

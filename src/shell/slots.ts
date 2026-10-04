@@ -118,6 +118,8 @@ export interface StatusBar {
   show(text: string, ms?: number): void;
   readonly message: Signal<string>;
   readonly right: Signal<string>;
+  /** What the page shown says about itself (a note's word count), before `right`. */
+  readonly context: Signal<string>;
 }
 
 export interface ShellApi {

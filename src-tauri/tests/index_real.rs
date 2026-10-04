@@ -85,6 +85,7 @@ fn backlinks_labels_rebuilds() {
     let r1 = create("Reading list", &format!("- {link} on attention\n"));
     let r2 = create("Grace", &format!("See {link}.\n\n```\n{link} in code is not a link\n```\n"));
     let _r3 = create("Unrelated", "Nothing here.\n");
+    let own = create("Own words", &format!("My [[teacher|{wid}]] said so.\n"));
     let orphan = create("Orphan", "Links to [[Ellul]] who has no note yet.\n");
     settle(&a);
 
@@ -92,7 +93,7 @@ fn backlinks_labels_rebuilds() {
     let bl = a.api.call("links.backlinks", json!({ "id": wid })).unwrap();
     let mut sources: Vec<&str> = bl.as_array().unwrap().iter().map(|b| b["title"].as_str().unwrap()).collect();
     sources.sort();
-    assert_eq!(sources, ["Grace", "Reading list"]);
+    assert_eq!(sources, ["Grace", "Own words", "Reading list"]);
     assert_eq!(
         bl.as_array().unwrap().iter().find(|b| b["title"] == "Reading list").unwrap()["context"],
         "Simone Weil on attention"
@@ -110,6 +111,7 @@ fn backlinks_labels_rebuilds() {
     }
     assert!(read(&r1["id"]).contains(&format!("[[Weil, Simone|{wid}]] on attention")), "{}", read(&r1["id"]));
     assert!(read(&r2["id"]).contains(&format!("```\n{link} in code")), "code is left alone");
+    assert!(read(&own["id"]).contains(&format!("My [[teacher|{wid}]] said so.")), "a label in one's own words stays");
 
     // A missing ID is restored from the label when exactly one record has that title.
     let ellul = create("Ellul", "");
@@ -129,7 +131,7 @@ fn backlinks_labels_rebuilds() {
     let a = app(&d);
     assert_eq!(a.api.library().unwrap().startup.mode, "full");
     let bl = a.api.call("links.backlinks", json!({ "id": wid })).unwrap();
-    assert_eq!(bl.as_array().unwrap().len(), 2);
+    assert_eq!(bl.as_array().unwrap().len(), 3, "Grace, Own words, Reading list");
     assert!(!a.api.call("search.query", json!({ "text": "attention" })).unwrap().as_array().unwrap().is_empty());
 
     // The visible "Rebuild index" command.
@@ -137,7 +139,7 @@ fn backlinks_labels_rebuilds() {
     let id = j["id"].as_str().unwrap().parse().unwrap();
     let done = a.api.hosts().unwrap().jobs.wait(id, Duration::from_secs(30)).unwrap();
     assert_eq!(done.state, librarium_contracts::api::JobState::Done);
-    assert_eq!(a.api.call("links.backlinks", json!({ "id": wid })).unwrap().as_array().unwrap().len(), 2);
+    assert_eq!(a.api.call("links.backlinks", json!({ "id": wid })).unwrap().as_array().unwrap().len(), 3);
     a.api.close_library();
     let _ = std::fs::remove_dir_all(&d);
 }

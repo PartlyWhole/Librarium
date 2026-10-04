@@ -2,8 +2,9 @@
 //!
 //! - The `links` view keeps every reference (source → target, with its label and context) and
 //!   every unresolved link (no usable ID).
-//! - The `links.repair` job keeps labels fresh (a label is a cache of the target's title; a
-//!   stale label is never an error) and restores a missing ID from the label only when exactly
+//! - The `links.repair` job keeps labels fresh: a label that was the target's old title follows
+//!   a rename, while a label in the writer's own words (an alias) stays (decision 0037). A stale
+//!   label is never an error. It also restores a missing ID from the label only when exactly
 //!   one record has that title. It writes only through the writer's background lane, with a
 //!   version check, when the folder is quiet, and never into a note with unsaved text.
 
@@ -174,9 +175,10 @@ pub fn contribute_methods(r: &mut Registry<ApiMethod>) -> Result<(), DuplicateId
     contribute_resolve(r)
 }
 
-/// Rewrites one source's links: stale labels of links to `target`, and missing IDs whose
-/// label names exactly one record. Returns whether it wrote.
-fn repair_source(ctx: &JobCtx, source: Id, refresh_target: Option<Id>) -> Result<bool> {
+/// Rewrites one source's links: the labels of links to `target` that were its old title (a
+/// label in the writer's own words stays), and missing IDs whose label names exactly one
+/// record. Returns whether it wrote.
+fn repair_source(ctx: &JobCtx, source: Id, refresh_target: Option<(Id, String)>) -> Result<bool> {
     let lib = ctx.library;
     let store = &lib.store;
     let Some(e) = store.get(source) else { return Ok(false) };
@@ -189,14 +191,16 @@ fn repair_source(ctx: &JobCtx, source: Id, refresh_target: Option<Id>) -> Result
         let hits = store2.find_by_title(label);
         (hits.len() == 1).then(|| hits[0].id)
     };
-    let target_title = refresh_target.and_then(|t| store.get(t).map(|e| (t, e.title)));
+    let target_title = refresh_target.and_then(|(t, old)| store.get(t).map(|e| (t, e.title, old)));
     lib.write(Lane::Background, move |tx| {
         tx.repair_body(source, &version, |body| {
             let mut out = body.to_string();
             let mut changed = false;
             for l in parse_links(body).into_iter().rev() {
                 let replacement = match (l.id, &target_title) {
-                    (Some(id), Some((t, title))) if id == *t && !l.embed && l.label != *title && !title.is_empty() => {
+                    (Some(id), Some((t, title, old)))
+                        if id == *t && !l.embed && l.label == *old && l.label != *title && !title.is_empty() =>
+                    {
                         Some(format_link(title, id, false))
                     }
                     (None, _) if !l.label.is_empty() => resolve(&l.label).map(|id| format_link(&l.label, id, l.embed)),
@@ -232,10 +236,13 @@ fn repair(ctx: &JobCtx, p: &Value) -> Result<()> {
     let store = &ctx.library.store;
     let Some(e) = store.get(id) else { return Ok(()) };
     if p["title_changed"].as_bool() == Some(true) {
-        // Labels of links to this record.
-        for b in backlinks(store, ctx.views, id)? {
-            if !b.embed {
-                repair_source(ctx, b.source, Some(id))?;
+        // Labels of links to this record that were its old title (unknown for a record just
+        // seen: then none are refreshed).
+        if let Some(old) = p["old_title"].as_str() {
+            for b in backlinks(store, ctx.views, id)? {
+                if !b.embed {
+                    repair_source(ctx, b.source, Some((id, old.to_string())))?;
+                }
             }
         }
         // Unresolved links elsewhere that this record's title now resolves.
@@ -277,8 +284,14 @@ pub fn contribute_jobs(r: &mut Registry<JobKind>) -> Result<(), DuplicateId> {
                         return None;
                     }
                     let e = store.get(c.id)?;
-                    let title_changed = t.insert(c.id, e.title.clone()).is_none_or(|old| old != e.title);
-                    Some((c.id.to_string(), json!({ "id": c.id, "seq": c.seq, "title_changed": title_changed })))
+                    let old = t.insert(c.id, e.title.clone());
+                    let title_changed = old.as_ref().is_none_or(|old| *old != e.title);
+                    // The old title tells which labels were the cache of it (and which were
+                    // the writer's own words, which stay).
+                    Some((
+                        c.id.to_string(),
+                        json!({ "id": c.id, "seq": c.seq, "title_changed": title_changed, "old_title": old }),
+                    ))
                 })
             }),
         },

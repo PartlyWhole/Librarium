@@ -1,5 +1,5 @@
 /** Notes: pages, and the Notes section (its folders and notes, daily notes among them). */
-import { h } from "../../kit/dom";
+import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
 import { effect } from "../../kit/signal";
 import { call, pickSavePath } from "../../backend";
@@ -9,6 +9,8 @@ import { toast } from "../../kit/toast";
 import { renderNote } from "./page";
 import { FORMATS } from "../../editor/format";
 import { activeEditor } from "../../editor/editor";
+import { outline } from "../../editor/stats";
+import { EditorView } from "@codemirror/view";
 import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
 import type { ShellApi } from "../../shell/api";
@@ -69,6 +71,34 @@ export function notes(shell: ShellApi): void {
       shell.router.go("note", { id: w.info.id, focus: "title" });
     },
   });
+  // The outline: the shown note's headings; a click goes there.
+  shell.sidePanel.add("notes", "outline", {
+    id: "outline",
+    title: "Outline",
+    applies: (r) => r.page === "note",
+    render(host) {
+      let shownDoc: unknown = null;
+      const paint = () => {
+        const dom = document.querySelector(".ws-page:not([hidden]) .editor-host .cm-editor");
+        const view = dom ? EditorView.findFromDOM(dom as HTMLElement) : null;
+        if (!view || view.state.doc === shownDoc) return;
+        shownDoc = view.state.doc;
+        const heads = outline(view.state);
+        const top = Math.min(...heads.map((x) => x.level));
+        replace(host, heads.length
+          ? h("ul", { class: "outline" }, heads.map((x) => h("li", { style: { paddingLeft: `${(x.level - top) * 14}px` } }, h("button", { class: "link-button outline-link", type: "button", onclick: () => {
+              view.dispatch({ selection: { anchor: x.from }, effects: EditorView.scrollIntoView(x.from, { y: "start", yMargin: 24 }) });
+              view.focus();
+            } }, x.text))))
+          : h("p", { class: "muted small" }, "Headings in this note (# Heading) show here."));
+      };
+      paint();
+      // The note changes as it is written: follow it (cheaply: only when its text changed).
+      const timer = setInterval(paint, 500);
+      return () => clearInterval(timer);
+    },
+  }, 5);
+
   // The Format menu: what the formatting keys do, for the editor last used.
   FORMATS.forEach((f, i) =>
     shell.actions.add("notes", {

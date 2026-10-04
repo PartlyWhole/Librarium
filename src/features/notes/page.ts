@@ -12,6 +12,8 @@ import type { Draft } from "../../generated/Draft";
 import type { RecordText } from "../../generated/RecordText";
 import type { Written } from "../../generated/Written";
 import { NoteSession } from "../../editor/session";
+import { countLabel } from "../../editor/stats";
+import { effect } from "../../kit/signal";
 import { FolderInput } from "lucide";
 
 export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<string, string>, ctx: PageContext): () => void {
@@ -67,8 +69,29 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
       titleOf: (target) => shell.records.get(target)?.title ?? null,
       onChange: () => session.changed(),
       onBlur: () => void session.flush(),
+      onUpdate: () => {
+        clearTimeout(countTimer);
+        countTimer = setTimeout(showCount, 150);
+      },
+      // An unresolved link's note is made beside this one.
+      create: async (label) => {
+        const folder = info.path.split("/").slice(1, -1).join("/") || undefined;
+        const w = await call<Written>("notes.create", { title: label, folder });
+        shell.records.put(w.info, w.seq);
+        return w.info.id;
+      },
       contributions: shell.editorExtensions.values(),
       placeholder: "Write…",
+    });
+    // Words and characters in the status bar, while this note is the one shown.
+    let countTimer: ReturnType<typeof setTimeout> | undefined;
+    const shown = () => alive && host.isConnected && !host.closest("[hidden]");
+    const showCount = () => shown() && shell.status.context.set(countLabel(view.state));
+    showCount();
+    cleanup.push(effect(() => (shell.router.active(), void queueMicrotask(showCount))));
+    cleanup.push(() => {
+      clearTimeout(countTimer);
+      if (!host.closest("[hidden]")) shell.status.context.set("");
     });
     cleanup.push(() => {
       void session.close();

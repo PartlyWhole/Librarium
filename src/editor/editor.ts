@@ -12,7 +12,7 @@ import { closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirro
 import { markdownSupport } from "./markdown";
 import { livePreview } from "./livepreview";
 import { linkCompletion, type LinkTarget } from "./complete";
-import { parseLinks } from "./links";
+import { formatLink, parseLinks } from "./links";
 import { formatKeymap, wrapOnType } from "./format";
 import { hangingIndent, listKeymap } from "./lists";
 import { clipboard, clipboardKeymap } from "./clipboard";
@@ -49,6 +49,10 @@ export interface EditorOptions {
   titleOf: (id: string) => string | null;
   onChange?: (doc: string) => void;
   onBlur?: () => void;
+  /** Called after any change of text or selection (debounce it for heavy work). */
+  onUpdate?: (view: EditorView) => void;
+  /** Makes a note for an unresolved link's words; returns its ID (the link is then completed). */
+  create?: (label: string, opts: { newTab: boolean }) => Promise<string | null>;
   contributions?: EditorContribution[];
   placeholder?: string;
 }
@@ -84,6 +88,7 @@ export function createEditor(o: EditorOptions): EditorView {
     EditorView.updateListener.of((u) => {
       if (u.docChanged) o.onChange?.(u.state.doc.toString());
       if (u.focusChanged && u.view.hasFocus) active = u.view;
+      if (u.docChanged || u.selectionSet || u.focusChanged) o.onUpdate?.(u.view);
       if (u.focusChanged && !u.view.hasFocus) o.onBlur?.();
     }),
     EditorView.domEventHandlers({
@@ -94,6 +99,19 @@ export function createEditor(o: EditorOptions): EditorView {
         if (t?.dataset.id) {
           e.preventDefault();
           o.open(t.dataset.id, { newTab });
+          return true;
+        }
+        // An unresolved link: make its note (as in Obsidian), complete the link, open it.
+        if (t?.dataset.label !== undefined && o.create && !view.state.readOnly) {
+          e.preventDefault();
+          const pos = view.posAtDOM(t);
+          const label = t.dataset.label;
+          void o.create(label, { newTab }).then((id) => {
+            if (!id) return;
+            const l = parseLinks(view.state.doc.toString()).find((x) => !x.id && x.label === label && x.from <= pos && x.to >= pos);
+            if (l) view.dispatch({ changes: { from: l.from, to: l.to, insert: formatLink(label, id, l.embed) }, userEvent: "input.link" });
+            o.open(id, { newTab });
+          });
           return true;
         }
         // ⌘-click on a link's source opens it too.

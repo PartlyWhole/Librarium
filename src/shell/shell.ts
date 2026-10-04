@@ -78,9 +78,11 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const message = signal("");
   const right = signal("");
   let msgTimer: ReturnType<typeof setTimeout> | undefined;
+  const statusContext = signal("");
   const status: StatusBar = {
     message,
     right,
+    context: statusContext,
     show(text, ms = 4000) {
       clearTimeout(msgTimer);
       message.set(text);
@@ -313,7 +315,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   effect(() => document.documentElement.style.setProperty("--reading-size", `${textSize()}px`));
   effect(() => {
     statusLeft.textContent = message();
-    statusRight.textContent = right();
+    statusRight.textContent = [statusContext(), right()].filter(Boolean).join("   ·   ");
   });
   effect(() => {
     back.disabled = !router.canBack();
@@ -401,6 +403,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
           },
         });
       } else if (tab !== shownTab) here.set(m.here);
+      if (tab !== shownTab) statusContext.set("");
       showTitle(m.title);
       headerActions.replaceChildren(...m.actions);
       for (const b of ribbonPageButtons) {

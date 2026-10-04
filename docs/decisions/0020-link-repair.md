@@ -1,6 +1,6 @@
 # 0020. When link labels are refreshed and missing IDs restored
 
-- Status: accepted
+- Status: accepted; amended by [0037](0037-first-class-writing.md) (only labels equal to the old title follow a rename)
 - Date: 2026-10-02
 
 ## Context and problem
