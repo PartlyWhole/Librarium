@@ -221,6 +221,12 @@ const api: Record<string, (p: any) => unknown> = {
   },
   "library.text": () => null,
   "library.import": () => ({ imported: [], failed: [] }),
+  "library.importData": (p) => {
+    const info = seed("item", String(p.name).replace(/\.[^.]+$/, ""), "", { "library.format": "image", "library.original": "original.png", sha256: "…" });
+    const bin = atob(String(p.data));
+    files.set(info.id, Uint8Array.from(bin, (c) => c.charCodeAt(0)).buffer);
+    return { info, seq: touch(need(info.id), "created") };
+  },
   "records.text": (p) => {
     const r = need(p.id);
     const text = mockTexts.get(p.id) ?? r.body;

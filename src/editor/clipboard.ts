@@ -37,6 +37,8 @@ export const clipboard = EditorView.domEventHandlers({
   paste(e, view) {
     const data = e.clipboardData;
     if (!data || view.state.readOnly) return false;
+    // Files (a copied image) are stored as library items, not pasted as text (editor.ts).
+    if (data.files?.length) return false;
     const own = data.getData(OWN);
     if (own) {
       e.preventDefault();

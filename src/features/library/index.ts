@@ -18,6 +18,7 @@ import { ask, modal } from "../../kit/dialog";
 import { BookOpen, Globe, FileText, Image as ImageIcon, Library as LibraryIcon, Plus, ZoomIn, ZoomOut, Maximize, ChevronUp, ChevronDown, Info } from "lucide";
 
 const KIND = "item";
+const ORIGINAL = "library.original";
 const EXTENSIONS = ["pdf", "epub", "png", "jpg", "jpeg", "gif", "webp", "heic", "tif", "tiff"];
 
 function formatOf(r: RecordInfo): string {
@@ -94,6 +95,14 @@ export async function removeSnapshots(shell: ShellApi, items: { id: string; snap
     toast(String((e as { message?: string }).message ?? e));
     return false;
   }
+}
+
+/** A file's bytes as base64 (for the API). */
+async function base64(f: Blob): Promise<string> {
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
 }
 
 export function library(shell: ShellApi): void {
@@ -222,7 +231,67 @@ export function library(shell: ShellApi): void {
 
   // Files dropped anywhere on the window are added.
   const dropping = signal(false);
-  onFileDrop((paths) => void importPaths(paths), (over) => dropping.set(over));
+  onFileDrop((paths, at) => {
+    // Dropped on a note being written: added to the library, and shown in the note there.
+    const ed = document.elementFromPoint?.(at.x, at.y)?.closest<HTMLElement>(".cm-editor");
+    if (ed && !ed.closest("[hidden]")) void embedPaths(ed, paths, at);
+    else void importPaths(paths);
+  }, (over) => dropping.set(over));
+
+  /** Adds files to the library, then asks the editor to show them where they came in. */
+  const embedIn = (ed: HTMLElement, written: Written[], at?: { x: number; y: number }) => {
+    for (const w of written) shell.records.put(w.info, w.seq);
+    if (!written.length) return;
+    ed.dispatchEvent(new CustomEvent("librarium:insert-embeds", { detail: { links: written.map((w) => ({ label: w.info.title || "Image", id: w.info.id })), ...at } }));
+    shell.status.show(written.length === 1 ? `Added “${written[0]!.info.title}” to the library.` : `Added ${count(written.length, "item")} to the library.`);
+  };
+  const embedPaths = async (ed: HTMLElement, paths: string[], at: { x: number; y: number }) => {
+    try {
+      const r = await call<ImportResult>("library.import", { paths });
+      for (const f of r.failed) toast(f.error);
+      embedIn(ed, r.imported, at);
+    } catch (e) {
+      toast(String((e as { message?: string }).message ?? e));
+    }
+  };
+  // Pasted into a note (an image copied in another app): the same, from the data.
+  document.addEventListener("librarium:files", (ev) => {
+    const ed = (ev.target as HTMLElement).closest<HTMLElement>(".cm-editor");
+    const files = (ev as CustomEvent<{ files: File[] }>).detail?.files ?? [];
+    if (!ed || !files.length) return;
+    void (async () => {
+      const written: Written[] = [];
+      for (const f of files) {
+        if (!/^image\/|application\/pdf|epub/.test(f.type)) {
+          toast(`“${f.name || "That"}” isn’t an image, a PDF or an EPUB.`);
+          continue;
+        }
+        const ext = (f.type.split("/")[1] ?? "png").replace("jpeg", "jpg").replace("+xml", "");
+        const stamp = new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }).replace(/[/:]/g, ".");
+        const name = f.name && f.name !== "image.png" ? f.name : `Pasted image ${stamp}.${ext}`;
+        try {
+          written.push(await call<Written>("library.importData", { name, data: await base64(f) }));
+        } catch (e) {
+          toast(String((e as { message?: string }).message ?? e));
+        }
+      }
+      embedIn(ed, written);
+    })();
+  });
+
+  // An item embedded in a note: an image shows itself; anything else shows as a card.
+  shell.embeds.add("library", KIND, {
+    kind: KIND,
+    render(r, open) {
+      if (formatOf(r) === "image") {
+        const img = h("img", { class: "embed-image", alt: r.title || "Image", title: r.title, onclick: () => open(r.id) }) as HTMLImageElement;
+        void readBytes(r.id).then((b) => (img.src = URL.createObjectURL(new Blob([b]))), () => (img.alt = `${r.title} (can’t be shown)`));
+        return h("figure", { class: "embed embed-figure" }, img);
+      }
+      return h("figure", { class: "embed embed-card" }, h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, icon(iconFor(r), 16), " ", r.title || "Untitled"));
+    },
+    markdown: (r) => (formatOf(r) === "image" ? `![${r.title}](${r.path.replace(/record\.json$/, String(r.fields[ORIGINAL] ?? ""))})` : `[${r.title}](${r.path})`),
+  });
   effect(() => document.body.classList.toggle("dropping", dropping()));
 
   // Items live in the library's own folders, browsed as in Finder; what an item holds (its

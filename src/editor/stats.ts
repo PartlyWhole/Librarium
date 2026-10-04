@@ -11,7 +11,8 @@ export function readable(md: string): string {
   let out = "";
   let last = 0;
   for (const l of parseLinks(md)) {
-    out += md.slice(last, l.from) + ` ${l.label} `;
+    // A link reads as its label; an embed (an image, a quotation) isn't the writer's words.
+    out += md.slice(last, l.from) + (l.embed ? " " : ` ${l.label} `);
     last = l.to;
   }
   out += md.slice(last);

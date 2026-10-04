@@ -264,6 +264,32 @@ pub fn contribute_methods(r: &mut Registry<ApiMethod>) -> Result<(), DuplicateId
             Ok(json!({ "imported": done, "failed": failed }))
         }),
     )?;
+    // Pasted data (an image copied in another app has no file): `{name, data (base64), folder?}`.
+    r.add(
+        ID,
+        "library.importData",
+        Arc::new(|ctx: &MethodCtx, p: Value| {
+            use base64::Engine as _;
+            let name = p["name"].as_str().unwrap_or("Pasted image").trim().to_string();
+            let name = if name.is_empty() { "Pasted image".to_string() } else { name };
+            if name.contains(['/', '\\']) || name.starts_with('.') || name.len() > 200 {
+                return Err(BackendError::invalid("not a file name"));
+            }
+            let data = p["data"].as_str().ok_or_else(|| BackendError::invalid("no data"))?;
+            if data.len() > 70_000_000 {
+                return Err(BackendError::invalid("That is too large to paste (over 50 MB); add it as a file."));
+            }
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(|e| BackendError::invalid(format!("not base64: {e}")))?;
+            let store = &ctx.library.store;
+            let dir = store.stage_dir(store.ids.next_id());
+            store.stage_file(&dir, &name, &bytes)?;
+            let r = import_in(ctx, &dir.join(&name), p["folder"].as_str().filter(|f| !f.is_empty()));
+            let _ = librarium_kernel::store::remove_tree(&*store.fs, &dir);
+            Ok(serde_json::to_value(r?).unwrap())
+        }),
+    )?;
     r.add(
         ID,
         "library.text",

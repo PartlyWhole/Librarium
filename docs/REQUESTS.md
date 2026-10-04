@@ -38,20 +38,26 @@ How urgent (optional):
 
 ## Waiting for you
 
-### R-021 · Images in notes: where should they live?
-- **Question:** when you paste or drop an image into a note, should it become a **library
-  item** (with its own ID, shown in Library, linked as `![[…]]`), or a **plain file in an
-  `attachments/` folder** next to your notes (standard `![](attachments/x.png)`, readable by
-  other Markdown apps)?
-- **Context:** the first fits the app's "everything has an ID" rule; the second is more
-  portable. Images in notes can't be built until this is decided. (From R-020's follow-ups.)
-
 ### R-022 · The keychain prompt while saving web pages
-- **Question:** WebKit sometimes asks the keychain for a "WebCrypto Master Key" when a page is
-  saved. You deny these prompts. Options: (a) leave it (deny is harmless), (b) you add a
-  permission rule, (c) turn off web encryption for saved pages (some pages may then
-  misbehave). An approach that supplied our own key through a private WebKit hook was refused
-  for safety and needs your explicit decision.
+> "Please explain web encryption for saved pages?"
+
+- **What it is:**
+  - Some pages run scripts that use the browser's built-in encryption (Web Crypto) to keep a
+    key, for sign-in, analytics or the like.
+  - WebKit, the engine Librarium uses to save pages, protects such keys with a "WebCrypto
+    Master Key" in your keychain, so it asks for it.
+  - The development app is rebuilt often, and the keychain treats each rebuild as a new app,
+    so it asks again. A properly built app would probably ask once (this can't be tested
+    without you).
+  - Denying is harmless: the PDF and the text are saved the same way, and keys the page tries
+    to keep would be thrown away anyway.
+- **Choose one:**
+  1. **Leave it:** keep pressing Deny.
+  2. **Click "Always Allow" once:** a harmless key in your login keychain. The development
+     app may ask again after rebuilds.
+  3. **Turn off web encryption while saving** *(recommended)*. The saving window hides Web
+     Crypto from pages, so no prompt can ever appear. The rare page that won't display at all
+     without it might save incomplete; ordinary articles don't need it.
 
 ---
 
@@ -62,6 +68,27 @@ How urgent (optional):
 ---
 
 ## Done
+
+### R-021 · Images in notes
+> "images stored as library items"
+
+- **Changed:**
+  - Pasting an image into a note, or dropping image files from Finder onto it, adds each to
+    the Library (the original kept byte for byte) and puts `![[title|id]]` on its own line
+    where it went.
+  - The note shows the image itself; a click opens it in the reader.
+  - PDFs and books dropped into a note show as a card.
+  - A clipboard image is named "Pasted image <date and time>".
+- **Use:** ⌘V an image (e.g. a screenshot) into a note, or drag files from Finder onto the
+  text. `![[` also offers library items to embed.
+- **Code:**
+  - `library.importData` in `crates/features/library/src/lib.rs`.
+  - The paste and embed events in `src/editor/editor.ts`.
+  - Import, drop and the image embed in `src/features/library/index.ts`.
+- **Decision:** 0040 · **Tested:** a pasted image becomes an item and is embedded in the note
+  (Vitest); checked in the preview. Dropping from Finder can only be tried in the real app:
+  please try it.
+- **Left:** resizing an image in a note.
 
 ### R-024 · The side panel
 > "Really don't like side panel" (screenshot 2026-10-03: everything stacked in one column,

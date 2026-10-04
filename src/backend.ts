@@ -144,15 +144,16 @@ export async function pickFiles(title: string, extensions: string[]): Promise<st
   return Array.isArray(r) ? r : typeof r === "string" ? [r] : [];
 }
 
-/** Files dropped on the window. */
-export function onFileDrop(handler: (paths: string[]) => void, hover?: (over: boolean) => void): () => void {
+/** Files dropped on the window, with where (in the page's coordinates). */
+export function onFileDrop(handler: (paths: string[], at: { x: number; y: number }) => void, hover?: (over: boolean) => void): () => void {
   if (!inTauri()) return () => {};
   let off: (() => void) | null = null;
   void getCurrentWebview()
     .onDragDropEvent((e) => {
       if (e.payload.type === "drop") {
         hover?.(false);
-        handler(e.payload.paths);
+        const ratio = window.devicePixelRatio || 1;
+        handler(e.payload.paths, { x: e.payload.position.x / ratio, y: e.payload.position.y / ratio });
       } else if (e.payload.type === "enter" || e.payload.type === "over") hover?.(true);
       else hover?.(false);
     })

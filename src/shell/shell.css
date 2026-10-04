@@ -617,3 +617,7 @@ body.dragging-items, body.dragging-items * { cursor: grabbing !important; }
 .side-panel-head { display: flex; align-items: center; gap: 2px; }
 .panel-tabs { display: flex; gap: 2px; flex: 1; }
 .panel-tab.current { background: var(--active); color: var(--ink); }
+/* Images (library items) in notes. */
+.embed.embed-figure { margin: 4px 0; padding: 0; border: 0; background: none; }
+.embed-image { display: block; max-width: 100%; max-height: 70vh; border-radius: var(--r2); cursor: zoom-in; }
+.embed-card { margin: 4px 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r2); display: inline-block; }

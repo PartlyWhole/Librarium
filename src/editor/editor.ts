@@ -128,6 +128,15 @@ export function createEditor(o: EditorOptions): EditorView {
         }
         return false;
       },
+      // Files pasted (an image copied elsewhere): whoever stores them (Library) is asked, and
+      // answers with `librarium:insert-embeds` (below).
+      paste(e, view) {
+        const files = [...(e.clipboardData?.files ?? [])];
+        if (!files.length || view.state.readOnly) return false;
+        e.preventDefault();
+        view.dom.dispatchEvent(new CustomEvent("librarium:files", { bubbles: true, detail: { files } }));
+        return true;
+      },
       // A middle-click on a link opens it in a new tab.
       auxclick(e) {
         const t = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
@@ -141,7 +150,21 @@ export function createEditor(o: EditorOptions): EditorView {
     paintProbe(),
   ];
   if (o.placeholder) extensions.push(placeholderExt(o.placeholder));
-  return new EditorView({ parent: o.parent, state: EditorState.create({ doc: o.doc, extensions }) });
+  const view = new EditorView({ parent: o.parent, state: EditorState.create({ doc: o.doc, extensions }) });
+  // Records to embed (images pasted or dropped, once stored): `![[title|id]]`, each on its own
+  // line, where they were dropped (x, y) or at the cursor.
+  view.dom.addEventListener("librarium:insert-embeds", (ev) => {
+    const d = (ev as CustomEvent<{ links: { label: string; id: string }[]; x?: number; y?: number }>).detail;
+    if (!d?.links?.length || view.state.readOnly) return;
+    const at = d.x !== undefined && d.y !== undefined ? view.posAtCoords({ x: d.x, y: d.y }) ?? view.state.selection.main.head : view.state.selection.main.head;
+    const line = view.state.doc.lineAt(at);
+    const before = line.text.trim() ? "\n" : "";
+    const text = before + d.links.map((l) => formatLink(l.label, l.id, true)).join("\n") + "\n";
+    const pos = line.text.trim() ? line.to : line.from;
+    view.dispatch({ changes: { from: pos, insert: text }, selection: { anchor: pos + text.length }, userEvent: "input.paste", scrollIntoView: true });
+    view.focus();
+  });
+  return view;
 }
 
 /** Keystroke-to-paint times (ms), for the 16 ms budget: keydown to the next frame. */
