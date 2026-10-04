@@ -33,19 +33,31 @@ How urgent (optional):
 
 <!-- Write new requests here, newest at the bottom. -->
 
-### No duplicate tabs
-What I want: "Don't see in a point of duplicate tabs (two tabs of the same file/page)"
-Why / example: three tabs all showing the note 2026-10-03 (screenshot, 2026-10-03).
-
-### The side panel
-What I want: "Really don't like side panel"
-Why / example: screenshot (2026-10-03) of the panel for a note: Linked from, Links without a
-target, Outline, History and Jobs (a long list of "Refreshing link labels 2026-10-03"), all
-stacked in one column.
 
 ---
 
 ## Waiting for you
+
+### R-024 · The side panel
+> "Really don't like side panel" (screenshot 2026-10-03: Linked from, Links without a target,
+> Outline, History and a long Jobs list of "Refreshing link labels", stacked in one column)
+
+- **Question:** what should take its place? Options:
+  - **(a) No side panel: each thing where it is used** *(recommended)*
+    - Links to and from the note at the bottom of the note (as Obsidian's "backlinks in
+      document"), folded by default.
+    - Outline and History as buttons in the note's header, each opening a popover (History's
+      comparison stays a dialog).
+    - Jobs only behind the status-bar button, as a popover. It would show running and failed
+      jobs, not every finished "Refreshing link labels".
+    - A library item's facts behind an ⓘ button in the reader.
+  - **(b) Keep a right panel, but one view at a time:** icons along its top (Links, Outline,
+    History, Jobs) choose what it shows, as in Obsidian's right sidebar. It would be closed
+    by default, and Jobs would hide finished routine work.
+  - **(c) Something else:** tell me what you dislike most (the stacking, the clutter, that it
+    takes width, or the look).
+- **Either way:** routine jobs that finished ("Refreshing link labels") will stop filling the
+  Jobs list.
 
 ### R-021 · Images in notes: where should they live?
 - **Question:** when you paste or drop an image into a note, should it become a **library
@@ -71,6 +83,24 @@ stacked in one column.
 ---
 
 ## Done
+
+### R-023 · No duplicate tabs
+> "Don't see in a point of duplicate tabs (two tabs of the same file/page)" (screenshot
+> 2026-10-03: three tabs of the note 2026-10-03)
+
+- **Changed:** two tabs never show the same note, item or page.
+  - Opening something already open in another tab (clicking it, "Open in new tab", a
+    middle-click, a link, ⇧⌘T) shows that tab instead, moved to the place asked for (a search
+    hit's position, a snapshot). The tab you were in stays where it was.
+  - Tabs saved with duplicates come back once each.
+  - ⌘T with a "New tab" already open shows that one.
+- **Use:** nothing to do; it just doesn't duplicate.
+- **Code:** `src/shell/router.ts`: `placeOf` (a record by its ID, a page by its params), and
+  checks in `go`, `reopen` and `restore`.
+- **Tested:** new router tests (going, "in a new tab", reopening, restoring saved duplicates);
+  all interface tests pass.
+- **Left:** back and forward inside a tab can still land on a page that another tab shows (a
+  tab's own history is left as it was).
 
 ### R-020 · Fold lists and headings like Obsidian
 > "Doesn't look great how bullet lists are collapsed including nested lists"

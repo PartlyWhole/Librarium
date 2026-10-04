@@ -14,6 +14,12 @@ export function sameRoute(a: Route, b: Route): boolean {
   return a.page === b.page && JSON.stringify(a.params) === JSON.stringify(b.params);
 }
 
+/** What a route shows: a record (whatever its place in it), or a page with its params. Two
+ * tabs never show the same thing (R-023). */
+export function placeOf(r: Route): string {
+  return r.params.id ? `${r.page}:${r.params.id}` : `${r.page}:${JSON.stringify(r.params)}`;
+}
+
 /** A tab as the tab bar shows it. */
 export interface TabInfo {
   id: string;
@@ -57,6 +63,15 @@ export class Router {
   /** Goes to a page in the active tab (or a new one: `newTab`, `background` to stay here). */
   go(page: string, params: Record<string, string> = {}, opts: { replace?: boolean; newTab?: boolean; background?: boolean } = {}): void {
     const r = { page, params };
+    // Already shown in another tab: that tab comes forward (at the place asked for).
+    const other = this.list.findIndex((t, i) => (opts.newTab || i !== this.at) && t.index >= 0 && placeOf(t.stack[t.index]!) === placeOf(r));
+    if (other >= 0 && !opts.replace) {
+      const t = this.list[other]!;
+      if (!sameRoute(t.stack[t.index]!, r)) t.stack[t.index] = r;
+      if (!opts.background) this.at = other;
+      this.sync();
+      return;
+    }
     if (opts.newTab) {
       const t: Tab = { id: newId(), stack: [r], index: 0, title: "" };
       this.list.splice(this.at + 1, 0, t);
@@ -143,6 +158,14 @@ export class Router {
   reopen(): boolean {
     const t = this.closed.pop();
     if (!t) return false;
+    // Its page is open in another tab already: show that one.
+    const cur = t.stack[t.index];
+    const open = cur ? this.list.findIndex((x) => x.index >= 0 && placeOf(x.stack[x.index]!) === placeOf(cur)) : -1;
+    if (open >= 0) {
+      this.at = open;
+      this.sync();
+      return true;
+    }
     this.list.splice(this.at + 1, 0, t);
     this.at += 1;
     this.sync();
@@ -191,8 +214,17 @@ export class Router {
   restore(s: SavedTabs): boolean {
     const tabs = (s?.tabs ?? []).filter((t) => Array.isArray(t.stack) && t.stack.length && t.index >= 0 && t.index < t.stack.length);
     if (!tabs.length) return false;
-    this.list = tabs.map((t) => ({ id: newId(), stack: t.stack, index: t.index, title: t.title ?? "" }));
-    this.at = Math.max(0, Math.min(this.list.length - 1, s.active ?? 0));
+    // Saved before tabs were kept apart: a page shown twice comes back once.
+    const seen = new Set<string>();
+    const activePlace = placeOf(tabs[Math.max(0, Math.min(tabs.length - 1, s.active ?? 0))]!.stack[tabs[Math.max(0, Math.min(tabs.length - 1, s.active ?? 0))]!.index]!);
+    const kept = tabs.filter((t) => {
+      const p = placeOf(t.stack[t.index]!);
+      if (seen.has(p)) return false;
+      seen.add(p);
+      return true;
+    });
+    this.list = kept.map((t) => ({ id: newId(), stack: t.stack, index: t.index, title: t.title ?? "" }));
+    this.at = Math.max(0, kept.findIndex((t) => placeOf(t.stack[t.index]!) === activePlace));
     this.sync();
     return true;
   }

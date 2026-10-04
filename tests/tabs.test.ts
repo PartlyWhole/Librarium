@@ -68,6 +68,38 @@ describe("the router's tabs", () => {
   });
 });
 
+describe("no two tabs show the same thing (R-023)", () => {
+  it("going to a page open in another tab shows that tab, at the place asked for", () => {
+    const r = new Router();
+    r.go("note", { id: "a" });
+    r.newTab({ page: "note", params: { id: "b" } });
+    r.go("note", { id: "a", at: "120" });
+    expect(r.tabs()).toHaveLength(2);
+    expect(r.active()).toBe(r.tabs()[0]!.id);
+    expect(r.current()).toEqual({ page: "note", params: { id: "a", at: "120" } });
+    // The tab it was asked from stays where it was.
+    expect(r.tabs()[1]!.route.params.id).toBe("b");
+    // "In a new tab" for something open: that tab.
+    r.go("note", { id: "b" }, { newTab: true });
+    expect(r.tabs()).toHaveLength(2);
+    expect(r.current().params.id).toBe("b");
+    // A reopened tab whose page is open shows that one.
+    r.newTab({ page: "note", params: { id: "c" } });
+    r.close();
+    r.go("note", { id: "c" });
+    expect(r.reopen()).toBe(true);
+    expect(r.tabs().filter((t) => t.route.params.id === "c")).toHaveLength(1);
+  });
+
+  it("tabs saved with duplicates come back once each", () => {
+    const r = new Router();
+    const at = (id: string) => ({ stack: [{ page: "note", params: { id } }], index: 0, title: "" });
+    expect(r.restore({ tabs: [at("x"), at("y"), at("x"), at("x")], active: 3 })).toBe(true);
+    expect(r.tabs().map((t) => t.route.params.id)).toEqual(["x", "y"]);
+    expect(r.current().params.id).toBe("x");
+  });
+});
+
 describe("tabs in the window", () => {
   it("⌘T opens a new tab, ⌃Tab and ⌘1 switch, ⌘W closes, ⇧⌘T reopens; titles follow the page", async () => {
     const { shell, a } = await boot();
