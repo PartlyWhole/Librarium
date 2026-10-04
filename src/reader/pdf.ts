@@ -10,7 +10,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { EventBus, PDFFindController, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { h } from "../kit/dom";
-import { boxesIn, boxesPlace, snapToWords, drawMarks, dragRect, endOf, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
+import { boxesIn, boxesPlace, caretIn, rangeEditor, regionEditor, snapStart, snapEnd, type EditPart, snapToWords, drawMarks, dragRect, endOf, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 import { advancesOf, splitIntoWords, type Advance, type FontData } from "./pdf-words";
 
@@ -122,6 +122,16 @@ export const pdfEngine: ReaderEngine = {
       settled = e.state !== 3; // 3: still searching
       wake();
     });
+    // A range's text, with its page and its boxes on every page it crosses.
+    const selOf = (range: Range) => {
+      const startEl = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
+      const pageEl = startEl?.closest<HTMLElement>(".page");
+      const boxes: Box[] = [];
+      for (const p of container.querySelectorAll<HTMLElement>(".page")) {
+        if (range.intersectsNode(p)) boxes.push(...boxesIn(range, p, Number(p.dataset.pageNumber)));
+      }
+      return { text: range.toString().trim(), page: pageEl ? Number(pageEl.dataset.pageNumber) : viewer.currentPageNumber, boxes, end: endOf(range) };
+    };
     const view: ReaderView = {
       zoomIn: () => ((fit = false), (viewer.currentScale = Math.min(8, viewer.currentScale * 1.2))),
       zoomOut: () => ((fit = false), (viewer.currentScale = Math.max(0.25, viewer.currentScale / 1.2))),
@@ -162,14 +172,90 @@ export const pdfEngine: ReaderEngine = {
         const sel = window.getSelection();
         const text = sel?.toString().trim() ?? "";
         if (!sel || !text || !sel.rangeCount || !container.contains(sel.anchorNode)) return null;
-        const range = sel.getRangeAt(0);
-        const pageEl = (sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement)?.closest<HTMLElement>(".page");
-        // Boxes on every page the selection crosses.
-        const boxes: Box[] = [];
-        for (const p of container.querySelectorAll<HTMLElement>(".page")) {
-          if (range.intersectsNode(p)) boxes.push(...boxesIn(range, p, Number(p.dataset.pageNumber)));
-        }
-        return { text, page: pageEl ? Number(pageEl.dataset.pageNumber) : viewer.currentPageNumber, boxes, end: endOf(range) };
+        return selOf(sel.getRangeAt(0));
+      },
+      editParts(parts, onChange) {
+        let current = parts;
+        let editors: { destroy(): void }[] = [];
+        let dragging = false;
+        const pageDiv = (n: number) => viewer.getPageView(n - 1)?.div as HTMLElement | undefined;
+        const layerAt = (x: number, y: number) =>
+          [...container.querySelectorAll<HTMLElement>(".page")].find((p) => {
+            const b = p.getBoundingClientRect();
+            return y >= b.top && y <= b.bottom && x >= b.left - 40 && x <= b.right + 40;
+          })?.querySelector<HTMLElement>(".textLayer") ?? null;
+        // A text part's range, from where it was drawn: its first box's start to its last's end.
+        const rangeOf = (p: EditPart): Range | null => {
+          const boxes = p.boxes ?? [];
+          if (!boxes.length) return null;
+          const at = (b: Box, right: boolean) => {
+            const d = pageDiv(b.page ?? p.page ?? 1);
+            const layer = d?.querySelector<HTMLElement>(".textLayer");
+            if (!d || !layer) return null;
+            const r = innerRect(d);
+            return caretIn(document, layer, r.left + (r.width * (right ? b.x + b.w - 0.3 : b.x + 0.3)) / 100, r.top + (r.height * (b.y + b.h / 2)) / 100);
+          };
+          const a = at(boxes[0]!, false);
+          const z = at(boxes[boxes.length - 1]!, true);
+          if (!a || !z) return null;
+          const r = document.createRange();
+          try {
+            r.setStart(a.node, snapStart(a.node, a.offset));
+            r.setEnd(z.node, snapEnd(z.node, z.offset));
+          } catch {
+            return null;
+          }
+          return r.collapsed ? null : r;
+        };
+        const build = () => {
+          editors.forEach((e) => e.destroy());
+          editors = [];
+          for (const p of current) {
+            if (p.region) {
+              const n = p.region.page ?? 1;
+              const d = pageDiv(n);
+              if (!d) continue;
+              editors.push(regionEditor({
+                over: d,
+                region: p.region,
+                onDrag: (r) => ((dragging = true), onChange({ key: p.key, done: false, region: { page: n, ...r } })),
+                onDone: async (r) => {
+                  dragging = false;
+                  onChange({ key: p.key, done: true, region: { page: n, ...r, png: await renderRegion(doc, n, r) } });
+                },
+              }));
+              continue;
+            }
+            const range = rangeOf(p);
+            if (!range) continue;
+            editors.push(rangeEditor({
+              overlay: container,
+              range,
+              screenRects: (r) => [...r.getClientRects()],
+              caretAt: (x, y) => {
+                const layer = layerAt(x, y);
+                return layer ? caretIn(document, layer, x, y) : null;
+              },
+              onDrag: (r) => ((dragging = true), onChange({ key: p.key, done: false, text: selOf(r) })),
+              onDone: (r) => ((dragging = false), onChange({ key: p.key, done: true, text: selOf(r) })),
+            }));
+          }
+        };
+        // Pages render as they come into view (and again on zoom): find the parts on them again.
+        const rendered = () => !dragging && build();
+        eventBus.on("textlayerrendered", rendered);
+        build();
+        return {
+          update(next) {
+            current = next;
+            build();
+          },
+          stop() {
+            eventBus.off("textlayerrendered", rendered);
+            editors.forEach((e) => e.destroy());
+            editors = [];
+          },
+        };
       },
       watchSelection(cb) {
         // When a drag or a keyboard selection ends (not at every step of it).

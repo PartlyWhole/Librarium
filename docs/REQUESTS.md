@@ -56,6 +56,56 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-036 · Edit a capture's selection; first-class image captures
+> "Add copy and delete icons to the capture page, but also, I want to be able to edit the
+> selection. In edit mode, I want to be able to drag the boundaries of what's selected, even if
+> selection is an aggregate of disjoint selections. I want the UI/UX to be first class. ·
+> Ensure first class handling of image captures as well. · Please test PDFs, web articles, and
+> epubs according to these things"
+
+- **Changed:**
+  - **The capture page** has Edit selection (pencil), Copy embed, Export and Delete icons.
+  - **Edit mode:** Edit selection (or Edit in the popover when you click a highlight) opens the
+    source at the capture.
+    - Every passage gets handles at its start and end, as in Apple Books. Drag one and that end
+      follows, snapping to whole words; the highlight follows as you drag. A capture of several
+      separate passages has handles on each.
+    - Regions (pictures) get a frame: drag a corner or edge to resize, or the inside to move.
+      The picture is taken again, sharp, when you let go.
+    - The panel beside the document says "Editing", lists the parts (× removes one), and has
+      Cancel and Save changes. Select more text, or drag a region, to add a part.
+    - Your words and a title you gave stay; an automatic title follows the new quote.
+  - **Pictures:**
+    - Click a picture in a book to capture it as an image ("Capture image"), or add it to a
+      capture.
+    - In PDFs, saved articles and images, drag a region as before; regions can now be resized
+      and moved.
+    - A capture's card in a note shows every part in order, pictures as pictures.
+- **Use:** open a capture → pencil. Or click a highlight in the source → Edit. Drag the handles,
+  then Save changes.
+- **Code:**
+  - `src/reader/host.ts` (`editParts`, `rangeEditor`, `regionEditor`, `caretIn`);
+  - the readers: `src/reader/pdf.ts`, `src/reader/image.ts`, `src/reader/epub/engine.ts`
+    (picture capture too);
+  - `src/features/captures/index.ts` (edit mode, the capture page icons, cards with pictures);
+  - `crates/features/captures/src/lib.rs` (`captures.update`);
+  - `src/shell/shell.css`.
+- **Decision:** 0049.
+- **Tested:**
+  - Interface tests: the whole flow (popover and capture page, dragging, a region resized,
+    removing a part, Cancel, Save), picture capture, and cards with pictures.
+  - A Rust test for `captures.update`.
+  - WebKit checks with real drags:
+    - a saved web article (one very tall PDF page): the end handle down a line, the start handle
+      past a word, a region resized with its picture re-cut;
+    - an EPUB at 100% and 130%: a passage's end dragged, with a new CFI;
+    - an image's recognised text, and a region on it;
+    - a book picture clicked and captured.
+  - Screenshots of the handles in the real WebKit view.
+  - Still needs your hands: how the handles feel with a trackpad.
+- **Left:** dragging a passage across an EPUB page turn isn't supported yet. Extend it on the
+  next page, or add a part there.
+
 ### R-035 · Show doesn't work well at another text size
 > "When font size is different, show doesn't work well"
 

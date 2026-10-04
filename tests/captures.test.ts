@@ -8,7 +8,7 @@ import { library } from "../src/features/library";
 import { captures } from "../src/features/captures";
 import { archive } from "../src/features/archive";
 import { READER_TOOLS, type ReaderTool } from "../src/shell/slots";
-import type { Mark, ReaderView } from "../src/reader/host";
+import type { EditedPart, EditPart, Mark, ReaderView } from "../src/reader/host";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let last: Shell | null = null;
@@ -30,7 +30,7 @@ async function boot(withArchive = false) {
   return { shell, src };
 }
 
-type Sel = { text: string; page: number; boxes?: { page: number; x: number; y: number; w: number; h: number }[]; end?: { x: number; y: number; bottom: number } };
+type Sel = { text: string; page: number; image?: string; boxes?: { page: number; x: number; y: number; w: number; h: number }[]; end?: { x: number; y: number; bottom: number } };
 
 /** A reader view that hands out the given selection, and records marks and watchers. */
 function fakeView(get: () => Sel | null, extra: Partial<ReaderView> = {}) {
@@ -383,5 +383,167 @@ describe("showing a capture in its source", () => {
     } finally {
       engine.open = original;
     }
+  });
+});
+
+describe("editing what a capture holds", () => {
+  /** A reader that records what it is asked to edit, and can play a drag. */
+  function editableView(get: () => Sel | null) {
+    const editing: { parts: EditPart[]; onChange: ((p: EditedPart) => void) | null; updates: number; stopped: boolean } = { parts: [], onChange: null, updates: 0, stopped: false };
+    const f = fakeView(get, {
+      editParts(parts, onChange) {
+        editing.parts = parts;
+        editing.onChange = onChange;
+        editing.stopped = false;
+        return {
+          update(next) {
+            editing.parts = next;
+            editing.updates++;
+          },
+          stop() {
+            editing.stopped = true;
+          },
+        };
+      },
+    });
+    return { ...f, editing };
+  }
+
+  it("drags a passage's end, sees it move, and saves the change; the words and a given title stay", async () => {
+    const { shell, src } = await boot(true);
+    const v = editableView(() => ({ text: "It avoids shock", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] }));
+    const t = mountTool(shell, src, v.view);
+    t.capture();
+    await wait(30);
+    button(t.aside, "Save capture").click();
+    await wait(60);
+    const cap = shell.records.list("capture")[0]!;
+    // From the highlight's popover.
+    v.clickMark([`${cap.id}#0`]);
+    const pop = [...document.querySelectorAll(".selection-pop")].find((p) => !(p as HTMLElement).hidden)!;
+    expect([...pop.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Open capture", "Edit", "Delete"]);
+    button(pop, "Edit").click();
+    await wait(60);
+    expect(v.editing.parts).toEqual([expect.objectContaining({ boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }], quote: "It avoids shock" })]);
+    expect(t.aside.querySelector("h2")?.textContent).toBe(`Editing “${cap.title}”`);
+    // Its saved highlight gives way to the part being edited.
+    expect(v.marks.current.filter((m) => m.saved)).toEqual([]);
+    expect(v.marks.current).toEqual([expect.objectContaining({ boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] })]);
+    // Dragging: redrawn as it moves (the handles stay: no new parts for the reader).
+    const key = v.editing.parts[0]!.key;
+    v.editing.onChange!({ key, done: false, text: { text: "It avoids shock and", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 30, h: 2 }] } });
+    await wait(20);
+    expect(v.marks.current[0]!.boxes).toEqual([{ page: 1, x: 10, y: 5, w: 30, h: 2 }]);
+    expect(v.editing.updates).toBe(0);
+    // Let go: anchored again in the stored text.
+    v.editing.onChange!({ key, done: true, text: { text: "It avoids shock and sensational events.", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 60, h: 2 }] } });
+    await wait(40);
+    expect(t.aside.querySelector(".capture-quote")?.textContent).toBe("It avoids shock and sensational events.");
+    button(t.aside, "Save changes").click();
+    await wait(60);
+    const after = shell.records.get(cap.id)!;
+    expect(after.fields["captures.quote"]).toBe("It avoids shock and sensational events.");
+    expect(anchors.get(cap.id).parts[0].boxes).toEqual([{ page: 1, x: 10, y: 5, w: 60, h: 2 }]);
+    expect(anchors.get(cap.id).parts[0].selector[0]).toMatchObject({ type: "TextQuoteSelector", exact: "It avoids shock and sensational events." });
+    expect(v.editing.stopped).toBe(true);
+    expect(t.aside.querySelector(".capture-draft")).toBeNull();
+    t.dispose();
+  });
+
+  it("removes a part, resizes a region (its picture taken again), and Cancel leaves the capture as it was", async () => {
+    const { shell, src } = await boot(true);
+    let sel: Sel | null = { text: "It avoids shock", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] };
+    const v = editableView(() => sel);
+    const pickRegion = async () => ({ page: 2, x: 10, y: 20, w: 30, h: 10, png: "data:image/png;base64,AAAA" });
+    const t = mountTool(shell, src, { ...v.view, pickRegion });
+    t.capture();
+    await wait(30);
+    (t.toolbar.querySelector('[aria-label="Capture a region"]') as HTMLButtonElement).click();
+    await wait(30);
+    button(t.aside, "Save capture").click();
+    await wait(60);
+    sel = null;
+    const cap = shell.records.list("capture")[0]!;
+    expect(cap.fields["captures.parts"]).toBe(2);
+    v.clickMark([`${cap.id}#0`]);
+    button([...document.querySelectorAll(".selection-pop")].find((p) => !(p as HTMLElement).hidden)!, "Edit").click();
+    await wait(60);
+    expect(v.editing.parts.map((p) => !!p.region)).toEqual([false, true]);
+    expect(v.editing.parts[1]!.region).toEqual({ page: 2, x: 10, y: 20, w: 30, h: 10 });
+    // Resize the region: drawn as it moves, its picture taken again when let go.
+    const rkey = v.editing.parts[1]!.key;
+    v.editing.onChange!({ key: rkey, done: true, region: { page: 2, x: 5, y: 15, w: 50, h: 20, png: "data:image/png;base64,BBBB" } });
+    await wait(30);
+    expect((t.aside.querySelector("img.capture-region") as HTMLImageElement).src).toBe("data:image/png;base64,BBBB");
+    // Cancel: nothing changes.
+    button(t.aside, "Cancel").click();
+    await wait(30);
+    expect(anchors.get(cap.id).parts[1].selector[0].refinedBy.value).toBe("xywh=percent:10,20,30,10");
+    // Again, then remove the text part and save: one part left, the region as resized.
+    v.clickMark([`${cap.id}#0`]);
+    button([...document.querySelectorAll(".selection-pop")].find((p) => !(p as HTMLElement).hidden)!, "Edit").click();
+    await wait(60);
+    v.editing.onChange!({ key: v.editing.parts[1]!.key, done: true, region: { page: 2, x: 5, y: 15, w: 50, h: 20, png: "data:image/png;base64,BBBB" } });
+    await wait(30);
+    (t.aside.querySelector('[aria-label="Remove this part"]') as HTMLButtonElement).click();
+    await wait(30);
+    expect(v.editing.updates).toBeGreaterThan(0);
+    expect(v.editing.parts.map((p) => !!p.region)).toEqual([true]);
+    button(t.aside, "Save changes").click();
+    await wait(60);
+    expect(shell.records.get(cap.id)!.fields["captures.parts"]).toBe(1);
+    expect(anchors.get(cap.id).parts[0].selector[0].refinedBy.value).toBe("xywh=percent:5,15,50,20");
+    t.dispose();
+  });
+
+  it("opens the source in edit mode from the capture page, which has Edit, Copy embed, Export and Delete", async () => {
+    const { shell, src } = await boot(true);
+    const engine = shell.readerEngines.get("pdf")!;
+    const original = engine.open;
+    const v = editableView(() => null);
+    engine.open = async () => v.view;
+    try {
+      const cap = seed("capture", "It avoids shock and…", "", { "captures.source": src.id, "captures.quote": "It avoids shock and sensational events.", "captures.parts": 1 });
+      anchors.set(cap.id, { id: cap.id, source: src.id, snapshot: null, parts: [{ selector: [{ type: "TextQuoteSelector", exact: "It avoids shock and sensational events.", prefix: "", suffix: "" }], boxes: [{ page: 1, x: 10, y: 5, w: 60, h: 2 }] }] });
+      await shell.records.load();
+      shell.router.go("capture", { id: cap.id });
+      await wait(80);
+      const header = [...document.querySelectorAll(".icon-button")].map((b) => b.getAttribute("aria-label"));
+      for (const name of ["Edit selection", "Copy embed", "Export as W3C annotations", "Delete capture"]) expect(header).toContain(name);
+      (document.querySelector('[aria-label="Edit selection"]') as HTMLButtonElement).click();
+      await wait(120);
+      expect(shell.router.current()).toMatchObject({ page: "item", params: { id: src.id, edit: cap.id } });
+      expect(v.editing.parts).toEqual([expect.objectContaining({ boxes: [{ page: 1, x: 10, y: 5, w: 60, h: 2 }] })]);
+      expect(document.querySelector(".capture-draft h2")?.textContent).toBe("Editing “It avoids shock and…”");
+    } finally {
+      engine.open = original;
+    }
+  });
+
+  it("captures a picture selected on its own (a book's image) as an image, shown in notes", async () => {
+    const { shell, src } = await boot(true);
+    const img = "data:image/png;base64,CCCC";
+    const v = fakeView(() => ({ text: "", page: 0, image: img, end: { x: 10, y: 10, bottom: 20 } }) as unknown as Sel);
+    const t = mountTool(shell, src, v.view);
+    v.select();
+    await wait(20);
+    const pop = [...document.querySelectorAll(".selection-pop")].find((p) => !(p as HTMLElement).hidden)!;
+    expect(pop.textContent).toBe("Capture image");
+    t.capture();
+    await wait(30);
+    expect((t.aside.querySelector("img.capture-region") as HTMLImageElement).src).toBe(img);
+    button(t.aside, "Save capture").click();
+    await wait(60);
+    const cap = shell.records.list("capture")[0]!;
+    expect(cap.title).toBe("A region");
+    t.dispose();
+    const n = seed("note", "Essay", `![[${cap.title}|${cap.id}]]\n\nand so on.\n`);
+    await shell.records.load();
+    shell.router.go("note", { id: n.id });
+    await wait(80);
+    const view = EditorView.findFromDOM(document.querySelector(".cm-editor") as HTMLElement)!;
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    await wait(40);
+    expect((view.contentDOM.querySelector(".embed img.embed-region") as HTMLImageElement | null)?.src).toBe(img);
   });
 });

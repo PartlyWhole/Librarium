@@ -72,6 +72,26 @@ function step(name: string) {
   document.title = `step: ${name}`;
 }
 
+/** Drags an element (a handle, a frame) from its centre by (dx, dy), as a pointer would. */
+async function dragBy(el: Element, dx: number, dy: number, steps = 6) {
+  const b = el.getBoundingClientRect();
+  const x0 = b.left + b.width / 2;
+  const y0 = b.top + b.height / 2;
+  el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, clientX: x0, clientY: y0, pointerId: 1, button: 0, isPrimary: true }));
+  for (let i = 1; i <= steps; i++) {
+    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: x0 + (dx * i) / steps, clientY: y0 + (dy * i) / steps, pointerId: 1, isPrimary: true }));
+    await new Promise((r) => setTimeout(r, 16));
+  }
+  window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, clientX: x0 + dx, clientY: y0 + dy, pointerId: 1, isPrimary: true }));
+  await new Promise((r) => setTimeout(r, 60));
+}
+
+/** Drags an element's centre to a point (window coordinates). */
+async function dragTo(el: Element, x: number, y: number) {
+  const b = el.getBoundingClientRect();
+  await dragBy(el, x - (b.left + b.width / 2), y - (b.top + b.height / 2));
+}
+
 async function run() {
   // Scans render completely with the wasm decoders, and not at all without them.
   step("jpx");
@@ -454,6 +474,107 @@ async function run() {
   fixedBook.view.destroy();
 
   // Recognised text: findable and selectable, in an image and a scanned PDF.
+  // Editing a capture's parts: handles at a passage's ends, a frame on a region.
+  step("edit pdf article");
+  const article = await open(pdfEngine, "article.pdf", "pdf");
+  await new Promise((r) => setTimeout(r, 900));
+  const spanOf = (root: ParentNode, re: RegExp) => [...root.querySelectorAll(".textLayer span")].find((s) => re.test(s.textContent ?? "")) as HTMLElement | undefined;
+  const a1 = spanOf(stage, /^grace\s/) ;
+  const lineSpans = (word: string) => [...stage.querySelectorAll(".textLayer span")].filter((s) => (s.textContent ?? "").startsWith(word));
+  // Select "Line 3 of the article: ..." through its end.
+  const l3 = spanOf(stage, /^3\s/);
+  const l3start = l3?.previousElementSibling as HTMLElement | null;
+  void a1;
+  void lineSpans;
+  const edits: { done: boolean; text?: { text: string; boxes?: unknown[] }; region?: { w: number; h: number; png?: string } }[] = [];
+  let articleEditor: { stop(): void } | undefined;
+  if (l3start && l3) {
+    const r = document.createRange();
+    r.setStart(l3start.firstChild!, 0);
+    r.setEnd(l3.nextElementSibling!.firstChild!, (l3.nextElementSibling!.textContent ?? "").trimEnd().length);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(r);
+    const sel = article.view.selection?.();
+    getSelection()!.removeAllRanges();
+    results.editPdfSelected = sel?.text ?? null;
+    articleEditor = article.view.editParts?.([{ key: "a", boxes: sel?.boxes ?? [], page: sel?.page, quote: sel?.text }], (e) => edits.push(e as never));
+    await new Promise((r2) => setTimeout(r2, 100));
+    const endH = stage.querySelector(".range-handle.end") as HTMLElement | null;
+    const startH = stage.querySelector(".range-handle.start") as HTMLElement | null;
+    results.editPdfHandles = !!endH && !!startH && !endH.hidden && !startH.hidden;
+    // Drag the end down a line (to the end of line 3's next line), then the start forward.
+    if (endH) {
+      const eb = endH.getBoundingClientRect();
+      await dragTo(endH, eb.left + 300, eb.top + eb.height / 2 + 14 * (stage.querySelector(".page")!.getBoundingClientRect().height / 6000));
+    }
+    const afterEnd = edits.filter((e) => e.done).at(-1);
+    results.editPdfEnd = afterEnd?.text ? { text: afterEnd.text.text, boxes: afterEnd.text.boxes?.length ?? 0 } : null;
+    if (startH) {
+      const sb = startH.getBoundingClientRect();
+      await dragTo(startH, sb.left + 40, sb.top + sb.height / 2);
+    }
+    const afterStart = edits.filter((e) => e.done).at(-1);
+    results.editPdfStart = afterStart?.text?.text ?? null;
+    articleEditor?.stop();
+    results.editPdfStopped = !stage.querySelector(".range-handle");
+  }
+  // A region: resize it by its corner; its picture is taken again.
+  const regionEdits: typeof edits = [];
+  const rEditor = article.view.editParts?.([{ key: "r", region: { page: 1, x: 10, y: 1, w: 20, h: 1 } }], (e) => regionEdits.push(e as never));
+  await new Promise((r) => setTimeout(r, 100));
+  const se = stage.querySelector(".region-edit .rh.se");
+  if (se) await dragBy(se, 120, 40);
+  await new Promise((r) => setTimeout(r, 400));
+  const lastRegion = regionEdits.filter((e) => e.done).at(-1)?.region;
+  results.editPdfRegion = lastRegion ? { grew: lastRegion.w > 20 && lastRegion.h > 1, png: (lastRegion.png ?? "").startsWith("data:image/png") && (lastRegion.png ?? "").length > 200 } : null;
+  rEditor?.stop();
+  article.view.destroy();
+
+  step("edit epub");
+  for (const size of [1, 1.3]) {
+    const sizedStore = new Map<string, unknown>([["reader.epub", { fontSize: size }]]);
+    const book = await open(epubEngine, "long.epub", "epub", undefined, { get: (k) => sizedStore.get(k), set: (k, v) => sizedStore.set(k, v) });
+    await new Promise((r) => setTimeout(r, 1200));
+    const fr = [...stage.querySelectorAll("iframe")].find((f) => (f as HTMLIFrameElement).style.visibility !== "hidden" && (f as HTMLIFrameElement).contentDocument?.querySelector("p")) as HTMLIFrameElement | undefined;
+    const d = fr?.contentDocument;
+    const p2 = d?.querySelectorAll("p")[1];
+    const t = p2?.firstChild as Text | undefined;
+    const bookEdits: typeof edits = [];
+    if (t && d) {
+      const r = d.createRange();
+      r.setStart(t, 0);
+      r.setEnd(t, 12);
+      d.getSelection()!.removeAllRanges();
+      d.getSelection()!.addRange(r);
+      const sel = book.view.selection?.();
+      book.view.clearSelection?.();
+      const ed = book.view.editParts?.([{ key: "e", cfi: sel?.cfi ?? null, quote: sel?.text }], (e) => bookEdits.push(e as never));
+      await new Promise((r2) => setTimeout(r2, 100));
+      const endH = stage.querySelector(".range-handle.end") as HTMLElement | null;
+      const startH = stage.querySelector(".range-handle.start") as HTMLElement | null;
+      // The handles sit at the passage's ends on screen.
+      const eb = endH?.getBoundingClientRect();
+      const sb = startH?.getBoundingClientRect();
+      const words = sel?.text ?? "";
+      if (endH && eb) await dragTo(endH, eb.left + 200, eb.top + eb.height * 1.6);
+      const last = bookEdits.filter((e) => e.done).at(-1)?.text;
+      results[`editEpub${size === 1 ? "" : "Zoomed"}`] = { before: words, after: last?.text ?? null, handles: !!eb && !!sb && sb.left < (eb?.left ?? 0) + 1000, cfiChanged: !!(last as { cfi?: string } | undefined)?.cfi && (last as { cfi?: string }).cfi !== sel?.cfi };
+      ed?.stop();
+    }
+    book.view.destroy();
+  }
+
+  step("epub picture");
+  const pictured = await open(epubEngine, "styled.epub", "epub");
+  await new Promise((r) => setTimeout(r, 900));
+  const pdoc = [...stage.querySelectorAll("iframe")].map((f) => (f as HTMLIFrameElement).contentDocument).find((x) => x?.querySelector("img"));
+  const pimg = pdoc?.querySelector("img");
+  pimg?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 100));
+  const psel = pictured.view.selection?.();
+  results.epubPicture = { image: (psel?.image ?? "").startsWith("data:image/png"), text: psel?.text ?? null, cfi: (psel?.cfi ?? "").startsWith("epubcfi(") };
+  pictured.view.destroy();
+
   step("ocr image");
   const ocrImg = await open(imageEngine, "words.png", "image", "words.ocr.json");
   await new Promise((r) => setTimeout(r, 500));
@@ -467,6 +588,22 @@ async function run() {
     getSelection()!.addRange(range);
   }
   results.ocrImageSelection = ocrImg.view.selection?.()?.text ?? null;
+  // Editing on an image: a recognised passage's end dragged; a region resized.
+  const imgSel = ocrImg.view.selection?.();
+  getSelection()!.removeAllRanges();
+  const imgEdits: { done: boolean; text?: { text: string }; region?: { w: number; png?: string } }[] = [];
+  const imgEditor = ocrImg.view.editParts?.([{ key: "t", boxes: imgSel?.boxes ?? [] }, { key: "r", region: { x: 10, y: 10, w: 20, h: 20 } }], (e) => imgEdits.push(e as never));
+  await new Promise((r) => setTimeout(r, 100));
+  results.ocrImageHandles = !!stage.querySelector(".range-handle.end") && !!stage.querySelector(".region-edit");
+  const imgStart = stage.querySelector(".range-handle.start");
+  // Past the first word (a start snaps to the start of the word under it, as in Books).
+  if (imgStart) await dragBy(imgStart, 150, 0);
+  const imgCorner = stage.querySelector(".region-edit .rh.se");
+  if (imgCorner) await dragBy(imgCorner, 40, 30);
+  const tEdit = imgEdits.filter((e) => e.done && e.text).at(-1)?.text?.text;
+  const rEdit = imgEdits.filter((e) => e.done && e.region).at(-1)?.region;
+  results.ocrImageEdited = { text: tEdit ?? null, region: rEdit ? rEdit.w > 20 && (rEdit.png ?? "").startsWith("data:image/png") : false };
+  imgEditor?.stop();
   ocrImg.view.destroy();
   step("ocr scan");
   const scan = await open(pdfEngine, "scan.pdf", "pdf", "scan.ocr.json");

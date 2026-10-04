@@ -710,3 +710,28 @@ body.dragging-items, body.dragging-items * { cursor: grabbing !important; }
 /* Librarium's mark (welcome page). */
 .logo { display: block; color: var(--accent-text); margin: 0 0 12px; }
 .logo svg { width: 100%; height: 100%; }
+
+/* Editing a capture's parts: handles at a passage's ends (as in Apple Books), a frame on a region. */
+.range-handle { position: absolute; z-index: 25; width: 2px; margin-left: -1px; background: var(--accent); cursor: grab; touch-action: none; }
+.range-handle::before { content: ""; position: absolute; inset: -6px -10px; }
+.range-handle .knob { position: absolute; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg), 0 1px 4px rgb(0 0 0 / 30%); }
+.range-handle.start .knob { top: -11px; }
+.range-handle.end .knob { bottom: -11px; }
+.range-handle:hover .knob, .range-handle:focus-visible .knob { transform: scale(1.2); }
+.range-handle:focus-visible { outline: none; }
+body.dragging-handle, body.dragging-handle * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing !important; }
+.region-edit { position: absolute; z-index: 6; box-sizing: border-box; border: 2px solid var(--accent); background: hsl(258 88% 66% / 10%); cursor: move; touch-action: none; }
+.region-edit .rh { position: absolute; width: 10px; height: 10px; margin: -6px 0 0 -6px; background: var(--bg); border: 2px solid var(--accent); border-radius: 2px; }
+.region-edit .rh.n, .region-edit .rh.s { left: 50%; cursor: ns-resize; }
+.region-edit .rh.e, .region-edit .rh.w { top: 50%; cursor: ew-resize; }
+.region-edit .rh.n { top: 0; }
+.region-edit .rh.s { top: 100%; }
+.region-edit .rh.e { left: 100%; }
+.region-edit .rh.w { left: 0; }
+.region-edit .rh.ne { top: 0; left: 100%; cursor: nesw-resize; }
+.region-edit .rh.nw { top: 0; left: 0; cursor: nwse-resize; }
+.region-edit .rh.se { top: 100%; left: 100%; cursor: nwse-resize; }
+.region-edit .rh.sw { top: 100%; left: 0; cursor: nesw-resize; }
+.embed-gap { color: var(--muted); font-size: var(--small); margin: 2px 0 6px 14px; }
+.embed .embed-region { display: block; max-width: 100%; max-height: 50vh; margin: 0 0 8px; border-radius: var(--r1); }
+.drag-shield { position: fixed; inset: 0; z-index: 1000; cursor: grabbing; background: transparent; }

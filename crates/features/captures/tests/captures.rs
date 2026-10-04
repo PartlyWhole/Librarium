@@ -149,3 +149,74 @@ fn sidecars_are_written_before_the_record() {
     fs.restart();
     assert!(lib.store.list(Some("capture")).is_empty());
 }
+
+#[test]
+fn editing_a_capture_replaces_its_parts_and_quote_and_keeps_the_words() {
+    let (lib, fs) = open();
+    let (src, _) = lib.write(Lane::Interactive, |tx| tx.create("page", "The Source", vec![], "text", None)).unwrap();
+    let get = |_: &str| None;
+    let ctx = MethodCtx { library: &lib, setting: &get, views: None, jobs: None };
+    let part = |q: &str| CapturePart {
+        selector: vec![json!({ "type": "TextQuoteSelector", "exact": q, "prefix": "", "suffix": "" })],
+        quote: q.into(),
+        locator: Some("p. 1".into()),
+        region_png: None,
+        boxes: vec![json!({ "page": 1, "x": 1, "y": 2, "w": 3, "h": 4 })],
+    };
+    let w = librarium_feature_captures::create(
+        &ctx,
+        CaptureParams {
+            source: src.id,
+            snapshot: None,
+            text: None,
+            parts: vec![part("Technique integrates everything.")],
+            words: "Why it matters.".into(),
+        },
+    )
+    .unwrap();
+    let id = w.info.id;
+    // An automatic title follows the new quote; the words stay.
+    let u = librarium_feature_captures::update(
+        &ctx,
+        librarium_feature_captures::UpdateParams {
+            id,
+            parts: vec![
+                part("Technique integrates everything. It avoids shock"),
+                CapturePart {
+                    selector: vec![json!({ "type": "FragmentSelector", "value": "xywh=percent:10,20,30,40" })],
+                    quote: String::new(),
+                    locator: None,
+                    region_png: Some(base64::engine::general_purpose::STANDARD.encode(PNG)),
+                    boxes: vec![],
+                },
+            ],
+        },
+    )
+    .unwrap();
+    assert_eq!(u.info.id, id);
+    assert_eq!(u.info.fields["captures.quote"], "Technique integrates everything. It avoids shock");
+    assert_eq!(u.info.fields["captures.parts"], 2);
+    assert_eq!(u.info.title, "Technique integrates everything. It avoids shock");
+    let md = String::from_utf8(fs.read(Path::new(&format!("/lib/captures/{id}.md"))).unwrap()).unwrap();
+    assert!(md.ends_with("---\nWhy it matters.\n"), "{md}");
+    let a = librarium_feature_captures::anchor(&lib.store, id).unwrap();
+    assert_eq!(a["parts"].as_array().unwrap().len(), 2);
+    assert_eq!(a["parts"][0]["selector"][0]["exact"], "Technique integrates everything. It avoids shock");
+    assert_eq!(a["parts"][1]["region"], ".region-2.png");
+    assert_eq!(a["source"], src.id.to_string(), "the rest of the anchor is kept");
+    assert_eq!(fs.read(Path::new(&format!("/lib/captures/{id}.region-2.png"))).unwrap(), PNG);
+    // A title the user gave stays.
+    lib.write(Lane::Interactive, move |tx| tx.relocate_from(id, None, Some("On technique"), None)).unwrap();
+    let u = librarium_feature_captures::update(
+        &ctx,
+        librarium_feature_captures::UpdateParams { id, parts: vec![part("It avoids shock")] },
+    )
+    .unwrap();
+    assert_eq!(u.info.title, "On technique");
+    assert_eq!(u.info.fields["captures.parts"], 1);
+    assert!(
+        librarium_feature_captures::update(&ctx, librarium_feature_captures::UpdateParams { id, parts: vec![] })
+            .is_err(),
+        "a capture keeps a part"
+    );
+}

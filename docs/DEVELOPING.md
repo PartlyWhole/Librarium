@@ -158,6 +158,8 @@ Rules that keep it honest:
     blob URLs). `epub/settings.ts` holds the reading settings and their panel. Captures use the
     same CFIs as before (`vendor/foliate-js/epubcfi.js`); marks and find are drawn with
     `CSS.highlights` in Readium's frames. Settings and places go through `ReaderSource.store`.
+    Readers can edit a capture's parts in place (`editParts`, with `rangeEditor`,
+    `regionEditor` and `caretIn` in `host.ts`; 0049).
     The chrome follows Apple Books (0046): readers can be `immersive` (the library page's
     toolbar shows on approach) and add their own toolbar `controls`.
 - **Kit** (`src/kit/`): small, dependency-free pieces (signals, DOM helper, dialogs, menus,

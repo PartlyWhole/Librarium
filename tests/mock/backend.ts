@@ -235,8 +235,19 @@ const api: Record<string, (p: any) => unknown> = {
   "captures.create": (p) => {
     const quote = p.parts.map((x: { quote: string }) => x.quote).filter(Boolean).join(" […] ");
     const info = seed("capture", quote.split(/\s+/).slice(0, 8).join(" ") || "A region", p.words ?? "", { "captures.source": p.source, "captures.quote": quote, "captures.parts": p.parts.length, ...(p.parts[0]?.locator ? { "captures.locator": p.parts[0].locator } : {}) });
-    anchors.set(info.id, { id: info.id, source: p.source, snapshot: null, text: p.text, parts: p.parts.map((x: { selector: unknown; boxes?: unknown[] }) => ({ selector: x.selector, ...(x.boxes?.length ? { boxes: x.boxes } : {}) })) });
+    anchors.set(info.id, { id: info.id, source: p.source, snapshot: null, text: p.text, parts: partsOf(info.id, p.parts) });
     return { info, seq: touch(need(info.id), "created") };
+  },
+  "captures.update": (p) => {
+    const r = need(p.id);
+    if (!p.parts.length) fail("invalid", "a capture needs at least one part");
+    const quote = p.parts.map((x: { quote: string }) => x.quote).filter(Boolean).join(" […] ");
+    const auto = (q: string) => q.split(/\s+/).slice(0, 8).join(" ") || "A region";
+    if (r.info.title === auto(String(r.info.fields["captures.quote"] ?? ""))) r.info.title = auto(quote);
+    r.info.fields = { ...r.info.fields, "captures.quote": quote, "captures.parts": p.parts.length };
+    const a = anchors.get(p.id);
+    if (a) a.parts = partsOf(p.id, p.parts);
+    return { info: r.info, seq: touch(r, "updated") };
   },
   "captures.anchor": (p) => anchors.get(p.id) ?? fail("not-found", "no anchor"),
   "captures.forSource": (p) =>
@@ -256,7 +267,7 @@ const api: Record<string, (p: any) => unknown> = {
     return { seq: state.seq };
   },
   "captures.orphans": () => [],
-  "captures.region": () => "data:image/png;base64,",
+  "captures.region": (p) => regions.get(`${p.id}#${p.n}`) ?? "data:image/png;base64,",
   "export.write": (p) => (exports.set(p.path, p.text), null),
   "jobs.dismiss": (p) => ((state.jobs = state.jobs.filter((j) => j.id !== p.id)), null),
   "jobs.retry": (p) => {
@@ -506,6 +517,14 @@ export const mockTexts = new Map<string, string>();
 export const mockSegments = new Map<string, { label: string; start: number; end: number }[]>();
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const anchors = new Map<string, any>();
+/** Region images of captures, by `id#n` (1-based), as data URLs. */
+export const regions = new Map<string, string>();
+function partsOf(id: string, parts: { selector: unknown; boxes?: unknown[]; region_png?: string | null }[]) {
+  return parts.map((x, i) => {
+    if (x.region_png) regions.set(`${id}#${i + 1}`, x.region_png.startsWith("data:") ? x.region_png : `data:image/png;base64,${x.region_png}`);
+    return { selector: x.selector, ...(x.boxes?.length ? { boxes: x.boxes } : {}), ...(x.region_png ? { region: `.region-${i + 1}.png` } : {}) };
+  });
+}
 export const exports = new Map<string, string>();
 
 /** Fixture URLs for items in the browser preview. */

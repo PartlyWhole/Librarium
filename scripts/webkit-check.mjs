@@ -57,10 +57,18 @@ const checks = [
   ["EPUB: in a wide window the page is centred", Math.abs(r.epubCentred?.offset ?? 99) <= 2],
   ["EPUB: a fixed-layout book opens on its first page", /^Page 1 of 2/.test(r.epubFixedAt) && r.epubFixedFrames >= 1],
   ["EPUB: images and stylesheets load from the book; its script files never run", r.epubImage === true && r.epubStylesheet === true && r.epubBookFileRan === false],
+  ["editing a saved article (PDF): handles at the passage's ends", r.editPdfHandles === true && /^Line 3 of/.test(r.editPdfSelected ?? "")],
+  ["editing a saved article: dragging the end handle down a line takes in that line", !!r.editPdfEnd && r.editPdfEnd.boxes >= 2 && r.editPdfEnd.text.length > (r.editPdfSelected ?? "").length && /Line 4/.test(r.editPdfEnd.text)],
+  ["editing a saved article: dragging the start handle forward drops the first word, snapping to words", !!r.editPdfStart && !/^Line 3/.test(r.editPdfStart) && /^\S+/.test(r.editPdfStart) && r.editPdfStopped === true],
+  ["editing a region: resizing by its corner takes its picture again", r.editPdfRegion?.grew === true && r.editPdfRegion.png === true],
+  ["editing an EPUB passage: dragging its end takes in more text, with a new CFI", !!r.editEpub?.after && r.editEpub.after.length > r.editEpub.before.length && r.editEpub.cfiChanged === true],
+  ["editing an EPUB passage at a larger text size works the same", !!r.editEpubZoomed?.after && r.editEpubZoomed.after.length > r.editEpubZoomed.before.length && r.editEpubZoomed.cfiChanged === true],
+  ["a picture in a book, clicked, is selected to capture as an image", r.epubPicture?.image === true && r.epubPicture.text === "" && r.epubPicture.cfi === true],
   ["image opens and zooms", r.imagePainted === true && r.imageZoomed === true],
   ["a region of an image is captured", r.imageRegion === true],
   ["recognised words in an image can be found", r.ocrImageLines === 3 && r.ocrImageFind?.count === 1],
   ["recognised words in an image can be selected (and so captured)", r.ocrImageSelection === "Gravity and grace are two forces."],
+  ["editing on an image: a recognised passage's start dragged forward; a region resized with its picture taken again", r.ocrImageHandles === true && !!r.ocrImageEdited?.text && r.ocrImageEdited.text !== "Gravity and grace are two forces." && r.ocrImageEdited.text.length < "Gravity and grace are two forces.".length && r.ocrImageEdited.region === true],
   ["recognised words on a scanned page can be found", r.ocrScanLines === 3 && r.ocrScanFind?.count >= 1],
 ];
 let failed = 0;

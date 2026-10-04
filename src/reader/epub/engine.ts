@@ -15,7 +15,7 @@ import * as CFI from "../../../vendor/foliate-js/epubcfi.js";
 import { List } from "lucide";
 import { h } from "../../kit/dom";
 import { icon } from "../../kit/icon";
-import { endOf, snapToWords, type Mark, type ReaderEngine, type ReaderView } from "../host";
+import { caretIn, endOf, rangeEditor, snapToWords, type Mark, type ReaderEngine, type ReaderView } from "../host";
 import { openBook } from "./streamer";
 import { settingsPanel, toPreferences, readSettings, themeOf, THEMES, type ReadingSettings } from "./settings";
 
@@ -69,6 +69,8 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     // Frames and what is drawn in them.
     const watchers = new Set<() => void>();
     const pointerWatchers = new Set<(at: { x: number; y: number }) => void>();
+    // Run when the page shown changes (a turn, a new chapter, a new layout).
+    const relayouts = new Set<() => void>();
     const chromeWatchers = new Set<(wanted: boolean) => void>();
     const markClickers = new Set<(ids: string[], at: { x: number; y: number }) => void>();
     let marks: Mark[] = [];
@@ -146,6 +148,16 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         stirred();
       });
       doc.addEventListener("click", (e) => {
+        // A click on a picture selects it, so it can be captured like a passage.
+        const pic = (e.target as Element | null)?.closest?.("img, svg image");
+        if (pic && !doc.getSelection()?.toString().trim()) {
+          const r = doc.createRange();
+          r.selectNode(pic.closest("svg") ?? pic);
+          doc.getSelection()?.removeAllRanges();
+          doc.getSelection()?.addRange(r);
+          fire();
+          return;
+        }
         if (doc.getSelection()?.toString().trim()) return;
         const at = (doc as any).caretRangeFromPoint?.(e.clientX, e.clientY) as Range | null;
         if (!at) return;
@@ -180,6 +192,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         }
         for (const f of frames()) attach(f.win);
         draw();
+        relayouts.forEach((r) => r());
         events.moved();
         clearTimeout(saveTimer);
         saveTimer = setTimeout(() => store?.set(PLACE(src.id), loc.serialize()), 800);
@@ -339,6 +352,21 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     const onScheme = () => settings.matchApp && apply(settings);
     media?.addEventListener?.("change", onScheme);
 
+    // A range in a page: its text, chapter and CFI (as captures store it), and where it ends.
+    function selOf(f: { doc: Document; el: HTMLIFrameElement; index: number }, range: Range) {
+      const cfi = CFI.joinIndir(book.spine[f.index]!.cfi, CFI.fromRange(range));
+      const b = f.el.getBoundingClientRect();
+      const e = endOf(range);
+      const sx = (x: number) => onScreenX(f.doc, x) + b.left;
+      const sy = (y: number) => onScreenY(f.doc, y) + b.top;
+      return { text: range.toString().trim(), chapter: f.index, cfi, end: e ? { x: sx(e.x), y: sy(e.y), bottom: sy(e.bottom) } : undefined };
+    }
+    // A range's boxes on screen (window coordinates).
+    function screenRects(f: { doc: Document; el: HTMLIFrameElement }, range: Range): DOMRect[] {
+      const b = f.el.getBoundingClientRect();
+      const z = zoomOf(f.doc);
+      return [...range.getClientRects()].map((r) => new DOMRect(b.left + onScreenX(f.doc, r.left), b.top + onScreenY(f.doc, r.top), r.width * z, r.height * z));
+    }
     const view: ReaderView = {
       immersive: true,
       controls: { start: [contentsBtn], end: [aa] },
@@ -394,17 +422,76 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       selection() {
         for (const f of frames()) {
           const sel = f.doc.getSelection();
-          const text = sel?.toString().trim();
-          if (!sel || !text || !sel.rangeCount || f.index < 0) continue;
+          if (!sel?.rangeCount || f.index < 0) continue;
           const range = sel.getRangeAt(0);
-          const cfi = CFI.joinIndir(book.spine[f.index]!.cfi, CFI.fromRange(range));
-          const b = f.el.getBoundingClientRect();
-          const e = endOf(range);
-          const sx = (x: number) => onScreenX(f.doc, x) + b.left;
-          const sy = (y: number) => onScreenY(f.doc, y) + b.top;
-          return { text, chapter: f.index, cfi, end: e ? { x: sx(e.x), y: sy(e.y), bottom: sy(e.bottom) } : undefined };
+          const text = sel.toString().trim();
+          // A picture selected on its own is captured as an image.
+          const pic = text ? null : pictureIn(range);
+          if (!text && !pic) continue;
+          const out = selOf(f, range);
+          if (pic) {
+            const png = pictureToPng(pic);
+            if (!png) continue;
+            const b = f.el.getBoundingClientRect();
+            const pr = pic.getBoundingClientRect();
+            return { ...out, text: "", image: png, end: { x: b.left + onScreenX(f.doc, pr.right), y: b.top + onScreenY(f.doc, pr.top), bottom: b.top + onScreenY(f.doc, pr.bottom) } };
+          }
+          return out;
         }
         return null;
+      },
+      editParts(parts, onChange) {
+        let current = parts;
+        let editors: { destroy(): void }[] = [];
+        let dragging = false;
+        const build = () => {
+          editors.forEach((e) => e.destroy());
+          editors = [];
+          for (const p of current) {
+            // Pictures are whole; text parts get handles where they are on the page shown.
+            if (p.region || !p.cfi) continue;
+            const spot = resolveCFI(p.cfi);
+            const f = spot && frames().find((x) => x.index === spot.index && x.el.style.visibility !== "hidden");
+            if (!spot || !f) continue;
+            let range: Range;
+            try {
+              range = spot.range(f.doc);
+            } catch {
+              continue;
+            }
+            editors.push(rangeEditor({
+              overlay: frame,
+              range,
+              screenRects: (r) => screenRects(f, r),
+              caretAt: (x, y) => {
+                const b = f.el.getBoundingClientRect();
+                const el = f.doc.scrollingElement ?? f.doc.documentElement;
+                const z = zoomOf(f.doc);
+                // Window → the page's own measuring units (unzoomed in WebKit's model).
+                const mx = (x - b.left + el.scrollLeft) / z - el.scrollLeft;
+                const my = (y - b.top + el.scrollTop) / z - el.scrollTop;
+                // The browser hit-tests in the frame's pixels; text measures in the page's units.
+                return f.doc.body ? caretIn(f.doc, f.doc.body, mx, my, { x: x - b.left, y: y - b.top }) : null;
+              },
+              onDrag: (r) => ((dragging = true), onChange({ key: p.key, done: false, text: selOf(f, r) })),
+              onDone: (r) => ((dragging = false), onChange({ key: p.key, done: true, text: selOf(f, r) })),
+            }));
+          }
+        };
+        const relayout = () => !dragging && build();
+        relayouts.add(relayout);
+        build();
+        return {
+          update(next) {
+            current = next;
+            build();
+          },
+          stop() {
+            relayouts.delete(relayout);
+            editors.forEach((e) => e.destroy());
+            editors = [];
+          },
+        };
       },
       watchSelection(cb) {
         watchers.add(cb);
@@ -608,6 +695,33 @@ function findInDoc(doc: Document, query: string): Range[] {
     out.push(r);
   }
   return out;
+}
+
+/** The picture a range holds on its own (an image, or an SVG's image), if any. */
+function pictureIn(range: Range): HTMLImageElement | SVGImageElement | null {
+  const root = range.commonAncestorContainer;
+  const el = root.nodeType === Node.ELEMENT_NODE ? (root as Element) : root.parentElement;
+  const pics = [...(el?.querySelectorAll("img, image") ?? [])].filter((p) => range.intersectsNode(p));
+  if (el && (el.localName === "img" || el.localName === "image") && !pics.length) pics.push(el);
+  return (pics[0] as HTMLImageElement | SVGImageElement | undefined) ?? null;
+}
+
+/** A picture in a book page as a PNG (its own pixels, at its natural size up to 2,000 px). */
+function pictureToPng(pic: HTMLImageElement | SVGImageElement): string | null {
+  const src = pic instanceof HTMLImageElement ? pic : null;
+  const w = src?.naturalWidth || pic.getBoundingClientRect().width;
+  const h = src?.naturalHeight || pic.getBoundingClientRect().height;
+  if (!w || !h) return null;
+  const k = Math.min(1, 2000 / Math.max(w, h));
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * k);
+  c.height = Math.round(h * k);
+  try {
+    c.getContext("2d")!.drawImage(pic as CanvasImageSource, 0, 0, c.width, c.height);
+    return c.toDataURL("image/png");
+  } catch {
+    return null;
+  }
 }
 
 const HIGHLIGHT_CSS = `

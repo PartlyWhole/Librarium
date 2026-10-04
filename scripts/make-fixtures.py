@@ -8,8 +8,8 @@ OUT.mkdir(parents=True, exist_ok=True)
 WORDS = ("technique society attention grace gravity freedom city reading work propaganda "
          "silence labour nature time image").split()
 
-def pdf(pages, path):
-    """A minimal PDF with Helvetica text, one content stream per page."""
+def pdf(pages, path, height=792):
+    """A minimal PDF with Helvetica text, one content stream per page (pages `height` tall)."""
     objs = []
     def add(b):
         objs.append(b)
@@ -20,7 +20,7 @@ def pdf(pages, path):
     kids = []
     content_ids = []
     for lines in pages:
-        ops = ["BT", "/F1 12 Tf", "72 760 Td", "14 TL"]
+        ops = ["BT", "/F1 12 Tf", f"72 {height - 32} Td", "14 TL"]
         for l in lines:
             esc = l.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
             ops.append(f"({esc}) Tj T*")
@@ -29,7 +29,7 @@ def pdf(pages, path):
         content_ids.append(add(b"<< /Length %d >>\nstream\n" % len(data) + data + b"\nendstream"))
     pages_id = len(objs) + len(pages) + 1
     for c in content_ids:
-        page_ids.append(add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>" % (pages_id, font, c)))
+        page_ids.append(add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 %d] /Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>" % (pages_id, height, font, c)))
     kids = b" ".join(b"%d 0 R" % p for p in page_ids)
     assert add(b"<< /Type /Pages /Kids [%s] /Count %d >>" % (kids, len(page_ids))) == pages_id
     catalog = add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages_id)
@@ -54,6 +54,8 @@ def page_lines(n):
 
 pdf([page_lines(n) for n in range(1, 101)], OUT / "text-100.pdf")
 pdf([["The Technological Society", "", "Technique integrates everything.", "It avoids shock and sensational events."], ["Second page", "", "Attention is the rarest form of generosity."]], OUT / "short.pdf")
+# A saved web article: one very tall page, as the page saver prints them.
+pdf([["An Article", ""] + [f"Line {k + 1} of the article: " + " ".join(WORDS[(k * 5 + j) % len(WORDS)] for j in range(8)) + "." for k in range(400)]], OUT / "article.pdf", height=6000)
 
 def png(path, w, h):
     raw = b"".join(b"\x00" + bytes(((x * 255) // w, (y * 255) // h, 160) for x in range(w) for _ in [0]).replace(b"", b"") if False else b"\x00" + b"".join(bytes(((x * 255) // w, (y * 255) // h, 160)) for x in range(w)) for y in range(h))

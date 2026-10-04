@@ -57,6 +57,12 @@ export interface ReaderView {
   /** Shows a place given by W3C selectors (page, quote, region, CFI). */
   showPlace?(selectors: PlaceSelector[]): Promise<boolean>;
   /**
+   * Edits the parts of a capture in place: text parts get handles at their ends to drag, regions
+   * a frame to resize and move. `onChange` reports each part as it is dragged (`done` false, to
+   * redraw it) and when let go (`done` true, with what to store).
+   */
+  editParts?(parts: EditPart[], onChange: (p: EditedPart) => void): PartsEditor;
+  /**
    * Reading without chrome, as in Apple Books: the toolbar hides until the pointer comes near
    * it (or something in it has focus). Zooming is left to the reader's own controls.
    */
@@ -73,8 +79,36 @@ export interface ReaderView {
   destroy(): void;
 }
 
+/** A part of a capture being edited, as the reader finds it. */
+export interface EditPart {
+  key: string;
+  /** A region part (percent of its page, or of the image). */
+  region?: { page?: number; x: number; y: number; w: number; h: number };
+  /** A text part: where it was drawn (PDF, images), its CFI (EPUB), its page and quote. */
+  boxes?: Box[];
+  cfi?: string | null;
+  page?: number;
+  quote?: string;
+}
+
+/** A part as edited: its new text (with where it is) or its new region (with its picture). */
+export interface EditedPart {
+  key: string;
+  done: boolean;
+  text?: ReaderSelection;
+  region?: ReaderRegion | (Omit<ReaderRegion, "png"> & { png?: undefined });
+}
+
+export interface PartsEditor {
+  /** The parts changed (one added or removed): edit these. */
+  update(parts: EditPart[]): void;
+  stop(): void;
+}
+
 export interface ReaderSelection {
   text: string;
+  /** A picture selected on its own (EPUB): captured as an image, a PNG data URL. */
+  image?: string;
   /** 1-based page (PDF). */
   page?: number;
   /** Spine index (EPUB). */
@@ -373,4 +407,261 @@ export function watchMarkClicks(over: HTMLElement, cb: (ids: string[], at: { x: 
   };
   over.addEventListener("click", click);
   return () => over.removeEventListener("click", click);
+}
+
+// ---- Editing a capture's parts in place ------------------------------------------------------
+
+/**
+ * A transparent cover over the window while something is dragged: pointer movements over a book
+ * page (a frame) would otherwise go to the frame, not to the app.
+ */
+let shieldEl: HTMLElement | null = null;
+function shield(): () => void {
+  const el = document.createElement("div");
+  el.className = "drag-shield";
+  document.body.appendChild(el);
+  shieldEl = el;
+  return () => {
+    el.remove();
+    if (shieldEl === el) shieldEl = null;
+  };
+}
+/** Runs `f` with the drag shield out of the way (for hit testing what is under it). */
+function underShield<T>(f: () => T): T {
+  const el = shieldEl;
+  if (el) el.style.display = "none";
+  try {
+    return f();
+  } finally {
+    if (el) el.style.display = "";
+  }
+}
+
+const isWordChar = (c: string | undefined) => !!c && /[\p{L}\p{N}\p{M}'’]/u.test(c);
+
+/** A caret moved back to the start of its word. */
+export const snapStart = (node: Node, offset: number) => snapCaret(node, offset, false);
+/** A caret moved forward to the end of its word. */
+export const snapEnd = (node: Node, offset: number) => snapCaret(node, offset, true);
+/** A caret moved to the nearest word edge: back for a start, forward for an end. */
+function snapCaret(node: Node, offset: number, toEnd: boolean): number {
+  if (node.nodeType !== Node.TEXT_NODE) return offset;
+  const t = node.textContent ?? "";
+  let o = offset;
+  if (toEnd) while (o < t.length && isWordChar(t[o - 1]) && isWordChar(t[o])) o++;
+  else while (o > 0 && isWordChar(t[o]) && isWordChar(t[o - 1])) o--;
+  return o;
+}
+
+/**
+ * The text caret at a point (in `doc`'s measuring units) among the text under `root`.
+ * The browser's own hit test first; then, for text it can't hit (PDF.js's invisible text layer
+ * under its cover), the nearest text on that line, to the character.
+ */
+export function caretIn(doc: Document, root: Element, x: number, y: number, hitAt?: { x: number; y: number }): { node: Text; offset: number } | null {
+  // `hitAt`: where to hit-test, when that differs from where text measures (a zoomed page).
+  const hit = (doc as unknown as { caretRangeFromPoint?(x: number, y: number): Range | null }).caretRangeFromPoint?.(hitAt?.x ?? x, hitAt?.y ?? y);
+  if (hit && hit.startContainer.nodeType === Node.TEXT_NODE && root.contains(hit.startContainer) && (hit.startContainer.textContent ?? "").trim()) {
+    return { node: hit.startContainer as Text, offset: hit.startOffset };
+  }
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let best: { node: Text; d: number; rect: DOMRect } | null = null;
+  const r = doc.createRange();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!(n.textContent ?? "").trim()) continue;
+    r.selectNodeContents(n);
+    for (const b of r.getClientRects()) {
+      if (!b.width) continue;
+      const dy = y < b.top ? b.top - y : y > b.bottom ? y - b.bottom : 0;
+      const dx = x < b.left ? b.left - x : x > b.right ? x - b.right : 0;
+      const d = dy * 4 + dx;
+      if (!best || d < best.d) best = { node: n as Text, d, rect: b };
+    }
+  }
+  if (!best) return null;
+  // The character nearest x on that line.
+  const t = best.node.textContent ?? "";
+  let lo = 0;
+  let hi = t.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    r.setStart(best.node, mid);
+    r.setEnd(best.node, Math.min(t.length, mid + 1));
+    const b = [...r.getClientRects()].find((q) => q.width) ?? r.getBoundingClientRect();
+    if (b.left + b.width / 2 < x && !(b.top > best.rect.bottom)) lo = mid + 1;
+    else hi = mid;
+  }
+  return { node: best.node, offset: lo };
+}
+
+export interface RangeEditorOptions {
+  /** Where the handles go: a positioned element in the app's own document. */
+  overlay: HTMLElement;
+  range: Range;
+  /** The range's boxes on screen (window coordinates). */
+  screenRects(r: Range): DOMRect[];
+  /** The caret at a point on screen (window coordinates), or null. */
+  caretAt(x: number, y: number): { node: Node; offset: number } | null;
+  onDrag(r: Range): void;
+  onDone(r: Range): void;
+}
+
+/**
+ * Handles at both ends of a range, as in Apple Books: drag one and that end follows the pointer,
+ * snapping to whole words; the ends never cross. The handles sit in the app's document (so book
+ * pages and PDF text layers aren't touched) and follow the range when `place` is called.
+ */
+export function rangeEditor(o: RangeEditorOptions): { place(): void; destroy(): void; range: Range } {
+  const range = o.range;
+  const make = (end: boolean) => {
+    const el = document.createElement("div");
+    el.className = `range-handle ${end ? "end" : "start"}`;
+    el.setAttribute("role", "slider");
+    el.setAttribute("aria-label", end ? "End of the passage" : "Start of the passage");
+    el.tabIndex = 0;
+    el.appendChild(document.createElement("span")).className = "knob";
+    o.overlay.appendChild(el);
+    let grab = { dx: 0, dy: 0 };
+    let unshield = () => {};
+    // The drag is followed on the window, wherever the pointer goes.
+    const move = (e: PointerEvent) => {
+      const c = underShield(() => o.caretAt(e.clientX + grab.dx, e.clientY + grab.dy));
+      if (!c) return;
+      const offset = snapCaret(c.node, c.offset, end);
+      const probe = range.cloneRange();
+      try {
+        if (end) probe.setEnd(c.node, offset);
+        else probe.setStart(c.node, offset);
+      } catch {
+        return;
+      }
+      // The ends never cross (a range collapses if they would), and a passage keeps a word.
+      if (probe.collapsed || !probe.toString().trim()) return;
+      if (end) range.setEnd(c.node, offset);
+      else range.setStart(c.node, offset);
+      place();
+      o.onDrag(range);
+    };
+    const finish = () => {
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", finish, true);
+      window.removeEventListener("pointercancel", finish, true);
+      unshield();
+      document.body.classList.remove("dragging-handle");
+      o.onDone(range);
+    };
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const b = el.getBoundingClientRect();
+      // Hold the bar's middle under the pointer, wherever on the handle it was taken.
+      grab = { dx: b.left + b.width / 2 - e.clientX, dy: b.top + b.height / 2 - e.clientY };
+      document.body.classList.add("dragging-handle");
+      unshield = shield();
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", finish, true);
+      window.addEventListener("pointercancel", finish, true);
+    });
+    return el;
+  };
+  const start = make(false);
+  const end = make(true);
+  const place = () => {
+    const rects = o.screenRects(range).filter((r) => r.width > 0 || r.height > 0);
+    const ob = o.overlay.getBoundingClientRect();
+    const put = (el: HTMLElement, r: DOMRect | undefined, atEnd: boolean) => {
+      el.hidden = !r;
+      if (!r) return;
+      Object.assign(el.style, { left: `${(atEnd ? r.right : r.left) - ob.left + o.overlay.scrollLeft}px`, top: `${r.top - ob.top + o.overlay.scrollTop}px`, height: `${r.height}px` });
+    };
+    put(start, rects[0], false);
+    put(end, rects[rects.length - 1], true);
+  };
+  place();
+  return {
+    range,
+    place,
+    destroy() {
+      start.remove();
+      end.remove();
+      document.body.classList.remove("dragging-handle");
+    },
+  };
+}
+
+type Rect = { x: number; y: number; w: number; h: number };
+
+/**
+ * A frame over a region (percent of `over`) with handles at its corners and edges to resize it,
+ * and its inside to move it; it stays within `over`.
+ */
+export function regionEditor(o: { over: HTMLElement; region: Rect; onDrag(r: Rect): void; onDone(r: Rect): void }): { destroy(): void; place(r?: Rect): void } {
+  let r = { ...o.region };
+  const box = document.createElement("div");
+  box.className = "region-edit";
+  box.setAttribute("aria-label", "The captured region: drag to move, or drag a handle to resize");
+  const dirs = ["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const;
+  for (const d of dirs) {
+    const hnd = document.createElement("span");
+    hnd.className = `rh ${d}`;
+    hnd.dataset.dir = d;
+    box.appendChild(hnd);
+  }
+  if (getComputedStyle(o.over).position === "static") o.over.style.position = "relative";
+  o.over.appendChild(box);
+  const place = (next?: Rect) => {
+    if (next) r = { ...next };
+    Object.assign(box.style, { left: `${r.x}%`, top: `${r.y}%`, width: `${r.w}%`, height: `${r.h}%` });
+  };
+  place();
+  const round = (v: number) => Math.round(v * 100) / 100;
+  let drag: { dir: string; x: number; y: number; from: Rect } | null = null;
+  let unshield = () => {};
+  const move = (e: PointerEvent) => {
+    if (!drag) return;
+    const b = o.over.getBoundingClientRect();
+    const dx = ((e.clientX - drag.x) / b.width) * 100;
+    const dy = ((e.clientY - drag.y) / b.height) * 100;
+    const f = drag.from;
+    let { x, y, w, h } = f;
+    const min = 1;
+    if (drag.dir === "move") {
+      x = Math.min(100 - w, Math.max(0, f.x + dx));
+      y = Math.min(100 - h, Math.max(0, f.y + dy));
+    } else {
+      if (drag.dir.includes("e")) w = Math.max(min, Math.min(100 - f.x, f.w + dx));
+      if (drag.dir.includes("s")) h = Math.max(min, Math.min(100 - f.y, f.h + dy));
+      if (drag.dir.includes("w")) {
+        x = Math.max(0, Math.min(f.x + f.w - min, f.x + dx));
+        w = f.x + f.w - x;
+      }
+      if (drag.dir.includes("n")) {
+        y = Math.max(0, Math.min(f.y + f.h - min, f.y + dy));
+        h = f.y + f.h - y;
+      }
+    }
+    place({ x: round(x), y: round(y), w: round(w), h: round(h) });
+    o.onDrag(r);
+  };
+  const finish = () => {
+    if (!drag) return;
+    drag = null;
+    window.removeEventListener("pointermove", move, true);
+    window.removeEventListener("pointerup", finish, true);
+    window.removeEventListener("pointercancel", finish, true);
+    unshield();
+    document.body.classList.remove("dragging-handle");
+    o.onDone(r);
+  };
+  box.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    drag = { dir: (e.target as HTMLElement).dataset.dir ?? "move", x: e.clientX, y: e.clientY, from: { ...r } };
+    document.body.classList.add("dragging-handle");
+    unshield = shield();
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", finish, true);
+    window.addEventListener("pointercancel", finish, true);
+  });
+  return { destroy: () => box.remove(), place };
 }

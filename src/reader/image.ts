@@ -1,6 +1,6 @@
 /** The image engine: the original image, zoomable; find searches its recognised text. */
 import { h } from "../kit/dom";
-import { boxesIn, cropToPng, drawMarks, dragRect, endOf, outlineRegion, watchMarkClicks, regionOf, type Mark, type ReaderEngine, type ReaderView } from "./host";
+import { boxesIn, caretIn, cropToPng, drawMarks, dragRect, endOf, outlineRegion, rangeEditor, regionEditor, snapEnd, snapStart, watchMarkClicks, regionOf, type Box, type EditPart, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 
 export const imageEngine: ReaderEngine = {
@@ -73,6 +73,60 @@ export const imageEngine: ReaderEngine = {
         };
       },
       clearSelection: () => window.getSelection()?.removeAllRanges(),
+      editParts(parts, onChange) {
+        let current = parts;
+        let editors: { destroy(): void }[] = [];
+        const sel = (r: Range) => ({ text: r.toString().trim(), boxes: boxesIn(r, holder), end: endOf(r) });
+        const crop = (r: { x: number; y: number; w: number; h: number }) => {
+          const sx = img.naturalWidth / 100;
+          const sy = img.naturalHeight / 100;
+          return cropToPng(img, r.x * sx, r.y * sy, r.w * sx, r.h * sy);
+        };
+        const layer = () => holder.querySelector<HTMLElement>(".ocr-layer");
+        const rangeOf = (p: EditPart): Range | null => {
+          const boxes: Box[] = p.boxes ?? [];
+          const l = layer();
+          if (!boxes.length || !l) return null;
+          const b = holder.getBoundingClientRect();
+          const at = (q: Box, right: boolean) => caretIn(document, l, b.left + (b.width * (right ? q.x + q.w - 0.3 : q.x + 0.3)) / 100, b.top + (b.height * (q.y + q.h / 2)) / 100);
+          const a = at(boxes[0]!, false);
+          const z = at(boxes[boxes.length - 1]!, true);
+          if (!a || !z) return null;
+          const r = document.createRange();
+          try {
+            r.setStart(a.node, snapStart(a.node, a.offset));
+            r.setEnd(z.node, snapEnd(z.node, z.offset));
+          } catch {
+            return null;
+          }
+          return r.collapsed ? null : r;
+        };
+        const build = () => {
+          editors.forEach((e) => e.destroy());
+          editors = [];
+          for (const p of current) {
+            if (p.region) {
+              editors.push(regionEditor({ over: holder, region: p.region, onDrag: (r) => onChange({ key: p.key, done: false, region: r }), onDone: (r) => onChange({ key: p.key, done: true, region: { ...r, png: crop(r) } }) }));
+              continue;
+            }
+            const range = rangeOf(p);
+            const l = layer();
+            if (!range || !l) continue;
+            editors.push(rangeEditor({ overlay: frame, range, screenRects: (r) => [...r.getClientRects()], caretAt: (x, y) => caretIn(document, l, x, y), onDrag: (r) => onChange({ key: p.key, done: false, text: sel(r) }), onDone: (r) => onChange({ key: p.key, done: true, text: sel(r) }) }));
+          }
+        };
+        build();
+        return {
+          update(next) {
+            current = next;
+            build();
+          },
+          stop() {
+            editors.forEach((e) => e.destroy());
+            editors = [];
+          },
+        };
+      },
       onMarkClick: (cb) => watchMarkClicks(frame, cb),
       setMarks(m) {
         marks = m;

@@ -8,7 +8,7 @@
 //!   capture is listed as an orphan, never deleted.
 
 use base64::Engine as _;
-use librarium_contracts::api::{CaptureParams, OrphanSidecar, Written};
+use librarium_contracts::api::{CaptureParams, CapturePart, OrphanSidecar, Written};
 use librarium_contracts::{BackendError, Id, Result};
 use librarium_kernel::frontmatter::FmValue;
 use librarium_kernel::kinds::{Format, Kinds, RecordKindDef};
@@ -119,6 +119,81 @@ pub fn create(ctx: &MethodCtx, p: CaptureParams) -> Result<Written> {
         anchor_body["id"] = json!(id_probe);
         sc.insert(0, (ANCHOR.into(), serde_json::to_vec_pretty(&anchor_body).unwrap()));
         tx.create_with_sidecars_id(id_probe, KIND, &title, fields, &words, sc)
+    })?;
+    Ok(Written { info: e.info(), seq })
+}
+
+/// A capture's new parts (its selection edited): the parts and quote are replaced, the user's
+/// words are kept, and an automatic title follows the new quote (a title the user gave stays).
+#[derive(Debug, Deserialize)]
+pub struct UpdateParams {
+    pub id: Id,
+    pub parts: Vec<CapturePart>,
+}
+
+pub fn update(ctx: &MethodCtx, p: UpdateParams) -> Result<Written> {
+    let store = &ctx.library.store;
+    let e = store.get(p.id).ok_or_else(|| BackendError::not_found("this capture can't be found"))?;
+    if e.kind != KIND {
+        return Err(BackendError::invalid("not a capture"));
+    }
+    if p.parts.is_empty() {
+        return Err(BackendError::invalid("a capture needs at least one part"));
+    }
+    let source_title = e
+        .fields
+        .get(SOURCE)
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse::<Id>().ok())
+        .and_then(|s| store.get(s))
+        .map(|s| s.title)
+        .unwrap_or_default();
+    let old_quote = e.fields.get(QUOTE).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let auto = |q: &str| if q.is_empty() { format!("A region of {source_title}") } else { first_words(q, 8) };
+    let quotes: Vec<&str> = p.parts.iter().map(|x| x.quote.trim()).filter(|q| !q.is_empty()).collect();
+    let quote = quotes.join(" […] ");
+    let title = if e.title == auto(&old_quote) { Some(auto(&quote)) } else { None };
+    let mut sidecars = vec![];
+    let mut parts = vec![];
+    for (i, part) in p.parts.iter().enumerate() {
+        let mut v = json!({ "selector": part.selector });
+        if !part.boxes.is_empty() {
+            v["boxes"] = json!(part.boxes);
+        }
+        if let Some(b64) = &part.region_png {
+            let png = base64::engine::general_purpose::STANDARD
+                .decode(b64.trim_start_matches("data:image/png;base64,"))
+                .map_err(|e| BackendError::invalid(format!("the region image is damaged: {e}")))?;
+            if !png.starts_with(b"\x89PNG") {
+                return Err(BackendError::invalid("the region image is not a PNG"));
+            }
+            let suffix = format!(".region-{}.png", i + 1);
+            v["region"] = json!(suffix);
+            sidecars.push((suffix, png));
+        }
+        parts.push(v);
+    }
+    let mut a = anchor(store, p.id)?;
+    a["parts"] = Value::Array(parts);
+    let anchor_bytes = serde_json::to_vec_pretty(&a).unwrap();
+    let locator = p.parts.iter().find_map(|x| x.locator.clone());
+    let id = p.id;
+    let (e, seq) = ctx.library.write(Lane::Interactive, move |tx| {
+        // The anchor and images first; the record's own file last (what lists and embeds read).
+        tx.write_sidecar(id, ANCHOR, &anchor_bytes)?;
+        for (suffix, png) in &sidecars {
+            tx.write_sidecar(id, suffix, png)?;
+        }
+        let edits = vec![
+            (QUOTE.to_string(), Some(FmValue::Str(quote))),
+            (PARTS.to_string(), Some(FmValue::Int(p.parts.len() as i64))),
+            (LOCATOR.to_string(), locator.map(FmValue::Str)),
+        ];
+        let r = tx.set_fields(id, None, &edits)?;
+        match title {
+            Some(t) => tx.relocate_from(id, None, Some(&t), None),
+            None => Ok(r),
+        }
     })?;
     Ok(Written { info: e.info(), seq })
 }
@@ -240,6 +315,14 @@ pub fn contribute_methods(r: &mut Registry<ApiMethod>) -> Result<(), DuplicateId
         Arc::new(|ctx: &MethodCtx, p: Value| {
             let p: CaptureParams = serde_json::from_value(p).map_err(|e| BackendError::invalid(e.to_string()))?;
             Ok(serde_json::to_value(create(ctx, p)?).unwrap())
+        }),
+    )?;
+    r.add(
+        ID,
+        "captures.update",
+        Arc::new(|ctx: &MethodCtx, p: Value| {
+            let p: UpdateParams = serde_json::from_value(p).map_err(|e| BackendError::invalid(e.to_string()))?;
+            Ok(serde_json::to_value(update(ctx, p)?).unwrap())
         }),
     )?;
     r.add(

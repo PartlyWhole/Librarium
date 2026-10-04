@@ -19,9 +19,9 @@ import type { RecordText } from "../../generated/RecordText";
 import type { StoredText } from "../../generated/StoredText";
 import type { Written } from "../../generated/Written";
 import { embedExtension } from "./embeds";
-import { Highlighter, Crop, Quote, FileDown, X, Trash2, Copy, LocateFixed } from "lucide";
+import { Highlighter, Crop, Quote, FileDown, X, Trash2, Copy, LocateFixed, Pencil } from "lucide";
 import { contextMenu } from "../../kit/menu";
-import type { Box } from "../../reader/host";
+import type { Box, EditedPart, EditPart, PartsEditor, ReaderSelection } from "../../reader/host";
 
 export const KIND = "capture";
 const F = { source: "captures.source", quote: "captures.quote", locator: "captures.locator" };
@@ -52,6 +52,8 @@ interface DraftPart extends CapturePart {
 interface Draft {
   parts: DraftPart[];
   words: string;
+  /** Editing a saved capture's parts (instead of making a new capture). */
+  editing?: { id: string; title: string };
 }
 
 const byOrder = (a: DraftPart, b: DraftPart) => {
@@ -129,7 +131,7 @@ export function captures(shell: ShellApi): void {
   const draftOf = (k: string) => drafts().get(k);
   const setDraft = (k: string, d: Draft | null) => {
     const m = new Map(drafts.peek());
-    if (d && (d.parts.length || d.words)) m.set(k, d);
+    if (d && (d.parts.length || d.words || d.editing)) m.set(k, d);
     else m.delete(k);
     drafts.set(m);
   };
@@ -148,10 +150,13 @@ export function captures(shell: ShellApi): void {
         setDraft(k, { ...d, parts: [...d.parts, p].sort(byOrder) });
       };
 
-      const addSelection = async () => {
-        const sel = view.selection?.();
-        if (!sel) return shell.status.show("Select some text first.");
-        hidePop();
+      /** A part from a selection (text, or a picture on its own), anchored in the stored text. */
+      const partFromSelection = async (sel: ReaderSelection, key = `p${++n}`): Promise<{ part: DraftPart; found: boolean }> => {
+        if (sel.image && !sel.text) {
+          const selector: Selector[] = sel.cfi ? [{ type: "FragmentSelector", value: sel.cfi, conformsTo: CFI }] : [];
+          const seg0 = sel.chapter !== undefined ? (await stored())?.segments[sel.chapter] : undefined;
+          return { found: true, part: { key, selector, quote: "", locator: seg0?.label || null, region_png: sel.image.replace(/^data:image\/png;base64,/, ""), preview: sel.image, order: [sel.chapter ?? 0, 0, 0], boxes: [], region: true, cfi: sel.cfi } };
+        }
         const st = await stored();
         const seg = st && (sel.page ? st.segments[sel.page - 1] : sel.chapter !== undefined ? st.segments[sel.chapter] : undefined);
         const at = st ? locateSelection(st.text, sel.text, seg ? { from: Number(seg.start), to: Number(seg.end) } : undefined) : null;
@@ -160,18 +165,35 @@ export function captures(shell: ShellApi): void {
         if (sel.cfi) selector.push({ type: "FragmentSelector", value: sel.cfi, conformsTo: CFI });
         const quote = at && st ? sliceCp(st.text, at.start, at.end) : sel.text;
         const first = sel.boxes?.[0];
-        add({
-          key: `p${++n}`,
-          selector,
-          quote,
-          locator: seg?.label || (sel.page ? `p. ${sel.page}` : null),
-          region_png: null,
-          order: [first?.page ?? sel.page ?? sel.chapter ?? 0, first?.y ?? 0, at?.start ?? 0],
-          boxes: sel.boxes ?? [],
-          cfi: sel.cfi,
-        });
+        return {
+          found: !!at,
+          part: {
+            key,
+            selector,
+            quote,
+            locator: seg?.label || (sel.page ? `p. ${sel.page}` : null),
+            region_png: null,
+            order: [first?.page ?? sel.page ?? sel.chapter ?? 0, first?.y ?? 0, at?.start ?? 0],
+            boxes: sel.boxes ?? [],
+            cfi: sel.cfi,
+          },
+        };
+      };
+      /** A region part (dragged out, or edited). */
+      const partFromRegion = (r: { page?: number; x: number; y: number; w: number; h: number; png: string }, key = `p${++n}`): DraftPart => {
+        const xywh = { type: "FragmentSelector" as const, value: `xywh=percent:${r.x},${r.y},${r.w},${r.h}`, conformsTo: MEDIA };
+        const selector: Selector[] = r.page ? [{ type: "FragmentSelector", value: `page=${r.page}`, conformsTo: PDF_PAGE, refinedBy: xywh }] : [xywh];
+        return { key, selector, quote: "", locator: r.page ? `p. ${r.page}` : null, region_png: r.png.replace(/^data:image\/png;base64,/, ""), preview: r.png, order: [r.page ?? 0, r.y, 0], boxes: [{ ...(r.page ? { page: r.page } : {}), x: r.x, y: r.y, w: r.w, h: r.h }], region: true };
+      };
+
+      const addSelection = async () => {
+        const sel = view.selection?.();
+        if (!sel) return shell.status.show("Select some text first.");
+        hidePop();
+        const { part, found } = await partFromSelection(sel);
+        add(part);
         view.clearSelection?.();
-        if (!at) shell.status.show("The stored text doesn’t contain that passage exactly; it was kept with its page only.", 6000);
+        if (!found) shell.status.show("The stored text doesn’t contain that passage exactly; it was kept with its page only.", 6000);
       };
 
       const addRegion = async () => {
@@ -179,24 +201,23 @@ export function captures(shell: ShellApi): void {
         hidePop();
         const r = await view.pickRegion();
         if (!r) return;
-        const xywh = { type: "FragmentSelector" as const, value: `xywh=percent:${r.x},${r.y},${r.w},${r.h}`, conformsTo: MEDIA };
-        const selector: Selector[] = r.page ? [{ type: "FragmentSelector", value: `page=${r.page}`, conformsTo: PDF_PAGE, refinedBy: xywh }] : [xywh];
-        add({
-          key: `p${++n}`,
-          selector,
-          quote: "",
-          locator: r.page ? `p. ${r.page}` : null,
-          region_png: r.png.replace(/^data:image\/png;base64,/, ""),
-          preview: r.png,
-          order: [r.page ?? 0, r.y, 0],
-          boxes: [{ ...(r.page ? { page: r.page } : {}), x: r.x, y: r.y, w: r.w, h: r.h }],
-          region: true,
-        });
+        add(partFromRegion(r));
       };
 
       const save = async () => {
         const d = drafts.peek().get(k);
         if (!d?.parts.length) return;
+        if (d.editing) {
+          try {
+            const w = await call<Written>("captures.update", { id: d.editing.id, parts: d.parts.map(toPart) });
+            shell.records.put(w.info, w.seq);
+            setDraft(k, null);
+            toast("Capture updated.", { action: { label: "Open", run: () => shell.openRecord(w.info.id) } });
+          } catch (e) {
+            toast(String((e as { message?: string }).message ?? e));
+          }
+          return;
+        }
         try {
           const st = await stored();
           const w = await call<Written>("captures.create", { source: ctx.source.id, snapshot: ctx.part ?? null, text: st?.origin ?? null, parts: d.parts.map(toPart), words: d.words });
@@ -218,7 +239,7 @@ export function captures(shell: ShellApi): void {
         const sel = view.selection?.();
         if (!sel?.end) return hidePop();
         const parts = drafts.peek().get(k)?.parts.length ?? 0;
-        popLabel.textContent = parts ? "Add to capture" : "Capture";
+        popLabel.textContent = parts ? (sel.image && !sel.text ? "Add image to capture" : "Add to capture") : sel.image && !sel.text ? "Capture image" : "Capture";
         pop.hidden = false;
         const w = pop.offsetWidth || 120;
         const x = Math.max(8, Math.min(window.innerWidth - w - 8, sel.end.x - w / 2));
@@ -236,6 +257,7 @@ export function captures(shell: ShellApi): void {
         if (!caps.length) return;
         hidePop();
         replace(markPop, caps.map((c) => h("button", { type: "button", title: c.title, onmousedown: (e: Event) => e.preventDefault(), onclick: () => (hideMarkPop(), shell.openRecord(c.id)) }, icon(Quote, 14), caps.length > 1 ? `Open “${c.title.slice(0, 28)}${c.title.length > 28 ? "…" : ""}”` : "Open capture")),
+          caps.length === 1 && view.editParts ? h("button", { type: "button", title: "Edit what this capture holds", onmousedown: (e: Event) => e.preventDefault(), onclick: () => (hideMarkPop(), void startEdit(caps[0]!.id)) }, icon(Pencil, 14), "Edit") : null,
           caps.length === 1 ? h("button", { type: "button", title: "Delete this capture (it goes to the archive)", onmousedown: (e: Event) => e.preventDefault(), onclick: () => {
             hideMarkPop();
             const r = shell.records.get(caps[0]!.id);
@@ -260,6 +282,87 @@ export function captures(shell: ShellApi): void {
       document.addEventListener("scroll", onScroll, true);
       window.addEventListener("keydown", onKey);
 
+      // ---- editing a saved capture's parts ----
+      /** Loads a saved capture's parts into the draft, to edit them in place. */
+      const startEdit = async (id: string) => {
+        if (!view.editParts) return shell.status.show("Captures can’t be edited in this kind of item.");
+        const cur = drafts.peek().get(k);
+        if (cur?.editing?.id === id) return;
+        if (cur?.parts.length && !cur.editing) return shell.status.show("Save or discard the capture being made first.", 5000);
+        const r = shell.records.get(id);
+        const a = await call<Anchor>("captures.anchor", { id }).catch(() => null);
+        if (!r || !a) return shell.status.show("This capture can’t be found.");
+        const parts: DraftPart[] = [];
+        for (const [i, p] of a.parts.entries()) {
+          const quote = (p.selector.find((x) => x.type === "TextQuoteSelector") as { exact?: string } | undefined)?.exact ?? "";
+          const frag = (prefix: string) => p.selector.flatMap((x) => [(x as { value?: string }).value, (x as { refinedBy?: { value?: string } }).refinedBy?.value]).find((v) => v?.startsWith(prefix));
+          const page = Number(frag("page=")?.slice(5)) || undefined;
+          const xywh = frag("xywh=percent:")?.slice(13).split(",").map(Number);
+          const isRegion = !!p.region || !!xywh;
+          const png = isRegion ? await call<string>("captures.region", { id, n: i + 1 }).catch(() => "") : "";
+          parts.push({
+            key: `p${++n}`,
+            selector: p.selector,
+            quote,
+            locator: page ? `p. ${page}` : (r.fields[F.locator] as string | undefined) ?? null,
+            region_png: png ? png.replace(/^data:image\/png;base64,/, "") : null,
+            preview: png || undefined,
+            order: [page ?? 0, p.boxes?.[0]?.y ?? xywh?.[1] ?? 0, i],
+            boxes: p.boxes ?? (xywh ? [{ ...(page ? { page } : {}), x: xywh[0]!, y: xywh[1]!, w: xywh[2]!, h: xywh[3]! }] : []),
+            region: isRegion,
+            cfi: frag("epubcfi("),
+          });
+        }
+        setDraft(k, { parts, words: "", editing: { id, title: r.title || "Capture" } });
+        void view.showPlace?.(JSON.parse(JSON.stringify([...(a.parts[0]?.selector ?? []), ...(a.parts[0]?.boxes?.length ? [{ type: "librarium:boxes", boxes: a.parts[0].boxes }] : [])])));
+      };
+      const toEdit = (p: DraftPart): EditPart => {
+        const xywh = p.region && p.boxes[0] ? p.boxes[0] : undefined;
+        return { key: p.key, ...(xywh && !p.cfi ? { region: { ...(xywh.page ? { page: xywh.page } : {}), x: xywh.x, y: xywh.y, w: xywh.w, h: xywh.h } } : {}), boxes: p.boxes, cfi: p.cfi ?? null, quote: p.quote };
+      };
+      // A part dragged: redrawn as it moves; anchored again (quote, selectors) when let go.
+      const edited = async (e: EditedPart) => {
+        const d = drafts.peek().get(k);
+        const old = d?.parts.find((x) => x.key === e.key);
+        if (!d || !old) return;
+        let next: DraftPart = old;
+        if (e.text) {
+          next = e.done ? (await partFromSelection(e.text, e.key)).part : { ...old, boxes: e.text.boxes ?? old.boxes, cfi: e.text.cfi ?? old.cfi, quote: e.text.text };
+        } else if (e.region) {
+          next = e.done && e.region.png ? partFromRegion({ ...e.region, png: e.region.png }, e.key) : { ...old, boxes: [{ ...(e.region.page ? { page: e.region.page } : {}), x: e.region.x, y: e.region.y, w: e.region.w, h: e.region.h }] };
+        }
+        const cur = drafts.peek().get(k);
+        if (!cur) return;
+        setDraft(k, { ...cur, parts: cur.parts.map((x) => (x.key === e.key ? next : x)).sort(byOrder) });
+      };
+      // The editor follows the draft: started with an edit, given new parts when one is added or
+      // removed (not on every drag: that would take the handle away mid-drag), stopped after.
+      let editor: PartsEditor | null = null;
+      let editorKeys = "";
+      const stopEditor = effect(() => {
+        const d = draftOf(k);
+        untracked(() => {
+          if (!d?.editing || !view.editParts) {
+            editor?.stop();
+            editor = null;
+            editorKeys = "";
+            return;
+          }
+          const keys = d.parts.map((p) => p.key).join();
+          if (!editor) editor = view.editParts(d.parts.map(toEdit), (e) => void edited(e));
+          else if (keys !== editorKeys) editor.update(d.parts.map(toEdit));
+          editorKeys = keys;
+        });
+      });
+      // Asked for by the route (Edit selection, from the capture page).
+      let lastEditRoute: unknown = null;
+      const stopEditRoute = effect(() => {
+        const r = shell.router.current();
+        if (r === lastEditRoute) return;
+        lastEditRoute = r;
+        if (r.page === "item" && r.params.id === ctx.source.id && r.params.edit) untracked(() => void startEdit(r.params.edit!));
+      });
+
       // The panel beside the document.
       const panel = h("section", { class: "capture-draft", "aria-label": "New capture" });
       // Captures already made from this source (this snapshot of it), highlighted softly; kept
@@ -283,7 +386,7 @@ export function captures(shell: ShellApi): void {
       });
       const stopPanel = effect(() => {
         const d = draftOf(k);
-        const savedMarks = saved().flatMap((c) => c.parts.map((p, i) => ({ id: `${c.id}#${i}`, boxes: p.boxes, region: p.region, cfi: p.region ? undefined : (p.cfi ?? undefined), saved: true })));
+        const savedMarks = saved().filter((c) => c.id !== d?.editing?.id).flatMap((c) => c.parts.map((p, i) => ({ id: `${c.id}#${i}`, boxes: p.boxes, region: p.region, cfi: p.region ? undefined : (p.cfi ?? undefined), saved: true })));
         view.setMarks?.([...savedMarks, ...(d?.parts ?? []).map((p) => ({ id: p.key, boxes: p.boxes, region: p.region, cfi: p.region ? undefined : p.cfi }))]);
         if (!d?.parts.length) {
           panel.remove();
@@ -315,6 +418,18 @@ export function captures(shell: ShellApi): void {
           }
         });
         const hadFocus = panel.contains(document.activeElement) && document.activeElement?.classList.contains("words-input");
+        if (d.editing) {
+          replace(panel,
+            h("div", { class: "capture-draft-head" }, h("h2", null, `Editing “${d.editing.title}”`)),
+            ...items,
+            h("p", { class: "draft-hint" }, `Drag the handles at a passage’s ends to change it${view.pickRegion ? ", or a region’s frame to resize or move it" : ""}. Select more text${view.pickRegion ? " or drag a region (⇧⌘R)" : ""} to add a part.`),
+            h("p", { class: "muted small" }, "Your words stay as they are."),
+            h("div", { class: "ask-buttons" },
+              h("button", { class: "button", type: "button", onclick: () => setDraft(k, null) }, "Cancel"),
+              h("button", { class: "button primary", type: "button", title: "Save changes (⌘↩)", disabled: !d.parts.length, onclick: () => void save() }, "Save changes")),
+          );
+          return;
+        }
         replace(panel,
           h("div", { class: "capture-draft-head" }, h("h2", null, d.parts.length > 1 ? `New capture · ${d.parts.length} parts` : "New capture")),
           ...items,
@@ -333,6 +448,9 @@ export function captures(shell: ShellApi): void {
       toolbar.append(b1, ...(b2 ? [b2] : []));
       active = { addSelection, addRegion, save };
       return () => {
+        stopEditor();
+        stopEditRoute();
+        editor?.stop();
         stopSaved();
         unwatchMarks();
         window.removeEventListener("mousedown", onAway, true);
@@ -397,14 +515,26 @@ export function captures(shell: ShellApi): void {
         e.preventDefault();
         void call<Anchor>("captures.anchor", { id: r.id }).then((a) => open(src, where(a)), () => open(src));
       } }, `— ${citation(shell, r)}`);
-      const regionN = Number(r.fields["captures.parts"] ?? 0);
+      const partsN = Number(r.fields["captures.parts"] ?? 1);
       const edit = h("button", { type: "button", class: "embed-edit", title: "Open the capture to edit it", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, "Edit");
       const archived = isArchived(r) ? h("span", { class: "badge", title: "This capture is in the archive" }, "In the archive") : null;
       const block = h("figure", { class: "embed" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite, archived, edit));
-      if (!quote && regionN) {
-        const img = h("img", { class: "capture-region", alt: "The captured region" });
-        void call<string>("captures.region", { id: r.id, n: 1 }).then((src2) => (img.src = src2), () => {});
-        block.prepend(img);
+      // Several parts, or a picture: each part in order, pictures as pictures.
+      if (partsN > 1 || !quote) {
+        void call<Anchor>("captures.anchor", { id: r.id }).then((a) => {
+          const nodes: HTMLElement[] = [];
+          a.parts.forEach((p, i) => {
+            if (i) nodes.push(h("div", { class: "embed-gap", "aria-hidden": "true" }, "[…]"));
+            const isRegion = !!p.region || p.selector.some((x) => [(x as { value?: string }).value, (x as { refinedBy?: { value?: string } }).refinedBy?.value].some((v) => v?.startsWith("xywh=")));
+            if (isRegion) {
+              const img = h("img", { class: "capture-region embed-region", alt: "A captured picture" });
+              void call<string>("captures.region", { id: r.id, n: i + 1 }).then((d) => (img.src = d), () => {});
+              nodes.push(img);
+            } else nodes.push(h("blockquote", { class: "embed-quote" }, (p.selector.find((x) => x.type === "TextQuoteSelector") as { exact?: string } | undefined)?.exact ?? ""));
+          });
+          block.querySelectorAll(":scope > .embed-quote, :scope > .capture-region").forEach((x) => x.remove());
+          block.prepend(...nodes);
+        }, () => {});
       }
       return block;
     },
@@ -503,6 +633,8 @@ export function captures(shell: ShellApi): void {
         });
         titleInput.addEventListener("blur", () => void rename());
         ctx.setHeaderActions([
+          h("button", { class: "icon-button", "aria-label": "Edit selection", title: "Edit what this capture holds, in its source (drag a passage’s ends, resize a region)", onclick: () => shell.openRecord(src, { ...where(anchor), edit: id }, { again: true }) }, icon(Pencil)),
+          h("button", { class: "icon-button", "aria-label": "Copy embed", title: "Copy embed (paste it into a note)", onclick: () => void navigator.clipboard?.writeText(`![[${info.title}|${id}]]`).then(() => toast("Embed copied: paste it into a note.")) }, icon(Copy)),
           h("button", { class: "icon-button", "aria-label": "Export as W3C annotations", title: "Export as W3C annotations", onclick: () => void exportW3C(shell, r, t.body) }, icon(FileDown)),
           isArchived(r) ? null : h("button", { class: "icon-button", "aria-label": "Delete capture", title: "Delete (it goes to the archive, where you can restore it or delete it for good)", onclick: async () => {
             await session.flush();
