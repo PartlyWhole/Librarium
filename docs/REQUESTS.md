@@ -56,6 +56,19 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-032 · Changing a book's text size doesn't keep the margins
+> "increasing/decreases font size for book reader does not keep padding/margins"
+
+- **Changed:** larger or smaller text now keeps the page's margins and columns, as in Apple
+  Books; fewer (or more) words fit a line. Before, Readium scaled the margins with the text, and
+  larger text could switch from two columns to one very wide one.
+- **Use:** A− / A+ in Aa (or ⌘− / ⌘+).
+- **Code:** `src/reader/epub/settings.ts` (`toPreferences`).
+- **Decision:** a note added to 0046.
+- **Tested:** a WebKit check in a wide window: the margin (56 px), the text width and two
+  columns are unchanged at 130%. It fails without the fix.
+- **Left:** nothing.
+
 ### R-031 · Edit and delete captures; captures in lists and quotes look wrong
 > "I want to be able to edit and delete captures. Also, the markdown support of captures is
 > pretty iffy (see screenshots) * There's always a line of space above and below the capture

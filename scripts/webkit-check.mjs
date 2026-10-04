@@ -44,6 +44,7 @@ const checks = [
   ["EPUB: a selection gives the same CFI as before (captures keep their places)", r.epubSelection === "rarest epubcfi(/6/2!/4/4,/1:17,/1:23)"],
   ["EPUB: a saved capture is highlighted", r.epubMarkDrawn === 1],
   ["EPUB: showing a capture goes to its chapter", r.epubShowPlace === true && /^Chapter One/.test(r.epubShownAt)],
+  ["EPUB: larger text keeps the page's margins and columns (fewer words a line, as in Books)", Array.isArray(r.epubMargins) && r.epubMargins[0]?.pad === 56 && Math.abs(r.epubMargins[1]?.pad - 56) <= 2 && r.epubMargins[0].cols === r.epubMargins[1].cols && Math.abs(r.epubMargins[0].text - r.epubMargins[1].text) <= 24],
   ["EPUB: the dark theme applies and the setting is kept", r.epubDark === "rgb(28, 28, 30)" && r.epubSettingsSaved === "night"],
   ["EPUB says how many pages are left in the chapter", /page/i.test(r.epubPagesLeft)],
   ["EPUB: the place in the book is remembered", /^Chapter Two/.test(r.epubReopenedAt)],

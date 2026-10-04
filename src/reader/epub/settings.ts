@@ -46,6 +46,8 @@ export const THEMES: Record<Theme, { name: string; backgroundColor: string; text
 };
 
 const SPACING = { tight: 1.35, normal: 1.55, loose: 1.8 };
+/** The page's side margins on screen, in pixels, at any text size. */
+const GUTTER = 56;
 const WIDTH = { narrow: [45, 55, 65], medium: [50, 66, 80], wide: [60, 85, 100] } as const;
 
 /** The saved settings, each value checked; settings from the first version are carried over. */
@@ -82,7 +84,13 @@ export function themeOf(s: ReadingSettings): Theme {
 
 /** Settings as Readium preferences. */
 export function toPreferences(s: ReadingSettings): IEpubPreferences {
-  const [minimal, optimal, maximal] = WIDTH[s.width];
+  // Readium sizes text with CSS zoom on the page, which scales the margins too, and measures
+  // line length in characters, so larger text took the margins and could jump to one wide
+  // column. As in Books, the page keeps its margins and column and fewer words fit: the margin
+  // is divided by the size, and above 100% so are the line lengths (below it, Readium already
+  // compensates).
+  const grow = Math.max(1, s.fontSize);
+  const [minimal, optimal, maximal] = WIDTH[s.width].map((n) => Math.max(12, Math.round(n / grow))) as [number, number, number];
   const { backgroundColor, textColor, linkColor } = THEMES[themeOf(s)];
   return {
     fontSize: s.fontSize,
@@ -95,9 +103,9 @@ export function toPreferences(s: ReadingSettings): IEpubPreferences {
     columnCount: s.columns === "one" ? 1 : null,
     textAlign: s.justify ? ("justify" as IEpubPreferences["textAlign"]) : null,
     // Roomy margins, as in Books.
-    pageGutter: 56,
-    scrollPaddingTop: 24,
-    scrollPaddingBottom: 48,
+    pageGutter: Math.round(GUTTER / s.fontSize),
+    scrollPaddingTop: Math.round(24 / s.fontSize),
+    scrollPaddingBottom: Math.round(48 / s.fontSize),
     backgroundColor,
     textColor,
     linkColor,

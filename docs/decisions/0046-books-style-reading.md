@@ -40,6 +40,17 @@ chrome out of the way:
   - under Customise: line spacing, line length, one or two pages, justify.
   Settings from the first version are carried over.
 
+## Later: margins at any text size (R-032)
+
+Readium sizes text with CSS `zoom` on the page body, which scales the margins with it, and
+measures line length in characters. So larger text ate the margins and could jump from two
+columns to one wide one. As in Books, the page keeps its margins and columns and fewer words
+fit a line:
+- the page margin and scroll padding are divided by the text size;
+- above 100%, so are the line lengths (below it, Readium compensates itself).
+A WebKit check in a wide window keeps the on-screen margin, the text width and the column count
+the same at 130%. It fails without the fix.
+
 ## Consequences
 
 - WebKit checks cover immersive chrome, the arrows, the contents popover marking where you are,

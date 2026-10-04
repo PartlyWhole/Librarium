@@ -252,6 +252,31 @@ async function run() {
   await waitFor(() => /^Chapter One/.test(epub.view.position()));
   results.epubShownAt = epub.view.position();
 
+  // Larger text keeps the page's margins (fewer words a line, as in Books).
+  step("epub margins");
+  // The page's margin and text width as shown: Readium sizes text with CSS zoom on the body,
+  // so what is on screen is the body's CSS size times its zoom.
+  const marginOf = () => {
+    const d = frameDocs().find((x) => x.title === "Chapter One" || x.title === "Chapter Two");
+    if (!d) return null;
+    const cs = getComputedStyle(d.body);
+    const z = Number.parseFloat(cs.zoom) || 1;
+    const pad = Number.parseFloat(cs.paddingLeft) * z;
+    const text = (Number.parseFloat(cs.maxWidth) - 2 * Number.parseFloat(cs.paddingLeft)) * z;
+    return { pad: Math.round(pad), text: Math.round(text), cols: getComputedStyle(d.documentElement).columnCount };
+  };
+  // In a wide window, where the column (not the window) sets the margins.
+  stage.style.width = "1500px";
+  await pause(600);
+  const marginBefore = marginOf();
+  epub.view.zoomIn();
+  epub.view.zoomIn();
+  epub.view.zoomIn();
+  await pause(900);
+  results.epubMargins = [marginBefore, marginOf()];
+  epub.view.zoomReset();
+  stage.style.width = "";
+  await pause(600);
   step("epub settings");
   (controls.querySelector(".epub-aa") as HTMLButtonElement).click();
   const epubPanel = document.querySelector(".epub-settings");
