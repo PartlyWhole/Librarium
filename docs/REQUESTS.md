@@ -63,6 +63,7 @@ How urgent (optional):
   - The whole kit is kept in the project, so another colourway is a quick swap.
 - **Use:** the development app shows it after its next rebuild. The built `Librarium.app`
   gets it at the next `npm run build`.
+- **Decision:** 0042.
 - **Code:** `assets/brand/` (the kit, `app-icon-macos.svg`, and a README on regenerating);
   `src-tauri/icons/`; `src/kit/logo.ts`.
 - **Tested:** all interface tests pass. The icon itself shows only in the real app.
