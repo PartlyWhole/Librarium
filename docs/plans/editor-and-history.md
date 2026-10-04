@@ -51,7 +51,7 @@ Markdown syntax, `links.ts` parses `[[label|id]]` (shared fixture with the Rust 
   `selectNextOccurrence`), ⌥-drag rectangular selection, ⌥-click adds a cursor.
 - Tests: each command on fixtures (toggle on, toggle off, multi-range).
 
-### E3. Lists ✅ when done
+### E3. Lists ✅
 
 - Tab / ⇧Tab on a list item move it **with its children**, by the width of the parent's
   marker (so `1.` children align); ordered lists renumber after indent, outdent, Enter and
