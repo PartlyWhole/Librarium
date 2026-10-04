@@ -52,15 +52,18 @@ How urgent (optional):
 
 ### R-025 · The app icon
 > "add this" (librarium-icon-kit.zip) · "sorry, this is better"
-> (librarium-refined-icon-kit.zip)
+> (librarium-refined-icon-kit.zip) · "I still see this" (the old purple Dock icon) ·
+> "This is better" (librarium-bold-icon-kit.zip)
 
 - **Changed:**
-  - Librarium's icon is the refined kit's **Evergreen & gold** (gold book-and-house on deep
+  - Librarium's icon is the bold kit's **Evergreen & gold** (thicker strokes, re-centred; gold book-and-house on deep
     green), the kit's recommendation for the app icon.
   - It is placed on macOS's icon grid, with the standard transparent margin, so it sits the
     same size as other apps in the Dock.
   - The welcome screen shows the mark.
   - The whole kit is kept in the project, so another colourway is a quick swap.
+  - The old icon stayed in the Dock because the app wasn't rebuilt when its icons changed; it
+    now is (`src-tauri/build.rs`).
 - **Use:** the development app shows it after its next rebuild. The built `Librarium.app`
   gets it at the next `npm run build`.
 - **Decision:** 0042.

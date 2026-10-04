@@ -1,4 +1,4 @@
-# 0042. The app icon comes from the refined icon kit
+# 0042. The app icon comes from the bold icon kit
 
 - Status: accepted
 - Date: 2026-10-04
@@ -6,7 +6,8 @@
 
 ## Context and problem
 
-The user supplied an icon kit, then a refined one, with five colourways and exports for the
+The user supplied an icon kit, then a refined one, then a bold one (thicker strokes, the mark
+re-centred), which is used; with five colourways and exports for the
 web, desktop, Android and iOS. Librarium needs one app icon and a mark for its interface.
 
 ## Decision

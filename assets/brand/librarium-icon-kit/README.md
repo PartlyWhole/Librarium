@@ -1,6 +1,6 @@
 # Librarium icon kit
 
-The supplied book-and-library design has been redrawn as real SVG paths. Refined edition: house walls terminate at the page edges, the roof has more clearance, and gently softened corners and more balanced proportions improve clarity. The geometry is symmetrical and flat, with clean edges and no embedded bitmap. The SVGs remain editable. The four-pane window and intersecting house/book outlines are retained.
+The supplied book-and-library design has been redrawn as real SVG paths. Bold, centered edition: thicker 54-unit strokes and a corrected vertical placement. house walls terminate at the page edges, the roof has more clearance, and gently softened corners and more balanced proportions improve clarity. The geometry is symmetrical and flat, with clean edges and no embedded bitmap. The SVGs remain editable. The four-pane window and intersecting house/book outlines are retained.
 
 ## Colorways
 
@@ -17,7 +17,7 @@ Exact colors are in palette.json. masters/ includes transparent original-gold, b
 - logo.svg and logo-transparent-1024.png: transparent standalone mark.
 - app-icon.svg: opaque square icon. Let the operating system apply its own mask.
 - app-icon-rounded.svg and preview-rounded.png: rounded presentation artwork and desktop source.
-- png/: square PNG exports from 16 to 1024 pixels. The 16–32 pixel icons have slightly heavier strokes and a wider window gap for clarity.
+- png/: square PNG exports from 16 to 1024 pixels. The 16–32 pixel icons have heavier strokes and a wider window gap for clarity.
 - web/: favicon.svg, multi-resolution favicon.ico, apple-touch-icon.png, 192/512 icons, maskable icons, and a starter manifest.webmanifest. Adjust start_url for your deployment. Keep these files together or update the manifest paths.
 - desktop/: Windows ICO and macOS ICNS, plus the editable PNG iconset.
 - ios/AppIcon.appiconset/: iPhone, iPad and 1024-pixel marketing assets with Contents.json. PNGs are opaque RGB without alpha.

@@ -106,4 +106,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-03 | The side panel shows one view at a time (icons along its top: Links, Outline, History, Captures, About, Jobs); repeated jobs are grouped. | [0039](docs/decisions/0039-side-panel-one-view.md) |
 | 2026-10-03 | Images in notes are library items: pasted or dropped, imported, embedded as `![[title|id]]`, shown in place. | [0040](docs/decisions/0040-images-in-notes.md) |
 | 2026-10-04 | Web Crypto is hidden from pages being saved, so WebKit never asks the keychain. | [0041](docs/decisions/0041-no-web-crypto-when-saving.md) |
-| 2026-10-04 | The app icon is the refined kit's Evergreen & gold, padded to macOS's icon grid. | [0042](docs/decisions/0042-app-icon.md) |
+| 2026-10-04 | The app icon is the bold kit's Evergreen & gold, padded to macOS's icon grid. | [0042](docs/decisions/0042-app-icon.md) |

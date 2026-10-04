@@ -1,6 +1,6 @@
 # Librarium's icon
 
-- `librarium-icon-kit/`: the refined icon kit as supplied (2026-10-04), without its Android and
+- `librarium-icon-kit/`: the bold icon kit as supplied (2026-10-04; it replaced the refined kit: thicker strokes, the mark re-centred), without its Android and
   iOS folders. Five colourways (Parchment, Evergreen & gold, Midnight, Aubergine,
   Terracotta), masters (gold, black, white, currentColor), web and desktop exports, and its
   own README and `palette.json`.
