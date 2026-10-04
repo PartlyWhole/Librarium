@@ -15,6 +15,7 @@ import { linkCompletion, type LinkTarget } from "./complete";
 import { parseLinks } from "./links";
 import { formatKeymap, wrapOnType } from "./format";
 import { hangingIndent, listKeymap } from "./lists";
+import { clipboard, clipboardKeymap } from "./clipboard";
 
 let active: EditorView | null = null;
 
@@ -71,7 +72,8 @@ export function createEditor(o: EditorOptions): EditorView {
     markdownSupport(),
     livePreview({ titleOf: o.titleOf, embedsHandled: contributions.some((c) => c.handlesEmbeds) }),
     linkCompletion(o.targets),
-    keymap.of([...formatKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, ...listKeymap, indentWithTab]),
+    clipboard,
+    keymap.of([...formatKeymap, ...clipboardKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, ...listKeymap, indentWithTab]),
     hangingIndent,
     EditorView.contentAttributes.of({ "aria-label": o.label, "aria-multiline": "true", spellcheck: "true", autocorrect: "on" }),
     EditorState.readOnly.of(!!o.readOnly),

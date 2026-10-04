@@ -61,7 +61,7 @@ Markdown syntax, `links.ts` parses `[[label|id]]` (shared fixture with the Rust 
   text.
 - Tests: indent/outdent subtrees, renumbering, task toggling.
 
-### E4. Paste ✅ when done
+### E4. Paste ✅
 
 - **HTML pastes as Markdown** (headings, paragraphs, emphasis, links, lists, quotes, code,
   tables, images as their alt text and address), converted by our own small converter over
