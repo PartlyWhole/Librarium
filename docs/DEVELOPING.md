@@ -184,6 +184,10 @@ combobox). Every action must be in a menu (shell test).
   - Readium's progression is the distance scrolled over the distance that can be scrolled
     (the width less one page), and its text search can miss. To show a range, find it in the
     page and go to its page by progression (`showRange`).
+  - At a text size other than 100%, Readium zooms the page body, and WebKit reports positions
+    inside it in unzoomed units with the scroll added unscaled: on screen = (x + scroll) × zoom
+    − scroll (`zoomOf`). Check layouts by eye: `SNAPSHOT=out.png swift scripts/webkit-run.swift
+    URL 60` saves a picture of the page once it sets `window.__result`.
   - Readium turns pages on clicks in the outer quarters unless the `click`/`tap` listeners
     return true. It sets its container's width to the column; the host centres it.
   - Readium doesn't size its frames: the host's CSS must (they default to 300 × 150, which

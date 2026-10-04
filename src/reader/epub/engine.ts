@@ -400,7 +400,9 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
           const cfi = CFI.joinIndir(book.spine[f.index]!.cfi, CFI.fromRange(range));
           const b = f.el.getBoundingClientRect();
           const e = endOf(range);
-          return { text, chapter: f.index, cfi, end: e ? { x: e.x + b.left, y: e.y + b.top, bottom: e.bottom + b.top } : undefined };
+          const sx = (x: number) => onScreenX(f.doc, x) + b.left;
+          const sy = (y: number) => onScreenY(f.doc, y) + b.top;
+          return { text, chapter: f.index, cfi, end: e ? { x: sx(e.x), y: sy(e.y), bottom: sy(e.bottom) } : undefined };
         }
         return null;
       },
@@ -490,14 +492,15 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     function progressionOf(f: { doc: Document }, range: Range): number {
       const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
       const el = f.doc.scrollingElement ?? f.doc.documentElement;
+      const z = zoomOf(f.doc);
       if (settings.scroll) {
         const room = el.scrollHeight - el.clientHeight;
-        return room > 0 ? Math.min(1, Math.max(0, (rect.top + el.scrollTop - 24) / room)) : 0;
+        return room > 0 ? Math.min(1, Math.max(0, ((rect.top + el.scrollTop) * z - 24) / room)) : 0;
       }
       const page = el.clientWidth;
       const room = el.scrollWidth - page;
       if (room <= 0 || page <= 0) return 0;
-      const at = Math.floor((rect.left + el.scrollLeft) / page) * page;
+      const at = Math.floor(((rect.left + el.scrollLeft) * z) / page) * page;
       return Math.min(1, Math.max(0, (at + 0.5) / room));
     }
     return view;
@@ -514,6 +517,37 @@ interface Found {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * How much to scale positions measured inside a book page to get pixels. Readium sizes text
+ * with CSS zoom on the page body. WebKit then reports positions inside it in its own unzoomed
+ * units (with the scroll offset added unscaled: on screen = (x + scroll) × zoom − scroll, checked
+ * against a screenshot), while browsers following the newer zoom rules report pixels. Telling
+ * them apart: the body (spanning every column, or the whole height) measures the page's real
+ * scroll size divided by the zoom in the old model, and the scroll size itself in the new one.
+ */
+function zoomOf(doc: Document): number {
+  const body = doc.body;
+  if (!body) return 1;
+  const z = Number.parseFloat(getComputedStyle(body).zoom) || 1;
+  if (z === 1) return 1;
+  const el = doc.scrollingElement ?? doc.documentElement;
+  const b = body.getBoundingClientRect();
+  const wide = el.scrollWidth > el.clientWidth * 1.5;
+  const ratio = wide ? el.scrollWidth / (b.width || 1) : el.scrollHeight / (b.height || 1);
+  return Math.abs(ratio - z) < Math.abs(ratio - 1) ? z : 1;
+}
+/** A measured x (relative to the frame) as pixels on screen within the frame. */
+function onScreenX(doc: Document, x: number): number {
+  const el = doc.scrollingElement ?? doc.documentElement;
+  const z = zoomOf(doc);
+  return (x + el.scrollLeft) * z - el.scrollLeft;
+}
+function onScreenY(doc: Document, y: number): number {
+  const el = doc.scrollingElement ?? doc.documentElement;
+  const z = zoomOf(doc);
+  return (y + el.scrollTop) * z - el.scrollTop;
+}
 const hrefOf = (path: string) => path.split("/").map(encodeURIComponent).join("/");
 
 /** The last step's index of a CFI (`epubcfi(/6/4[id])` → 4). */

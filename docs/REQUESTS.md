@@ -56,6 +56,26 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-035 · Show doesn't work well at another text size
+> "When font size is different, show doesn't work well"
+
+- **Changed:** "Show" (and find) land on the right page at any text size.
+  - At another size, Readium zooms the book page. WebKit then reports positions inside it in
+    unzoomed units, with the scroll offset added unscaled. So jumps to a later page (most
+    clearly into another chapter) landed short; at 130%, paragraph 71 instead of 95.
+  - Positions are now converted to real pixels. Which model the browser uses is detected, not
+    assumed.
+  - The capture button by a selection is placed correctly at other sizes too.
+- **Code:** `src/reader/epub/engine.ts` (`zoomOf`, `onScreenX/Y`, `progressionOf`).
+- **Tested:**
+  - Screenshots of the real WebKit view (the WebKit runner can now save one: `SNAPSHOT=file.png`)
+    at 80%, 100% and 130%: the capture is on screen and highlighted.
+  - WebKit checks at 130% in a wide, two-column window, with jumps across chapters: find, Show,
+    and opening at a place with a saved size. They fail without the fix. My first versions of
+    these checks used the same wrong conversion and passed; they now use the conversion checked
+    against the screenshots.
+- **Left:** nothing.
+
 ### R-034 · Capture buttons feel unresponsive; "Show in the source" doesn't work well
 > "Buttons/links for captures ("Show"/"Show in the source", "Copy Embed", "Delete") feel pretty
 > unresponsive. Use small icons. · "Show"/"Show in the source" doesn't seem to work well.

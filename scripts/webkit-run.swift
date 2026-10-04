@@ -1,5 +1,6 @@
 // Loads a page in an offscreen WKWebView (the engine the app uses) and prints
 // `window.__result` as JSON once the page sets it. Usage: swift webkit-run.swift URL SECONDS
+// (with SNAPSHOT=file.png in the environment, it also saves a picture of the page then)
 import AppKit
 import WebKit
 
@@ -32,6 +33,16 @@ Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
     web.evaluateJavaScript("window.__result ? JSON.stringify(window.__result) : ('pending:' + document.readyState + ':' + document.title)") { value, error in
         if let s = value as? String, !s.hasPrefix("pending:") {
             print(s)
+            // With SNAPSHOT=path, saves what the page shows (for looking at a layout by eye).
+            if let path = ProcessInfo.processInfo.environment["SNAPSHOT"] {
+                web.takeSnapshot(with: nil) { image, _ in
+                    if let image = image, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
+                        try? png.write(to: URL(fileURLWithPath: path))
+                    }
+                    exit(0)
+                }
+                return
+            }
             exit(0)
         }
         if Date().timeIntervalSince(start) > timeout {

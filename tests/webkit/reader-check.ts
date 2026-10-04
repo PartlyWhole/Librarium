@@ -322,29 +322,116 @@ async function run() {
   // A long chapter: find goes to the page each match is on; a click on the page doesn't turn it;
   // in a wide window the page is centred.
   step("epub long");
-  const longBook = await open(epubEngine, "long.epub", "epub");
+  let longBook = await open(epubEngine, "long.epub", "epub");
   await waitFor(() => frameDocs().length > 0);
   await pause(400);
+  // Whether a range is on the page shown. Inside a zoomed page (another text size), WebKit
+  // measures in unzoomed units with the scroll added unscaled: on screen = (x + scroll) × zoom −
+  // scroll (checked against a screenshot).
+  const rangeOnPage = (f: HTMLIFrameElement, r: Range) => {
+    const d = f.contentDocument!;
+    const el = d.scrollingElement ?? d.documentElement;
+    const z0 = Number.parseFloat(getComputedStyle(d.body).zoom) || 1;
+    const bw = d.body.getBoundingClientRect().width || 1;
+    const z = z0 === 1 || Math.abs(el.scrollWidth / bw - z0) > Math.abs(el.scrollWidth / bw - 1) ? 1 : z0;
+    const b = r.getBoundingClientRect();
+    const left = (b.left + el.scrollLeft) * z - el.scrollLeft;
+    const right = (b.right + el.scrollLeft) * z - el.scrollLeft;
+    return b.width > 0 && left >= -1 && right <= f.clientWidth + 1;
+  };
   const shownFrame = () => [...stage.querySelectorAll("iframe")].find((f) => (f as HTMLIFrameElement).style.visibility !== "hidden" && (f as HTMLIFrameElement).contentDocument?.querySelector("p")) as HTMLIFrameElement | undefined;
   const nowOnPage = () => {
     const f = shownFrame();
     const reg = (f?.contentWindow as unknown as { CSS: { highlights?: Map<string, Set<Range>> } } | null)?.CSS.highlights;
     const r = reg?.get("lib-find-now") ? [...reg.get("lib-find-now")!][0] : undefined;
     if (!f || !r) return false;
-    const b = r.getBoundingClientRect();
-    return b.width > 0 && b.left >= 0 && b.right <= f.clientWidth + 1;
+    return rangeOnPage(f, r);
   };
   const findVisible: boolean[] = [];
   const first = await longBook.view.find("zephyrine");
   await pause(500);
   findVisible.push(nowOnPage());
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 4; i++) {
     await longBook.view.find("zephyrine", { again: true });
     await pause(500);
     findVisible.push(nowOnPage());
   }
   results.epubLongFind = { count: first.count, visible: findVisible };
+  // At another text size (Readium zooms the page), find and showing a place still land right,
+  // in a wide window (two columns a page).
   longBook.view.findClear();
+  stage.style.width = "1800px";
+  await pause(700);
+  longBook.view.zoomIn();
+  longBook.view.zoomIn();
+  longBook.view.zoomIn();
+  await pause(900);
+  const zoomedVisible: boolean[] = [];
+  await longBook.view.find("zephyrine");
+  await pause(600);
+  zoomedVisible.push(nowOnPage());
+  for (let i = 0; i < 4; i++) {
+    await longBook.view.find("zephyrine", { again: true });
+    await pause(600);
+    zoomedVisible.push(nowOnPage());
+  }
+  results.epubZoomedFind = zoomedVisible;
+  longBook.view.findClear();
+  // Showing a capture at this size: select the last "zephyrine", take its place as a capture
+  // does, go back to the start, then show it.
+  const pendingOnPage = () => {
+    const f = shownFrame();
+    const reg = (f?.contentWindow as unknown as { CSS: { highlights?: Map<string, Set<Range>> } } | null)?.CSS.highlights;
+    const r = reg?.get("lib-pending") ? [...reg.get("lib-pending")!][0] : undefined;
+    if (!f || !r) return false;
+    return rangeOnPage(f, r);
+  };
+  const zdoc = shownFrame()?.contentDocument;
+  let zcfi: string | undefined;
+  if (zdoc) {
+    const w = zdoc.createTreeWalker(zdoc.body, NodeFilter.SHOW_TEXT);
+    let last: Range | null = null;
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const i = (n as Text).data.indexOf("zephyrine");
+      if (i >= 0) {
+        last = zdoc.createRange();
+        last.setStart(n, i);
+        last.setEnd(n, i + 9);
+      }
+    }
+    if (last) {
+      zdoc.getSelection()!.removeAllRanges();
+      zdoc.getSelection()!.addRange(last);
+      zcfi = longBook.view.selection?.()?.cfi;
+      longBook.view.clearSelection?.();
+    }
+  }
+  await longBook.view.find("Paragraph 1.");
+  longBook.view.findClear();
+  await pause(500);
+  longBook.view.setMarks?.(zcfi ? [{ id: "z", boxes: [], cfi: zcfi }] : []);
+  await longBook.view.showPlace?.([{ type: "TextQuoteSelector", exact: "zephyrine" }, { type: "FragmentSelector", value: zcfi ?? "" }]);
+  await pause(700);
+  results.epubZoomedShow = { cfi: zcfi ?? null, onPage: pendingOnPage(), at: longBook.view.position(), zoom: getComputedStyle(shownFrame()!.contentDocument!.body).zoom };
+  longBook.view.setMarks?.([]);
+  // Opened with a place at a saved text size (Show from a note or another tab): the place is
+  // asked for as soon as the book opens.
+  longBook.view.destroy();
+  const sized = new Map<string, unknown>([["reader.epub", { fontSize: 1.3 }]]);
+  const reopenedLong = await open(epubEngine, "long.epub", "epub", undefined, { get: (k) => sized.get(k), set: (k, v) => sized.set(k, v) });
+  reopenedLong.view.setMarks?.(zcfi ? [{ id: "z", boxes: [], cfi: zcfi }] : []);
+  await reopenedLong.view.showPlace?.([{ type: "TextQuoteSelector", exact: "zephyrine" }, { type: "FragmentSelector", value: zcfi ?? "" }]);
+  await pause(1200);
+  results.epubOpenedAtPlaceCols = getComputedStyle(shownFrame()!.contentDocument!.documentElement).columnCount;
+  results.epubOpenedAtPlace = { onPage: pendingOnPage(), at: reopenedLong.view.position(), zoom: getComputedStyle(shownFrame()!.contentDocument!.body).zoom };
+  reopenedLong.view.destroy();
+  stage.style.width = "";
+  const longAgain = await open(epubEngine, "long.epub", "epub");
+  await waitFor(() => frameDocs().length > 0);
+  await pause(400);
+  longBook = longAgain;
+  longBook.view.zoomReset();
+  await pause(600);
   const atBefore = longBook.view.position();
   const fdoc = shownFrame()?.contentDocument;
   const fw = shownFrame()?.clientWidth ?? 0;

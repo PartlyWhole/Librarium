@@ -119,17 +119,20 @@ def fixed_epub(path):
             z.writestr(f"OPS/p{i}.xhtml", f'<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Page {i}</title><meta name="viewport" content="width=600, height=800"/></head><body style="margin:0;width:600px;height:800px;background:#eee"><p style="font-size:48px;margin:40px">Page {i} of the picture book.</p></body></html>')
 
 def long_epub(path):
-    """One long chapter (many pages), with a rare word on several of them (for find)."""
-    paras = []
-    for i in range(1, 121):
-        extra = " The zephyrine light returned." if i in (8, 60, 112) else ""
-        paras.append(f"<p>Paragraph {i}. " + " ".join(WORDS[(i * 3 + j) % len(WORDS)] for j in range(60)) + f".{extra}</p>")
+    """Two long chapters (many pages each), with a rare word on several pages (for find)."""
+    def chapter(title, marks):
+        paras = []
+        for i in range(1, 121):
+            extra = " The zephyrine light returned." if i in marks else ""
+            paras.append(f"<p>Paragraph {i}. " + " ".join(WORDS[(i * 3 + j) % len(WORDS)] for j in range(60)) + f".{extra}</p>")
+        return f'<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>{title}</title></head><body><h1>{title}</h1>' + "".join(paras) + '</body></html>'
     with zipfile.ZipFile(path, "w") as z:
         z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", compress_type=zipfile.ZIP_STORED)
         z.writestr("META-INF/container.xml", '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')
-        z.writestr("book.opf", '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">long-book</dc:identifier><dc:title>Long Book</dc:title><dc:language>en</dc:language><meta property="dcterms:modified">2026-10-04T00:00:00Z</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="c" href="c.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c"/></spine></package>')
-        z.writestr("nav.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol><li><a href="c.xhtml">The Long Chapter</a></li></ol></nav></body></html>')
-        z.writestr("c.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>The Long Chapter</title></head><body><h1>The Long Chapter</h1>' + "".join(paras) + '</body></html>')
+        z.writestr("book.opf", '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">long-book</dc:identifier><dc:title>Long Book</dc:title><dc:language>en</dc:language><meta property="dcterms:modified">2026-10-04T00:00:00Z</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="c" href="c.xhtml" media-type="application/xhtml+xml"/><item id="d" href="d.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c"/><itemref idref="d"/></spine></package>')
+        z.writestr("nav.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol><li><a href="c.xhtml">The Long Chapter</a></li><li><a href="d.xhtml">The Second Chapter</a></li></ol></nav></body></html>')
+        z.writestr("c.xhtml", chapter("The Long Chapter", (8, 60, 112)))
+        z.writestr("d.xhtml", chapter("The Second Chapter", (30, 95)))
 
 styled_epub(OUT / "styled.epub")
 fixed_epub(OUT / "fixed.epub")
