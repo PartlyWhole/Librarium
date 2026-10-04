@@ -61,13 +61,17 @@ export class Router {
   }
 
   /** Goes to a page in the active tab (or a new one: `newTab`, `background` to stay here). */
-  go(page: string, params: Record<string, string> = {}, opts: { replace?: boolean; newTab?: boolean; background?: boolean } = {}): void {
+  /**
+   * Goes to a route. `again` asks for it even if it is already shown (e.g. "show this place"
+   * after the reader has moved on): the page is told again.
+   */
+  go(page: string, params: Record<string, string> = {}, opts: { replace?: boolean; newTab?: boolean; background?: boolean; again?: boolean } = {}): void {
     const r = { page, params };
     // Already shown in another tab: that tab comes forward (at the place asked for).
     const other = this.list.findIndex((t, i) => (opts.newTab || i !== this.at) && t.index >= 0 && placeOf(t.stack[t.index]!) === placeOf(r));
     if (other >= 0 && !opts.replace) {
       const t = this.list[other]!;
-      if (!sameRoute(t.stack[t.index]!, r)) t.stack[t.index] = r;
+      if (opts.again || !sameRoute(t.stack[t.index]!, r)) t.stack[t.index] = r;
       if (!opts.background) this.at = other;
       this.sync();
       return;
@@ -80,7 +84,13 @@ export class Router {
       return;
     }
     const t = this.tab;
-    if (t.index >= 0 && sameRoute(t.stack[t.index]!, r)) return;
+    if (t.index >= 0 && sameRoute(t.stack[t.index]!, r)) {
+      if (opts.again) {
+        t.stack[t.index] = r;
+        this.sync();
+      }
+      return;
+    }
     if (opts.replace && t.index >= 0) t.stack[t.index] = r;
     else {
       t.stack = t.stack.slice(0, t.index + 1);

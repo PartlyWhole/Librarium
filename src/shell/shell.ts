@@ -24,7 +24,7 @@ import type { ShellApi, StatusBar } from "./api";
 import { refreshMenu } from "./menu";
 import { Prefs } from "./prefs";
 import { Records } from "./records";
-import { Router, sameRoute, type Route, type SavedTabs } from "./router";
+import { Router, placeOf, sameRoute, type Route, type SavedTabs } from "./router";
 import { renderNewTab, tabBar } from "./tabs";
 import { guardLinks } from "./links";
 import { logo } from "../kit/logo";
@@ -146,7 +146,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     openRecord(id, params = {}, opts = {}) {
       const r = records.get(id);
       const page = r ? openers.get(r.kind) : undefined;
-      if (page) router.go(page, { id, ...params }, { newTab: opts.newTab });
+      if (page) router.go(page, { id, ...params }, { newTab: opts.newTab, again: opts.again });
       else status.show("That record can't be opened here.");
     },
     editorExtensions,
@@ -177,6 +177,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     scroll: number;
     here: { kind: string; folder: string } | null;
     dispose: (() => void) | void;
+    update?: (params: Record<string, string>) => boolean;
   }
   const mounted = new Map<string, Mounted>();
   let shownTab = "";
@@ -381,10 +382,18 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
         leaving.here = here.peek();
       }
       let m = mounted.get(tab);
-      if (m && (m.page !== page || !sameRoute(m.route, r))) {
+      // The same record somewhere else in it (or asked for again): a page that can, moves there
+      // without rendering again (a document keeps its place and needn't reload).
+      const inPlace = m && m.page === page && m.update && placeOf(m.route) === placeOf(r) && m.route !== r;
+      if (inPlace && m!.update!(r.params)) {
+        m!.route = r;
+        // The router forgets a tab's title on a new route; the page isn't rendered again to set it.
+        if (m!.title) router.setTitle(m!.title, tab);
+      }
+      else if (m && (m.page !== page || !sameRoute(m.route, r))) {
         unmount(tab, m);
         m = undefined;
-      }
+      } else if (m) m.route = r;
       for (const [id, x] of mounted) x.host.hidden = id !== tab;
       if (!m) {
         const host = h("div", { class: "ws-page" });
@@ -394,7 +403,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
         m = mine;
         if (tab !== shownTab) here.set(null);
         // A page renders untracked: what it reads must not re-render it (it subscribes itself).
-        mine.dispose = p.render(host, r.params, {
+        const made = p.render(host, r.params, {
           shell,
           setTitle: (t) => {
             mine.title = t;
@@ -406,6 +415,11 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
             if (router.active.peek() === tab) headerActions.replaceChildren(...nodes);
           },
         });
+        if (typeof made === "function") mine.dispose = made;
+        else if (made) {
+          mine.dispose = made.dispose?.bind(made);
+          mine.update = made.update?.bind(made);
+        }
       } else if (tab !== shownTab) here.set(m.here);
       if (tab !== shownTab) statusContext.set("");
       showTitle(m.title);

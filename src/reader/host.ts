@@ -123,6 +123,19 @@ export interface PlaceSelector {
   value?: string;
   exact?: string;
   refinedBy?: PlaceSelector;
+  /** With type "librarium:boxes": where the place was drawn (percent of its page). */
+  boxes?: Box[];
+}
+
+/** The box around a place's drawn boxes on one page (the first page they are on). */
+export function boxesPlace(selectors: PlaceSelector[]): { page?: number; region: { x: number; y: number; w: number; h: number } } | null {
+  const boxes = selectors.find((s) => s.type === "librarium:boxes")?.boxes;
+  if (!boxes?.length) return null;
+  const page = boxes[0]!.page;
+  const on = boxes.filter((b) => b.page === page);
+  const x = Math.min(...on.map((b) => b.x));
+  const y = Math.min(...on.map((b) => b.y));
+  return { page, region: { x, y, w: Math.max(...on.map((b) => b.x + b.w)) - x, h: Math.max(...on.map((b) => b.y + b.h)) - y } };
 }
 
 /** Parses "page=3" (RFC 8118). */

@@ -58,6 +58,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .icon-button:hover { background: var(--hover); color: var(--ink); }
 .icon-button:active { background: var(--active); }
+.icon-button.small { width: 24px; height: 24px; }
+.icon-button.destructive:hover { color: #b42318; }
+:root[data-theme="dark"] .icon-button.destructive:hover { color: #ff8a80; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .icon-button.destructive:hover { color: #ff8a80; } }
+.capture-tools { gap: 2px; align-items: center; }
 .icon-button:disabled { opacity: 0.35; background: transparent; }
 .icon-button.current { color: var(--accent-text); }
 .icon { display: block; flex: none; }
@@ -453,9 +458,6 @@ body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6
 .embed-edit { margin-left: auto; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: var(--small); padding: 0 4px; border-radius: var(--r1); cursor: pointer; opacity: 0; transition: opacity 0.15s; }
 .embed:hover .embed-edit, .embed-edit:focus-visible { opacity: 1; }
 .embed-edit:hover { color: var(--accent-text); background: var(--hover); }
-.destructive-link { color: #b42318; }
-:root[data-theme="dark"] .destructive-link { color: #ff8a80; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .destructive-link { color: #ff8a80; } }
 /* An embed in a line of writing fills the rest of the line beside its marker (a bullet, a quote
    bar), instead of breaking the line into an empty line above and below; it doesn't inherit a
    list's hanging indent. */

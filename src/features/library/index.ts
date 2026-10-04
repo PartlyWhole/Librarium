@@ -342,6 +342,17 @@ export function library(shell: ShellApi): void {
       const findCount = h("span", { class: "muted small find-count", "aria-live": "polite" });
       let view: ReaderView | null = null;
       let alive = true;
+      // A place asked for before the document opened.
+      let pending: Record<string, string> | null = null;
+      const goTo = (v: ReaderView, p: Record<string, string>) => {
+        if (p.place) {
+          try {
+            void v.showPlace?.(JSON.parse(p.place));
+          } catch {
+            /* not a place */
+          }
+        } else if (p.at) v.goToTextOffset?.(Number(p.at));
+      };
       const btn = (node: Parameters<typeof icon>[0], label: string, run: () => void) => h("button", { class: "icon-button", "aria-label": label, title: label, onclick: run }, icon(node));
       const find = async (again = false, back = false) => {
         const q = findInput.value.trim();
@@ -409,13 +420,8 @@ export function library(shell: ShellApi): void {
               const d = t.mount(tools, { source: r, view: v, text, part, aside });
               if (typeof d === "function") toolDisposers.push(d);
             }
-            if (params.place) {
-              try {
-                void v.showPlace?.(JSON.parse(params.place));
-              } catch {
-                /* not a place */
-              }
-            } else if (params.at) v.goToTextOffset?.(Number(params.at));
+            goTo(v, pending ?? params);
+            pending = null;
           },
           (e) => alive && replace(stage, h("p", { class: "empty" }, `This item couldn’t be opened: ${String(e?.message ?? e)}`)),
         );
@@ -423,11 +429,21 @@ export function library(shell: ShellApi): void {
         findInput.focus();
         findInput.select();
       };
-      return () => {
-        alive = false;
-        toolDisposers.forEach((d) => d());
-        view?.destroy();
-        host.classList.remove("reader-page");
+      return {
+        dispose() {
+          alive = false;
+          toolDisposers.forEach((d) => d());
+          view?.destroy();
+          host.classList.remove("reader-page");
+        },
+        // Another place in the same item (Show in the source, a search hit): go there in the open
+        // document instead of opening it again. Another snapshot needs a fresh page.
+        update(next) {
+          if ((next.snapshot ?? "") !== (params.snapshot ?? "")) return false;
+          if (view) goTo(view, next);
+          else pending = next;
+          return true;
+        },
       };
     },
   });

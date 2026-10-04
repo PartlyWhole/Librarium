@@ -334,3 +334,54 @@ describe("editing and deleting captures", () => {
     expect(view.contentDOM.querySelector(".embed .badge")?.textContent).toBe("In the archive");
   });
 });
+
+describe("showing a capture in its source", () => {
+  it("moves the open document to the place (no reopening), again when asked again, by where it was drawn", async () => {
+    const { shell, src } = await boot(true);
+    // A fake reader for PDFs, counting how often it opens and where it is asked to go.
+    const engine = shell.readerEngines.get("pdf")!;
+    const original = engine.open;
+    let opened = 0;
+    const places: unknown[] = [];
+    engine.open = async () => {
+      opened++;
+      return fakeView(() => null, { showPlace: async (s) => (places.push(s), true) }).view;
+    };
+    try {
+      const sel: Sel = { text: "It avoids shock", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] };
+      const f = fakeView(() => sel);
+      const t = mountTool(shell, src, f.view);
+      t.capture();
+      await wait(30);
+      button(t.aside, "Save capture").click();
+      await wait(60);
+      t.dispose();
+      const cap = shell.records.list("capture")[0]!;
+      shell.router.go("item", { id: src.id });
+      await wait(60);
+      expect(opened).toBe(1);
+      // The Captures panel: small icon buttons, named.
+      shell.showPanelSection("captures");
+      await wait(60);
+      const tools = document.querySelector(".side-panel .capture-tools")!;
+      expect([...tools.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"))).toEqual(["Show in the source", "Copy embed", "Delete"]);
+      const show = tools.querySelector('[aria-label="Show in the source"]') as HTMLButtonElement;
+      show.click();
+      await wait(60);
+      expect(opened).toBe(1);
+      expect(places).toHaveLength(1);
+      expect((places[0] as { type: string; boxes?: unknown }[]).find((s) => s.type === "librarium:boxes")?.boxes).toEqual([{ page: 1, x: 10, y: 5, w: 20, h: 2 }]);
+      // Asked again (after reading on), it goes there again.
+      show.click();
+      await wait(60);
+      expect(opened).toBe(1);
+      expect(places).toHaveLength(2);
+      expect(shell.router.current().params.id).toBe(src.id);
+      // The tab keeps its title.
+      expect(shell.router.tabs().find((x) => x.route.params.id === src.id)?.title).toBe("The Technological Society");
+      void cap;
+    } finally {
+      engine.open = original;
+    }
+  });
+});

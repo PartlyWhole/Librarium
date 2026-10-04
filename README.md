@@ -112,3 +112,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-04 | EPUBs are read with Readium, served from memory (no server); captures keep their CFIs; reading settings and places per device. | [0045](docs/decisions/0045-epub-readium.md) |
 | 2026-10-04 | Books read like Apple Books: immersive toolbar, running head, pages left in chapter, edge arrows and swipes, a Books-style Aa panel. | [0046](docs/decisions/0046-books-style-reading.md) |
 | 2026-10-04 | Captures can be renamed and deleted (to the archive, with Undo) from the page, menus and highlights; embeds sit inside list items and quotes. | [0047](docs/decisions/0047-editing-deleting-captures.md) |
+| 2026-10-04 | Showing a place (a capture's) moves the open document there without reopening it; PDFs go by where it was drawn. | [0048](docs/decisions/0048-showing-a-place-in-place.md) |

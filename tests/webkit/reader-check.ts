@@ -106,6 +106,18 @@ async function run() {
   results.pdfPlace = await pdf.view.showPlace?.([{ type: "FragmentSelector", value: "page=3", refinedBy: { type: "FragmentSelector", value: "xywh=percent:10,10,30,5" } }]);
   await new Promise((r) => setTimeout(r, 300));
   results.pdfPlaceMarked = !!stage.querySelector(".region-mark") && pdf.view.position().startsWith("Page 3");
+  // A capture's place by where it was drawn: straight to its page, outlined there.
+  step("pdf place by boxes");
+  stage.querySelectorAll(".region-mark").forEach((n) => n.remove());
+  results.pdfPlaceByBoxes = await pdf.view.showPlace?.([{ type: "TextQuoteSelector", exact: "not in the text at all" }, { type: "librarium:boxes", boxes: [{ page: 42, x: 10, y: 30, w: 60, h: 2 }, { page: 42, x: 10, y: 33, w: 40, h: 2 }] }]);
+  await new Promise((r) => setTimeout(r, 400));
+  const mark42 = stage.querySelector(".region-mark") as HTMLElement | null;
+  results.pdfPlaceByBoxesAt = { position: pdf.view.position(), page: mark42?.closest(".page")?.getAttribute("data-page-number") ?? null, visible: (() => {
+    if (!mark42) return false;
+    const m = mark42.getBoundingClientRect();
+    const c = stage.getBoundingClientRect();
+    return m.top >= c.top && m.bottom <= c.bottom;
+  })() };
   step("pdf find");
   results.pdfFind = await pdf.view.find("Line 7 of page 42");
   // The selectable text lies exactly over the drawn page (no border between them), in words.

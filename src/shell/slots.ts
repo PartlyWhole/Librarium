@@ -25,8 +25,17 @@ export interface Page {
   ribbon?: number;
   /** Opens this page; registered as an action `go.<id>`. */
   keys?: string;
-  /** Renders into `host`; returns a disposer. */
-  render(host: HTMLElement, params: Record<string, string>, ctx: PageContext): (() => void) | void;
+  /**
+   * Renders into `host`; returns a disposer, or a handle whose `update` takes new params for the
+   * same record without rendering again (true if it did; false to be rendered afresh).
+   */
+  render(host: HTMLElement, params: Record<string, string>, ctx: PageContext): (() => void) | void | PageHandle;
+}
+
+export interface PageHandle {
+  dispose?(): void;
+  /** New params for the same record (e.g. a place in it): handled in place, or false. */
+  update?(params: Record<string, string>): boolean;
 }
 
 export interface PageContext {
@@ -159,7 +168,8 @@ export interface ShellApi {
   folder: Signal<LibraryStatus | null>;
   /** Opens a record on the page registered for its kind (with optional extra params), in the
    * active tab or a new one. */
-  openRecord(id: string, params?: Record<string, string>, opts?: { newTab?: boolean }): void;
+  /** Opens a record; `again` re-asks for a place in it even if it is already shown there. */
+  openRecord(id: string, params?: Record<string, string>, opts?: { newTab?: boolean; again?: boolean }): void;
   /** The highest change sequence number the index has applied. */
   indexed: Signal<number>;
   /** shell.editor-extensions */

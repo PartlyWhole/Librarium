@@ -25,7 +25,7 @@ class EmbedWidget extends WidgetType {
       s.title = "This capture can’t be found";
       return s;
     }
-    const el = renderer.render(r, (id, params) => this.shell.openRecord(id, params));
+    const el = renderer.render(r, (id, params) => this.shell.openRecord(id, params, { again: true }));
     el.classList.add("cm-embed");
     return el;
   }

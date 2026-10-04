@@ -131,8 +131,9 @@ Rules that keep it honest:
   collisions rejected), prefs (per device), records cache (kept current by change events),
   undo for app actions, jobs UI.
 - **Tabs and navigation** (`router.ts`, `tabs.ts`, 0034): each tab has its own history and a
-  living page (hidden when another tab shows); `router.go(page, params, {newTab})`; tabs are
-  restored at start.
+  living page (hidden when another tab shows); `router.go(page, params, {newTab, again})`;
+  tabs are restored at start. A page can return `{ dispose, update }` to take new params for
+  the same record without rendering again (0048); the item page moves its reader.
 - **Folders service** (`src/shell/folders/`, 0033): Notes and Library add themselves as
   folder spaces and get a Finder-like page (list/icons, sort, filter, selection, renaming,
   context menus, a selection bar) and a sidebar tree. Dragging uses pointer events

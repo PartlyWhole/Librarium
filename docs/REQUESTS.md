@@ -56,6 +56,41 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-034 · Capture buttons feel unresponsive; "Show in the source" doesn't work well
+> "Buttons/links for captures ("Show"/"Show in the source", "Copy Embed", "Delete") feel pretty
+> unresponsive. Use small icons. · "Show"/"Show in the source" doesn't seem to work well.
+> Please diagnose issue(s)"
+
+- **Diagnosis:**
+  1. **The source reopened from scratch.** "Show" changed the route's place, and the app treated
+     any change as a new page: the whole PDF or book was opened again (slow, and you lost your
+     place) before it moved to the capture.
+  2. **Asking twice did nothing.** Showing the same capture again (after you'd read on) was the
+     same route, so it was ignored.
+  3. **PDFs went to the top of the page,** then searched for the quote. A saved web page is one
+     very tall page, the search misses words with "ff"/"fi" (R-028), and it finds the first
+     occurrence anywhere, so it often didn't reach the passage.
+- **Changed:**
+  - "Show" moves the document that is already open to the capture, with no reload. It works
+    every time, even for the same capture again.
+  - In PDFs, "Show" goes straight to where the capture was drawn on the page and outlines it.
+    The quote search is only a fallback, for captures made before boxes were kept. In books it
+    goes to the exact place (R-033).
+  - The capture buttons are small icons with tooltips: Show in the source (target), Copy embed,
+    Delete. They're in the Captures panel and on the capture page.
+- **Code:** `src/shell/shell.ts` and `src/shell/slots.ts` (pages can take a new place in place:
+  `PageHandle.update`), `src/shell/router.ts` (`again`), `src/features/library/index.ts` (the
+  item page's `update`), `src/features/captures/index.ts` (icons, places with boxes),
+  `src/reader/pdf.ts` and `src/reader/host.ts` (`boxesPlace`).
+- **Decision:** 0048.
+- **Tested:**
+  - An interface test: the source opens once; Show moves it there and again on a second click;
+    the place carries the boxes; the tab keeps its title; the panel's buttons are the three named
+    icons.
+  - A WebKit check: a PDF goes to page 42 with the passage outlined on screen, by its boxes,
+    when its quote can't be found.
+- **Left:** nothing.
+
 ### R-033 · Book page not centred; clicks turn pages; find lands on the wrong page
 > "Page is not automatically centered (see photo) · Clicking on page should not navigate to
 > next or prev page (only clicking the arrows, or left/right key) · The find tool doesn't seem

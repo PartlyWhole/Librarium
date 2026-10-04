@@ -10,7 +10,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { EventBus, PDFFindController, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { h } from "../kit/dom";
-import { boxesIn, snapToWords, drawMarks, dragRect, endOf, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
+import { boxesIn, boxesPlace, snapToWords, drawMarks, dragRect, endOf, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 import { advancesOf, splitIntoWords, type Advance, type FontData } from "./pdf-words";
 
@@ -222,6 +222,14 @@ export const pdfEngine: ReaderEngine = {
       },
       async showPlace(selectors) {
         await pagesReady;
+        // Where it was drawn: straight there, outlined (a text search can miss or find another).
+        const drawn = boxesPlace(selectors);
+        if (drawn?.page && drawn.page >= 1 && drawn.page <= doc.numPages) {
+          viewer.currentPageNumber = drawn.page;
+          marked = { page: drawn.page, region: drawn.region };
+          drawMark(true);
+          return true;
+        }
         const page = pageOf(selectors);
         if (!page || page < 1 || page > doc.numPages) return false;
         viewer.currentPageNumber = page;

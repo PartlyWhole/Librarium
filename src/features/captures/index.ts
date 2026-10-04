@@ -19,7 +19,7 @@ import type { RecordText } from "../../generated/RecordText";
 import type { StoredText } from "../../generated/StoredText";
 import type { Written } from "../../generated/Written";
 import { embedExtension } from "./embeds";
-import { Highlighter, Crop, Quote, FileDown, X, Trash2 } from "lucide";
+import { Highlighter, Crop, Quote, FileDown, X, Trash2, Copy, LocateFixed } from "lucide";
 import { contextMenu } from "../../kit/menu";
 import type { Box } from "../../reader/host";
 
@@ -28,6 +28,10 @@ const F = { source: "captures.source", quote: "captures.quote", locator: "captur
 const PDF_PAGE = "http://tools.ietf.org/rfc/rfc8118";
 const MEDIA = "http://www.w3.org/TR/media-frags/";
 const CFI = "http://www.idpf.org/epub/linking/cfi/epub-cfi.html";
+/** A small icon button with its name as a tooltip (and for assistive technology). */
+function iconButton(node: Parameters<typeof icon>[0], label: string, run: () => void, destructive = false): HTMLButtonElement {
+  return h("button", { type: "button", class: `icon-button small${destructive ? " destructive" : ""}`, title: label, "aria-label": label, onclick: run }, icon(node, 15));
+}
 /** Archived records carry this field (set by the archive feature). */
 const ARCHIVED = "archive.at";
 const isArchived = (r: RecordInfo | undefined) => r?.fields[ARCHIVED] != null;
@@ -71,7 +75,7 @@ interface Anchor {
   id: string;
   source: string;
   snapshot?: string | null;
-  parts: { selector: Selector[]; region?: string }[];
+  parts: { selector: Selector[]; region?: string; boxes?: Box[] }[];
 }
 
 export type PartStatus = { status: "found" | "moved" | "lost" | "region"; start?: number; end?: number };
@@ -111,7 +115,7 @@ export function captures(shell: ShellApi): void {
   const captureMenu = (c: RecordInfo, at: { x: number; y: number }) =>
     contextMenu([
       { label: "Open", run: () => shell.openRecord(c.id) },
-      { label: "Show in the source", run: () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(String(c.fields[F.source] ?? ""), where(a))) },
+      { label: "Show in the source", run: () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(String(c.fields[F.source] ?? ""), where(a), { again: true })) },
       { label: "Copy embed", run: () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note.")) },
       "separator",
       { label: "Delete", destructive: true, run: () => void deleteCapture(c) },
@@ -375,9 +379,15 @@ export function captures(shell: ShellApi): void {
   });
 
   // ---- embeds ---------------------------------------------------------------------------
-  const placeOf = (anchor: Anchor | null) => (anchor?.parts[0] ? JSON.stringify(anchor.parts[0].selector) : undefined);
-  /** Where to open a capture's source: its place, in the snapshot it came from. */
-  const where = (anchor: Anchor | null, selector?: Selector[]): Record<string, string> => ({ place: selector ? JSON.stringify(selector) : (placeOf(anchor) ?? ""), ...(anchor?.snapshot ? { snapshot: anchor.snapshot } : {}) });
+  /**
+   * A part's place for the reader: its selectors, and where it was drawn on the page (boxes),
+   * which take the reader straight to it (text search can miss: R-028). The boxes selector is
+   * Librarium's own and only travels in the route; it is never stored.
+   */
+  const placeFor = (part: Anchor["parts"][number] | undefined) =>
+    part ? JSON.stringify([...part.selector, ...(part.boxes?.length ? [{ type: "librarium:boxes", boxes: part.boxes }] : [])]) : undefined;
+  /** Where to open a capture's source: its place (a part's, or the first), in the snapshot it came from. */
+  const where = (anchor: Anchor | null, part?: Anchor["parts"][number]): Record<string, string> => ({ place: placeFor(part ?? anchor?.parts[0]) ?? "", ...(anchor?.snapshot ? { snapshot: anchor.snapshot } : {}) });
   shell.embeds.add("captures", KIND, {
     kind: KIND,
     render(r, open) {
@@ -427,14 +437,14 @@ export function captures(shell: ShellApi): void {
         anchor?.parts.forEach((p, i) => {
           const s = st[i];
           const quote = p.selector.find((x) => x.type === "TextQuoteSelector") as { exact: string } | undefined;
-          const show = () => shell.openRecord(src, where(anchor, p.selector));
+          const show = () => shell.openRecord(src, where(anchor, p), { again: true });
           const body = quote ? h("blockquote", { class: "capture-quote" }, quote.exact) : h("img", { class: "capture-region", alt: "The captured region" });
           if (!quote) void call<string>("captures.region", { id, n: i + 1 }).then((d) => ((body as HTMLImageElement).src = d), () => {});
           const badge = s?.status === "moved" ? h("span", { class: "badge moved" }, "moved — check it") : s?.status === "lost" ? h("span", { class: "badge lost" }, "lost") : null;
           const confirm = s?.status === "moved" ? h("button", { class: "link-button", onclick: () => void confirmMoved(id, anchor, i, src).then(() => shell.router.go("capture", { id }, { replace: true })) }, "This is the place") : null;
-          partsEl.appendChild(h("div", { class: "capture-part" }, body, h("div", { class: "row tight" }, h("button", { class: "link-button", onclick: show }, "Show in the source"), badge, confirm)));
+          partsEl.appendChild(h("div", { class: "capture-part" }, body, h("div", { class: "row tight capture-tools" }, iconButton(LocateFixed, "Show in the source", show), badge, confirm)));
         });
-        const cite = h("p", { class: "muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(src, where(anchor))) }, citation(shell, r)));
+        const cite = h("p", { class: "muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(src, where(anchor), { again: true })) }, citation(shell, r)));
         const editorHost = h("div", { class: "editor-host" });
         // The title renames the capture (the quote itself stays exact).
         let info = r;
@@ -526,10 +536,10 @@ export function captures(shell: ShellApi): void {
         replace(host, ul);
         for (const c of list.sort((a, b) => (a.created ?? "").localeCompare(b.created ?? ""))) {
           const status = h("span", { class: "badge" });
-          const li = h("li", null, h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(c.id)) }, c.title || "Capture"), " ", status, h("div", { class: "row tight" },
-            h("button", { class: "link-button", onclick: () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, where(a))) }, "Show"),
-            h("button", { class: "link-button", onclick: () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note.")) }, "Copy embed"),
-            h("button", { class: "link-button destructive-link", onclick: () => void deleteCapture(c) }, "Delete")));
+          const li = h("li", { class: "capture-row" }, h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(c.id)) }, c.title || "Capture"), " ", status, h("div", { class: "row tight capture-tools" },
+            iconButton(LocateFixed, "Show in the source", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, where(a), { again: true }))),
+            iconButton(Copy, "Copy embed", () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note."))),
+            iconButton(Trash2, "Delete", () => void deleteCapture(c), true)));
           li.addEventListener("contextmenu", (e) => {
             e.preventDefault();
             captureMenu(c, { x: e.clientX, y: e.clientY });
