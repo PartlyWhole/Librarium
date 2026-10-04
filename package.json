@@ -47,9 +47,12 @@
     "@lezer/common": "1.5.3",
     "@lezer/highlight": "1.2.5",
     "@lezer/markdown": "1.7.2",
+    "@readium/navigator": "2.11.1",
+    "@readium/shared": "2.6.0",
     "@tauri-apps/api": "2.12.1",
     "@tauri-apps/plugin-dialog": "2.8.1",
     "approx-string-match": "2.0.0",
+    "fflate": "0.8.3",
     "lucide": "1.50.0",
     "pdfjs-dist": "6.3.289"
   },

@@ -7,7 +7,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { pdfEngine, DOCUMENT_OPTIONS } from "../../src/reader/pdf";
 import { epubEngine } from "../../src/reader/epub";
 import { imageEngine } from "../../src/reader/image";
-import type { ReaderEngine, ReaderSource } from "../../src/reader/host";
+import type { ReaderEngine, ReaderSource, ReaderStore } from "../../src/reader/host";
 
 const results: Record<string, unknown> = {};
 const fixture = async (n: string) => (await fetch(`/tests/fixtures/library/${n}`)).arrayBuffer();
@@ -30,13 +30,13 @@ async function inked(name: string, wasm: boolean): Promise<number> {
   return n;
 }
 
-async function open(engine: ReaderEngine, name: string, format: string, stored?: string) {
+async function open(engine: ReaderEngine, name: string, format: string, stored?: string, store?: ReaderStore) {
   stage.replaceChildren();
   let firstPaint = -1;
   let painted!: () => void;
   const paint = new Promise<void>((r) => (painted = r));
   const text = async () => (stored ? JSON.parse(new TextDecoder().decode(await fixture(stored))) : null);
-  const src: ReaderSource = { id: name, format, title: name, bytes: () => fixture(name), text };
+  const src: ReaderSource = { id: name, format, title: name, bytes: () => fixture(name), text, store };
   const view = await engine.open(stage, src, { moved() {}, firstPaint: (ms) => ((firstPaint = ms), painted()) });
   await Promise.race([paint, new Promise((r) => setTimeout(r, 10_000))]);
   return { view, firstPaint };
@@ -175,46 +175,107 @@ async function run() {
   }
   pdf.view.destroy();
 
-  // EPUB: opens, finds, and its own scripts never run.
+  // EPUB, read with Readium (0045).
   step("epub");
-  const epub = await open(epubEngine, "notebooks.epub", "epub");
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const waitFor = async (ok: () => boolean, ms = 5000) => {
+    const t0 = performance.now();
+    while (!ok() && performance.now() - t0 < ms) await pause(50);
+    return ok();
+  };
+  const savedPrefs = new Map<string, unknown>();
+  const epubStore: ReaderStore = { get: (k) => savedPrefs.get(k), set: (k, v) => savedPrefs.set(k, v) };
+  const epub = await open(epubEngine, "notebooks.epub", "epub", undefined, epubStore);
   results.epubPainted = epub.firstPaint >= 0;
-  await new Promise((r) => setTimeout(r, 500));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fv: any = stage.querySelector("foliate-view");
-  const docs = (fv?.renderer?.getContents?.() ?? []).map((c: { doc: Document }) => c.doc);
-  results.epubDocs = docs.length;
-  results.epubScriptRan = docs.some((d: Document) => / ran$/.test(d.title));
-  results.epubPolicy = docs.every((d: Document) => /script-src 'none'/.test(d.querySelector("meta[http-equiv=Content-Security-Policy]")?.getAttribute("content") ?? ""));
-  // Reading on: the chapter bar, keys and scrolling past a chapter's end turn chapters.
-  step("epub chapters");
-  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  const bar = stage.querySelector(".epub-bar")!;
-  const [prevCh, nextCh] = [...bar.querySelectorAll("button")] as HTMLButtonElement[];
-  const contents = bar.querySelector("select") as HTMLSelectElement;
-  results.epubContents = [...contents.options].map((o) => o.textContent).join("|");
+  const frameDocs = () => [...stage.querySelectorAll("iframe")].map((f) => (f as HTMLIFrameElement).contentDocument).filter((d): d is Document => !!d && !!d.body?.textContent?.trim());
+  await waitFor(() => frameDocs().length > 0);
+  results.epubDocs = frameDocs().length;
+  results.epubScriptRan = frameDocs().some((d) => / ran$/.test(d.title));
+  results.epubPolicy = frameDocs().every((d) => [...d.querySelectorAll("meta[http-equiv=Content-Security-Policy]")].some((m) => (m.getAttribute("content") ?? "").startsWith("script-src blob:")));
+  const epubBar = stage.querySelector(".epub-bar")!;
+  const epubContents = epubBar.querySelector("select") as HTMLSelectElement;
+  results.epubContents = [...epubContents.options].map((o) => o.textContent).join("|");
   results.epubStartsAt = epub.view.position();
-  results.epubPrevHidden = prevCh!.disabled;
-  nextCh!.click();
-  await wait(600);
+
+  step("epub turn");
+  (epubBar.querySelector('[aria-label="Next page"]') as HTMLButtonElement).click();
+  await waitFor(() => /^Chapter Two/.test(epub.view.position()));
   results.epubAfterNext = epub.view.position();
-  results.epubContentsFollows = contents.selectedIndex;
-  results.epubNextHiddenAtEnd = nextCh!.disabled;
-  const frameDoc = () => fv.renderer.getContents()[0].doc as Document;
-  frameDoc().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
-  await wait(600);
+  results.epubContentsFollows = epubContents.selectedIndex;
+  frameDocs()[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+  await waitFor(() => /^Chapter One/.test(epub.view.position()));
   results.epubAfterLeft = epub.view.position();
-  // A deliberate scroll (after a pause) past the end of the (short) first chapter.
-  await wait(300);
-  frameDoc().dispatchEvent(new WheelEvent("wheel", { deltaY: 60, bubbles: true }));
-  frameDoc().dispatchEvent(new WheelEvent("wheel", { deltaY: 60, bubbles: true }));
-  await wait(600);
-  results.epubAfterWheel = epub.view.position();
-  results.epubScriptRanLater = / ran$/.test(frameDoc().title);
+  results.epubScriptRanLater = frameDocs().some((d) => / ran$/.test(d.title));
+
   step("epub find");
-  results.epubFind = await epub.view.find("generosity");
-  epub.view.zoomIn();
+  results.epubFind = await epub.view.find("gravity and grace");
+  await pause(400);
+  const highlights = (name: string) => frameDocs().reduce((n, d) => n + (((d.defaultView as unknown as { CSS: { highlights?: Map<string, Set<Range>> } }).CSS.highlights?.get(name)?.size) ?? 0), 0);
+  results.epubFindAt = epub.view.position();
+  results.epubFindDrawn = highlights("lib-find-now");
+  epub.view.findClear();
+
+  step("epub selection");
+  epubContents.value = epubContents.options[0]!.value;
+  epubContents.dispatchEvent(new Event("change"));
+  await waitFor(() => /^Chapter One/.test(epub.view.position()));
+  await pause(300);
+  const chapterOneDoc = frameDocs().find((d) => d.title === "Chapter One");
+  const firstPara = chapterOneDoc?.querySelector("p");
+  if (firstPara?.firstChild) {
+    const r = chapterOneDoc!.createRange();
+    r.setStart(firstPara.firstChild, 17);
+    r.setEnd(firstPara.firstChild, 23);
+    chapterOneDoc!.getSelection()!.removeAllRanges();
+    chapterOneDoc!.getSelection()!.addRange(r);
+  }
+  const epubSel = epub.view.selection?.();
+  results.epubSelection = epubSel ? `${epubSel.text} ${epubSel.cfi}` : null;
+  epub.view.clearSelection?.();
+  if (epubSel?.cfi) epub.view.setMarks?.([{ id: "cap#0", boxes: [], cfi: epubSel.cfi, saved: true }]);
+  await pause(200);
+  results.epubMarkDrawn = highlights("lib-saved");
+  // Showing a capture from elsewhere in the book goes to its chapter.
+  (epubBar.querySelector('[aria-label="Next page"]') as HTMLButtonElement).click();
+  await waitFor(() => /^Chapter Two/.test(epub.view.position()));
+  results.epubShowPlace = await epub.view.showPlace?.([{ type: "TextQuoteSelector", exact: "rarest" }, { type: "FragmentSelector", value: epubSel?.cfi ?? "" }]);
+  await waitFor(() => /^Chapter One/.test(epub.view.position()));
+  results.epubShownAt = epub.view.position();
+
+  step("epub settings");
+  (epubBar.querySelector(".epub-aa") as HTMLButtonElement).click();
+  const epubPanel = stage.querySelector(".epub-settings");
+  (epubPanel?.querySelector('[role=radio][data-value="dark"]') as HTMLButtonElement | null)?.click();
+  await pause(800);
+  const bookBg = frameDocs()[0] ? getComputedStyle(frameDocs()[0]!.documentElement).backgroundColor : "";
+  results.epubDark = bookBg;
+  results.epubSettingsSaved = (savedPrefs.get("reader.epub") as { theme?: string } | undefined)?.theme ?? null;
+  // The place is remembered: back to Chapter Two, close, and open reopened.
+  (epubBar.querySelector('[aria-label="Next page"]') as HTMLButtonElement).click();
+  await waitFor(() => /^Chapter Two/.test(epub.view.position()));
   epub.view.destroy();
+  const reopened = await open(epubEngine, "notebooks.epub", "epub", undefined, epubStore);
+  await waitFor(() => /^Chapter/.test(reopened.view.position()));
+  results.epubReopenedAt = reopened.view.position();
+  reopened.view.destroy();
+
+  step("epub resources");
+  const styledBook = await open(epubEngine, "styled.epub", "epub");
+  await waitFor(() => frameDocs().length > 0);
+  await pause(500);
+  const styledDoc = frameDocs()[0];
+  const bookImg = styledDoc?.querySelector("img") as HTMLImageElement | null;
+  results.epubImage = !!bookImg && bookImg.complete && bookImg.naturalWidth > 0;
+  results.epubStylesheet = styledDoc ? /blob:/.test(getComputedStyle(styledDoc.querySelector("p.pic")!).backgroundImage) : false;
+  results.epubBookFileRan = frameDocs().some((d) => / ran$/.test(d.title));
+  styledBook.view.destroy();
+
+  step("epub fixed layout");
+  const fixedBook = await open(epubEngine, "fixed.epub", "epub");
+  await waitFor(() => /^Page 1 of 2/.test(fixedBook.view.position()));
+  results.epubFixedAt = fixedBook.view.position();
+  results.epubFixedFrames = stage.querySelectorAll("iframe.readium-navigator-iframe").length;
+  fixedBook.view.destroy();
 
   // Recognised text: findable and selectable, in an image and a scanned PDF.
   step("ocr image");

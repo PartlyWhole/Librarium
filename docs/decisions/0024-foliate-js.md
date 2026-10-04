@@ -1,5 +1,7 @@
 # 0024. foliate-js is vendored at a pinned commit, with book scripts disabled
 
+> Superseded by 0045: EPUBs are read with Readium; only foliate-js's `epubcfi.js` is kept.
+
 - Status: accepted
 - Date: 2026-10-02
 

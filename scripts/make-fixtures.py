@@ -79,6 +79,48 @@ def epub(path):
             z.writestr(f"OEBPS/text/c{i}.xhtml", f'<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>{t}</title></head><body><h1>{t}</h1>{body}<script>document.title="script ran"</script><img src="missing.png" alt="" onerror="document.title=&quot;handler ran&quot;"/><a href="javascript:void(document.title=&quot;link ran&quot;)">x</a></body></html>')
 
 epub(OUT / "notebooks.epub")
+
+def styled_epub(path):
+    """An EPUB 3 with a stylesheet, a font, an image, nested contents, links between chapters,
+    a non-linear item and itemref ids (for the Readium streamer)."""
+    png_bytes = b"\x89PNG\r\n\x1a\n" + bytes.fromhex("0000000d49484452000000010000000108020000009077" "53de0000000c4944415408d763f8cfc0000003010100c9fe92ef0000000049454e44ae426082")
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml", '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="EPUB/package.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')
+        z.writestr("EPUB/package.opf", '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">urn:uuid:22345678-1234-4234-8234-123456789abc</dc:identifier><dc:title>Styled Book</dc:title><dc:creator>A. Writer</dc:creator><dc:language>en</dc:language><meta property="dcterms:modified">2026-10-04T00:00:00Z</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="css" href="css/style.css" media-type="text/css"/><item id="font" href="fonts/f.woff2" media-type="font/woff2"/><item id="pic" href="images/pic.png" media-type="image/png"/><item id="js" href="js/app.js" media-type="text/javascript"/><item id="notes" href="text/notes.xhtml" media-type="application/xhtml+xml"/><item id="c1" href="text/one.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="text/two.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref id="r1" idref="c1"/><itemref id="r-notes" idref="notes" linear="no"/><itemref id="r2" idref="c2"/></spine></package>')
+        z.writestr("EPUB/nav.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="landmarks"><ol><li><a href="text/one.xhtml">Start</a></li></ol></nav><nav epub:type="toc"><ol><li><a href="text/one.xhtml">Part One</a><ol><li><a href="text/one.xhtml#s2">A Section</a></li></ol></li><li><a href="text/two.xhtml">Part Two</a></li></ol></nav></body></html>')
+        z.writestr("EPUB/css/style.css", '@font-face { font-family: "Book"; src: url("../fonts/f.woff2") format("woff2"); } body { font-family: "Book", serif; } .pic { background: url(../images/pic.png); }')
+        z.writestr("EPUB/fonts/f.woff2", b"wOF2-not-really")
+        z.writestr("EPUB/images/pic.png", png_bytes)
+        z.writestr("EPUB/js/app.js", 'document.title = "book file ran"')
+        head = '<head><title>{t}</title><link rel="stylesheet" type="text/css" href="../css/style.css"/><script src="../js/app.js"></script></head>'
+        z.writestr("EPUB/text/one.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml">' + head.format(t="Part One") + '<body><h1>Part One</h1><p>Attention is the rarest and purest form of generosity.</p><p><img src="../images/pic.png" alt="A picture"/></p><p class="pic" style="background-image: url(\'../images/pic.png\')">Styled</p><p><a href="two.xhtml#end">On to part two</a></p><h2 id="s2">A Section</h2><p>We read slowly, and quote exactly.</p></body></html>')
+        z.writestr("EPUB/text/notes.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Notes</title></head><body><p>A note.</p></body></html>')
+        z.writestr("EPUB/text/two.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml">' + head.format(t="Part Two") + '<body><h1>Part Two</h1><p>Gravity and grace are two forces in the world.</p><p id="end">Technique integrates everything.</p></body></html>')
+
+def ncx_epub(path):
+    """An EPUB 2: contents in an NCX file, no navigation document."""
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml", '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')
+        z.writestr("content.opf", '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="uid"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">old-book</dc:identifier><dc:title>Old Book</dc:title><dc:language>en</dc:language></metadata><manifest><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/><item id="a" href="a.html" media-type="application/xhtml+xml"/></manifest><spine toc="ncx"><itemref idref="a"/></spine></package>')
+        z.writestr("toc.ncx", '<?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><navMap><navPoint id="p1" playOrder="1"><navLabel><text>The Only Chapter</text></navLabel><content src="a.html"/><navPoint id="p2" playOrder="2"><navLabel><text>Within</text></navLabel><content src="a.html#in"/></navPoint></navPoint></navMap></ncx>')
+        # Not well-formed XHTML (an unclosed <br>), as old books often are.
+        z.writestr("a.html", '<html><head><title>A</title></head><body><p>Old text<br><span id="in">within</span></p></body></html>')
+
+def fixed_epub(path):
+    """A fixed-layout EPUB of two pages (600 × 800)."""
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml", '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')
+        z.writestr("OPS/book.opf", '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">fixed-book</dc:identifier><dc:title>Picture Book</dc:title><dc:language>en</dc:language><meta property="rendition:layout">pre-paginated</meta><meta property="dcterms:modified">2026-10-04T00:00:00Z</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="p1" href="p1.xhtml" media-type="application/xhtml+xml"/><item id="p2" href="p2.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="p1" properties="page-spread-right"/><itemref idref="p2" properties="page-spread-left"/></spine></package>')
+        z.writestr("OPS/nav.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol><li><a href="p1.xhtml">One</a></li><li><a href="p2.xhtml">Two</a></li></ol></nav></body></html>')
+        for i in (1, 2):
+            z.writestr(f"OPS/p{i}.xhtml", f'<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Page {i}</title><meta name="viewport" content="width=600, height=800"/></head><body style="margin:0;width:600px;height:800px;background:#eee"><p style="font-size:48px;margin:40px">Page {i} of the picture book.</p></body></html>')
+
+styled_epub(OUT / "styled.epub")
+fixed_epub(OUT / "fixed.epub")
+ncx_epub(OUT / "old.epub")
 print("fixtures written to", OUT)
 
 def jpx_pdf(png_path, path):

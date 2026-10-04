@@ -358,10 +358,28 @@ mark { background: var(--selection); color: inherit; border-radius: 2px; padding
 .image-container { display: grid; place-items: center; padding: 16px; }
 .image-view { max-width: 100%; height: auto; box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
 .epub-container { background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
-.epub-view { display: block; flex: 1; min-height: 0; }
-.epub-bar { flex: none; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 8px; border-top: 1px solid var(--border); }
-.epub-bar select { max-width: min(50%, 360px); }
-.epub-bar button:disabled { visibility: hidden; }
+/* Readium lays the book out in here (its frames fill it). */
+.epub-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+/* Readium leaves its frames' size to the host: a reflowable book's frame fills the stage
+   (fixed-layout pages sit in Readium's own wrappers, sized by Readium). */
+.epub-stage > iframe.readium-navigator-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.epub-stage iframe.readium-navigator-iframe { border: 0; }
+.epub-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-top: 1px solid var(--border); }
+.epub-turn { font-size: 20px; line-height: 1; width: 28px; height: 26px; }
+.epub-contents { max-width: min(40%, 320px); height: 26px; font-size: var(--small); }
+.epub-where { flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.epub-aa { font: inherit; font-weight: 600; padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: var(--r1); background: var(--bg); color: var(--ink); cursor: pointer; }
+.epub-aa[aria-expanded="true"] { background: var(--selection); }
+.epub-settings { position: absolute; right: 8px; bottom: 40px; z-index: 30; width: min(360px, calc(100% - 16px)); padding: 12px; border: 1px solid var(--border); border-radius: var(--r2, 8px); background: var(--bg); box-shadow: 0 8px 28px rgb(0 0 0 / 18%); display: grid; gap: 10px; }
+.epub-setting { display: grid; gap: 4px; }
+.epub-setting[hidden] { display: none; }
+.epub-setting-label { font-size: var(--small); color: var(--muted); }
+.epub-settings .seg { display: flex; gap: 2px; padding: 2px; border-radius: var(--r1); background: var(--bg-alt); }
+.epub-settings .seg button { flex: 1; font: inherit; font-size: var(--small); padding: 4px 6px; border: 0; border-radius: var(--r1); background: transparent; color: var(--ink); cursor: pointer; }
+.epub-settings .seg button[aria-checked="true"] { background: var(--bg); box-shadow: 0 1px 2px rgb(0 0 0 / 15%); font-weight: 600; }
+.epub-settings .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.epub-size { flex: 1; text-align: center; align-self: center; font-size: var(--small); }
+.epub-settings-foot { display: flex; justify-content: space-between; }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }

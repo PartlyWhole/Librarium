@@ -149,10 +149,14 @@ Rules that keep it honest:
   - `complete.ts`: `[[` completion; plus embeds from extensions.
   - The note page (`features/notes/page.ts`) adds autosave, the word count, and making notes
     from unresolved links. `features/notes/history.ts` is the History panel.
-- **Reader** (`src/reader/`): PDF.js (legacy build), images, EPUB through vendored foliate-js;
-  marks for captures; region capture. PDF text is placed word by word over a borderless page
-  (`pdf-words.ts`, 0044); mouse selections snap to words (`snapToWords`). EPUB pages are cleaned and given a no-scripts policy
-  (`epub-safe.ts`, 0043); chapters turn by scrolling on, keys, and the chapter bar.
+- **Reader** (`src/reader/`): PDF.js (legacy build), images, EPUB with Readium; marks for
+  captures; region capture. PDF text is placed word by word over a borderless page
+  (`pdf-words.ts`, 0044); mouse selections snap to words (`snapToWords`).
+  - **EPUB** (0045): `epub.ts` loads `epub/engine.ts` on first use. `epub/streamer.ts` serves
+    the book from memory (OPF → manifest, chapters made safe by `epub-safe.ts`, resources as
+    blob URLs). `epub/settings.ts` holds the reading settings and their panel. Captures use the
+    same CFIs as before (`vendor/foliate-js/epubcfi.js`); marks and find are drawn with
+    `CSS.highlights` in Readium's frames. Settings and places go through `ReaderSource.store`.
 - **Kit** (`src/kit/`): small, dependency-free pieces (signals, DOM helper, dialogs, menus,
   combobox, tree (virtualized), selection, select list, drag and drop, toasts).
 
@@ -173,7 +177,11 @@ combobox). Every action must be in a menu (shell test).
     `src-tauri/build.rs` reruns when `icons/` changes so a new icon shows after the restart.
 - **WebKit, PDFs and saved pages**
   - In an iframe sandboxed without `allow-scripts`, WebKit runs no event listeners at all, not
-    even the parent's (bug 218086). Stop a book's scripts by other means (0043).
+    even the parent's (bug 218086). Stop a book's scripts by other means (0043, 0045).
+  - Readium doesn't size its frames: the host's CSS must (they default to 300 × 150, which
+    lays a chapter out in a tiny box with extra pages).
+  - Blob-URL frames inherit the app's Content Security Policy in built copies (the dev app has
+    none), so anything book frames load must be allowed there too (`blob:`).
   - `pdf-extract` reads nothing from WebKit's PDFs; PDFKit does.
   - Count images inside Form XObjects.
   - Strip soft hyphens.

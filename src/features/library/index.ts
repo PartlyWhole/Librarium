@@ -10,7 +10,7 @@ import { ITEM_CHILDREN, READER_TOOLS, type ItemChildren, type ReaderTool } from 
 import type { StoredText as StoredJoined } from "../../generated/StoredText";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import type { Written } from "../../generated/Written";
-import type { ReaderView, StoredText } from "../../reader/host";
+import type { ReaderStore, ReaderView, StoredText } from "../../reader/host";
 import { pdfEngine } from "../../reader/pdf";
 import { imageEngine } from "../../reader/image";
 import { epubEngine } from "../../reader/epub";
@@ -106,6 +106,8 @@ async function base64(f: Blob): Promise<string> {
 }
 
 export function library(shell: ShellApi): void {
+  // Reading settings and places, per device (settings.json), for engines that keep them.
+  const readerStore: ReaderStore = { get: (k) => shell.prefs.get(k), set: (k, v) => shell.prefs.pref<unknown>(k, null).set(v) };
   const manageSnapshots = (r: RecordInfo, showing: string) => manageSnapshotsDialog(shell, r, showing);
   shell.recordActions.add("library", "remove-older-snapshots", {
     label: (n) => (n === 1 ? "Remove older snapshots…" : `Remove older snapshots of ${n} pages…`),
@@ -386,7 +388,7 @@ export function library(shell: ShellApi): void {
         return;
       }
       void engine
-        .open(stage, { id, format: web ? "pdf" : formatOf(r), title: r.title, bytes: () => readBytes(id, web ? `snapshots/${snap}/page.pdf` : undefined), text: () => (web ? Promise.resolve(null) : call<StoredText | null>("library.text", { id })) }, {
+        .open(stage, { id, format: web ? "pdf" : formatOf(r), title: r.title, bytes: () => readBytes(id, web ? `snapshots/${snap}/page.pdf` : undefined), text: () => (web ? Promise.resolve(null) : call<StoredText | null>("library.text", { id })), store: readerStore }, {
           moved: () => (pos.textContent = view?.position() ?? ""),
           firstPaint: (ms) => console.info(`reader: first page of ${formatOf(r)} in ${Math.round(ms)} ms`),
         })

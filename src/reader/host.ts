@@ -10,6 +10,13 @@ export interface ReaderSource {
   bytes(): Promise<ArrayBuffer>;
   /** The stored extracted text (JSON), if any. */
   text(): Promise<StoredText | null>;
+  /** Per-device storage for reading settings and places (the shell's prefs), if offered. */
+  store?: ReaderStore;
+}
+
+export interface ReaderStore {
+  get(key: string): unknown;
+  set(key: string, value: unknown): void;
 }
 
 export interface StoredText {

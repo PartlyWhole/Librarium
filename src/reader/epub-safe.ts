@@ -1,19 +1,22 @@
 /**
- * Makes a book's pages safe to show in frames that allow scripts (decision 0043).
+ * Makes a book's pages safe to show (decisions 0043, 0045).
  *
- * WebKit runs no event listeners at all, not even the app's, in a frame sandboxed without
- * `allow-scripts` (https://bugs.webkit.org/show_bug.cgi?id=218086). Reading needs those
- * listeners (selection, keys, the wheel), so book frames allow scripts, and the book's own
- * scripts are stopped here instead, twice over:
- * - everything that could run code is removed: scripts, frames, plugins, `on…` handlers,
- *   `javascript:` links, refresh redirects, `<base>`;
- * - each page gets a Content Security Policy that forbids scripts, plugins, frames and
- *   workers, in case anything was missed.
- * Script files in the book are never loaded (see epub.ts).
+ * Book pages are shown in frames that run scripts: the reader's own (Readium's, loaded from
+ * blob URLs) need them, and WebKit runs no event listeners at all in a frame without
+ * `allow-scripts` (https://bugs.webkit.org/show_bug.cgi?id=218086). The book's own code is
+ * made inert here, before a page is shown:
+ * - script elements are emptied and given a type no browser runs (kept in place, so EPUB CFI
+ *   paths to the text after them don't change);
+ * - frames, plugins and portals lose what they would load; `<base>` and `<meta http-equiv>`
+ *   are removed;
+ * - `on…` handlers and `javascript:` (and similar) links are removed;
+ * - each page gets a Content Security Policy allowing scripts only from blob URLs (the
+ *   reader's), with no plugins, frames, workers or form submission.
+ * The book's script files are never served (streamer.ts), so no blob URL holds book code.
  */
 
 /** The policy given to every page of a book. */
-export const BOOK_CSP = "script-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'";
+export const BOOK_CSP = "script-src blob:; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; form-action 'none'";
 
 const MARKUP = new Set(["application/xhtml+xml", "text/html", "image/svg+xml"]);
 
@@ -22,33 +25,50 @@ export function isMarkup(type: string): boolean {
   return MARKUP.has(type.split(";")[0]!.trim().toLowerCase());
 }
 
-const DANGEROUS = "script, iframe, frame, frameset, object, embed, applet, portal, base, meta[http-equiv]";
-const URL_ATTRS = ["href", "src", "action", "formaction", "data", "xlink:href"];
+const LOADERS = "iframe, frame, object, embed, applet, portal";
+const LOADER_ATTRS = ["src", "srcdoc", "data", "code", "codebase", "archive"];
+const URL_ATTRS = new Set(["href", "src", "action", "formaction", "data", "xlink:href", "poster", "background"]);
+const SCRIPTED_URL = /^(javascript|vbscript|data:text\/html|data:application\/xhtml)/i;
 
-/** A book page with nothing left that could run, and the book policy in its head. */
-export function safeMarkup(text: string, type: string): string {
-  const mime = type.split(";")[0]!.trim().toLowerCase();
-  const doc = new DOMParser().parseFromString(text, mime as DOMParserSupportedType);
-  if (doc.querySelector("parsererror")) {
-    // Foliate falls back to HTML for broken XHTML; clean it the same way.
-    return mime === "text/html" ? "" : safeMarkup(text, "text/html");
+/** Makes everything in a parsed page that could run inert, in place. */
+export function neutralize(doc: Document): void {
+  for (const s of [...doc.querySelectorAll("script")]) {
+    s.textContent = "";
+    for (const a of [...s.attributes]) s.removeAttributeNode(a);
+    s.setAttribute("type", "application/x-librarium-inert");
   }
-  for (const el of [...doc.querySelectorAll(DANGEROUS)]) el.remove();
+  for (const el of [...doc.querySelectorAll(LOADERS)]) for (const a of LOADER_ATTRS) el.removeAttribute(a);
+  for (const el of [...doc.querySelectorAll("base, meta[http-equiv]")]) el.remove();
   for (const el of [...doc.querySelectorAll("*")]) {
     for (const a of [...el.attributes]) {
       const name = a.name.toLowerCase();
       if (name.startsWith("on")) el.removeAttributeNode(a);
-      else if (URL_ATTRS.includes(name) && /^\s*(javascript|vbscript|data:text\/html)/i.test([...a.value].filter((c) => c > " ").join(""))) el.removeAttributeNode(a);
+      else if (URL_ATTRS.has(name) && SCRIPTED_URL.test([...a.value].filter((c) => c > " ").join(""))) el.removeAttributeNode(a);
     }
   }
-  // SVG has no <meta>; it has had everything that runs removed above.
-  const head = mime === "image/svg+xml" ? null : doc.head ?? doc.querySelector("head");
-  if (head) {
-    const ns = doc.documentElement.namespaceURI ?? "http://www.w3.org/1999/xhtml";
-    const meta = doc.createElementNS(ns, "meta");
-    meta.setAttribute("http-equiv", "Content-Security-Policy");
-    meta.setAttribute("content", BOOK_CSP);
-    head.prepend(meta);
-  }
-  return mime === "text/html" ? `<!DOCTYPE html>${doc.documentElement.outerHTML}` : new XMLSerializer().serializeToString(doc);
+}
+
+/** Adds the book policy (and any other meta) first in a page's head, if it has one. */
+export function addMeta(doc: Document, attrs: Record<string, string>): void {
+  const head = doc.documentElement.namespaceURI === "http://www.w3.org/2000/svg" ? null : doc.querySelector("head");
+  if (!head) return;
+  const meta = doc.createElementNS(doc.documentElement.namespaceURI ?? "http://www.w3.org/1999/xhtml", "meta");
+  for (const [k, v] of Object.entries(attrs)) meta.setAttribute(k, v);
+  head.prepend(meta);
+}
+
+/** Parses a book page, falling back to HTML for broken XHTML (as readers do). */
+export function parsePage(text: string, type: string): Document {
+  const mime = type.split(";")[0]!.trim().toLowerCase();
+  const doc = new DOMParser().parseFromString(text, mime as DOMParserSupportedType);
+  if (mime !== "text/html" && doc.querySelector("parsererror")) return new DOMParser().parseFromString(text, "text/html");
+  return doc;
+}
+
+/** A book page with its code made inert and the book policy in its head (as XML). */
+export function safeMarkup(text: string, type: string): string {
+  const doc = parsePage(text, type);
+  neutralize(doc);
+  addMeta(doc, { "http-equiv": "Content-Security-Policy", content: BOOK_CSP });
+  return new XMLSerializer().serializeToString(doc);
 }

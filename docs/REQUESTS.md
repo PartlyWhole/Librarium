@@ -56,6 +56,46 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-029 · A better EPUB reader (Readium)
+> "The epub reader is not great. What options do we have?" · "Go with C. I want first class
+> experience of captures but also first class reading/viewing experience"
+
+- **Changed:**
+  - Books are read with Readium, the EPUB toolkit used by Thorium and many library and
+    publisher apps:
+    - real pages (two columns on a wide window) or scrolling, as you choose;
+    - page turns run straight through chapters;
+    - fixed-layout books (picture books, comics) work.
+  - Reading settings, kept on this Mac (the **Aa** button): text size, font (the book's,
+    serif or sans), spacing, line length, pages or scroll, columns, and theme (follow the
+    app, light, sepia, dark).
+  - The book reopens where you left it.
+  - The bar under the book: previous page, contents, where you are, Aa, next page.
+  - Captures work as before, and existing captures keep their places. Select text (it snaps
+    to whole words), Capture, save; saved captures are highlighted; clicking one offers to
+    open it. Find searches the whole book and highlights the match.
+  - Book code still never runs. Books' pages are made inert before they're shown, and their
+    script files are never loaded.
+- **Use:** open a book. ← → or Space / ⇧Space turn pages; Page Down / Page Up too. Aa for
+  settings. ⌘F to find. ⌘+ / ⌘− change the text size.
+- **Code:** `src/reader/epub.ts`, `src/reader/epub/` (`engine.ts`, `streamer.ts`,
+  `settings.ts`), `src/reader/epub-safe.ts`, `src/reader/host.ts` (`ReaderSource.store`),
+  `src/features/library/index.ts`, `src/shell/shell.css`, `src-tauri/tauri.conf.json` (policy),
+  `vendor/foliate-js/` (only the CFI module now).
+- **Decision:** 0045 (supersedes 0024, and the brief's line naming foliate-js, as you chose).
+  Plan: `docs/plans/epub-readium.md`.
+- **Tested:**
+  - Unit tests for the streamer (manifest, contents, resources, EPUB 2) and for the cleaning.
+  - WebKit checks for everything above, including the exact CFI captures get and a
+    fixed-layout book.
+  - Checked by eye in the preview: settings, sepia, and capturing → saving → highlight →
+    "Open capture".
+  - Still needs the real app: how page turns and trackpad gestures feel, and real books with
+    heavy styling.
+- **Left:**
+  - Swiping between pages with the trackpad hasn't been checked yet (keys and the buttons work).
+  - A built copy of the app needs `npm run build` to pick up the security-policy change.
+
 ### R-027 · PDF find highlights off; selecting text hard; captures highlight every other line
 > "Highlighting is off (find feature) and selecting text (clicking and dragging) is not very
 > easy to use (do quick research for best practices of UI/UX for selecting text)" ·
