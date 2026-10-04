@@ -16,7 +16,7 @@ import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
 import type { ShellApi } from "../../shell/api";
 import type { RecordInfo } from "../../generated/RecordInfo";
-import { Files, FileText, FilePlus } from "lucide";
+import { Files, FileText, FilePlus, ListTree } from "lucide";
 
 const KIND = "note";
 
@@ -87,6 +87,7 @@ export function notes(shell: ShellApi): void {
   shell.sidePanel.add("notes", "outline", {
     id: "outline",
     title: "Outline",
+    icon: ListTree,
     applies: (r) => r.page === "note",
     render(host) {
       let shownDoc: unknown = null;

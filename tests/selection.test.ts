@@ -158,7 +158,7 @@ describe("failed jobs", () => {
     expect(status.textContent).toBe("2 failed");
     status.click();
     await wait(50);
-    const panel = document.querySelector('.side-panel [data-section="jobs"]')!;
+    const panel = document.querySelector('.side-panel section[data-section="jobs"]')!;
     expect(panel.textContent).toContain("https://x.example/1");
     expect(panel.textContent).toContain("Why: the page didn’t finish loading in 90 s");
     [...panel.querySelectorAll("button")].find((b) => b.textContent === "Dismiss all")!.click();

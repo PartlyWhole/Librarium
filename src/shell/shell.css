@@ -613,3 +613,7 @@ body.dragging-items, body.dragging-items * { cursor: grabbing !important; }
 .diff-key.delete { background: rgb(220 38 38 / 12%); }
 .diff-key.insert { background: rgb(22 163 74 / 12%); }
 .recently-deleted { margin-top: 28px; }
+/* The side panel: one view at a time, chosen by the icons along its top. */
+.side-panel-head { display: flex; align-items: center; gap: 2px; }
+.panel-tabs { display: flex; gap: 2px; flex: 1; }
+.panel-tab.current { background: var(--active); color: var(--ink); }

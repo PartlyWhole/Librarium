@@ -9,6 +9,7 @@ import { toast } from "../kit/toast";
 import type { JobInfo } from "../generated/JobInfo";
 import type { JobsList } from "../generated/JobsList";
 import type { ShellApi } from "./slots";
+import { ListChecks } from "lucide";
 
 export function jobsUi(shell: ShellApi): void {
   const jobs = signal<JobsList>({ running: [], failed: [], recent: [], resumed: null });
@@ -83,6 +84,16 @@ export function jobsUi(shell: ShellApi): void {
       j.error ? h("div", { class: "muted small" }, `Why: ${j.error}`) : j.message ? h("div", { class: "muted small" }, j.message) : null,
       h("div", { class: "row tight" }, buttons.map(([label, run]) => h("button", { class: "link-button", onclick: run }, label))));
   };
+  /** Finished jobs, routine repeats grouped ("Refreshing link labels · 12 times"). */
+  const recentRows = (list: JobInfo[]) => {
+    const groups = new Map<string, JobInfo[]>();
+    for (const j of list) groups.set(j.title, [...(groups.get(j.title) ?? []), j]);
+    return [...groups.values()].map((g) => {
+      if (g.length === 1) return row(g[0]!, []);
+      const last = Math.max(...g.map((j) => j.updated_ms));
+      return h("li", { class: "job" }, h("div", null, h("span", null, g[0]!.title)), h("div", { class: "muted small" }, `${g.length} times, last at ${new Date(last).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`));
+    });
+  };
   const act = (method: string, id: string) => void call(method, { id }).then(load, (e) => toast(String(e?.message ?? e)));
   /** Stops every running and waiting job (waiting ones at once, running ones at their next step). */
   const cancelAll = async () => {
@@ -100,6 +111,7 @@ export function jobsUi(shell: ShellApi): void {
   shell.sidePanel.add("shell", "jobs", {
     id: "jobs",
     title: "Jobs",
+    icon: ListChecks,
     applies: () => shell.folder()?.state === "open",
     render(host) {
       void load();
@@ -123,7 +135,7 @@ export function jobsUi(shell: ShellApi): void {
                 h("ul", { class: "jobs" }, l.failed.map((j) => row(j, [["Retry", () => act("jobs.retry", j.id)], ["Dismiss", () => act("jobs.dismiss", j.id)]]))),
               ]
             : null,
-          l.recent.length ? [h("h3", { class: "panel-subtitle" }, "Recent"), h("ul", { class: "jobs" }, l.recent.map((j) => row(j, [])))] : null,
+          l.recent.length ? [h("h3", { class: "panel-subtitle" }, "Recent"), h("ul", { class: "jobs" }, recentRows(l.recent))] : null,
         );
       });
     },

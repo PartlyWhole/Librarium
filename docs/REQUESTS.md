@@ -38,27 +38,6 @@ How urgent (optional):
 
 ## Waiting for you
 
-### R-024 · The side panel
-> "Really don't like side panel" (screenshot 2026-10-03: Linked from, Links without a target,
-> Outline, History and a long Jobs list of "Refreshing link labels", stacked in one column)
-
-- **Question:** what should take its place? Options:
-  - **(a) No side panel: each thing where it is used** *(recommended)*
-    - Links to and from the note at the bottom of the note (as Obsidian's "backlinks in
-      document"), folded by default.
-    - Outline and History as buttons in the note's header, each opening a popover (History's
-      comparison stays a dialog).
-    - Jobs only behind the status-bar button, as a popover. It would show running and failed
-      jobs, not every finished "Refreshing link labels".
-    - A library item's facts behind an ⓘ button in the reader.
-  - **(b) Keep a right panel, but one view at a time:** icons along its top (Links, Outline,
-    History, Jobs) choose what it shows, as in Obsidian's right sidebar. It would be closed
-    by default, and Jobs would hide finished routine work.
-  - **(c) Something else:** tell me what you dislike most (the stacking, the clutter, that it
-    takes width, or the look).
-- **Either way:** routine jobs that finished ("Refreshing link labels") will stop filling the
-  Jobs list.
-
 ### R-021 · Images in notes: where should they live?
 - **Question:** when you paste or drop an image into a note, should it become a **library
   item** (with its own ID, shown in Library, linked as `![[…]]`), or a **plain file in an
@@ -83,6 +62,27 @@ How urgent (optional):
 ---
 
 ## Done
+
+### R-024 · The side panel
+> "Really don't like side panel" (screenshot 2026-10-03: everything stacked in one column,
+> Jobs full of "Refreshing link labels"). Chosen: "Panel, one view at a time".
+
+- **Changed:**
+  - The panel shows one view at a time, chosen by icons along its top: Links (what links
+    here, plus a note's links without a target), Outline, History, Captures and About (for
+    library items), and Jobs. Only views that apply to the page are offered.
+  - The panel remembers your choice and starts closed.
+  - Repeated finished jobs show as one line ("Refreshing link labels · 12 times, last at
+    11:24 PM").
+- **Use:** ⌥⌘\ or the button at the top right opens and closes the panel. Click an icon (or
+  use the arrow keys on them) to switch views. ⌥⌘Y opens it on History, and the status bar's
+  jobs button opens it on Jobs.
+- **Code:** the panel in `src/shell/shell.ts` ("One view at a time"),
+  `SidePanelSection.icon` in `src/shell/slots.ts`, the Links view in
+  `src/features/links/index.ts`, grouping in `src/shell/jobs.ts`.
+- **Decision:** 0039 · **Tested:** a new panel test; two tests updated on purpose (the jobs
+  view is found by its section, and the captures test opens the Captures view); all 151
+  interface tests pass; checked in the preview.
 
 ### R-023 · No duplicate tabs
 > "Don't see in a point of duplicate tabs (two tabs of the same file/page)" (screenshot

@@ -172,3 +172,23 @@ describe("tabs in the window", () => {
     expect(saved()?.active).toBe(1);
   });
 });
+
+describe("the side panel (R-024)", () => {
+  it("shows one view at a time, chosen by the icons along its top, and remembers the choice", async () => {
+    const { shell, a } = await boot();
+    shell.openRecord(a.id);
+    await wait(30);
+    shell.actions.run("shell.toggleSidePanel");
+    await wait(30);
+    const tabs = () => [...document.querySelectorAll<HTMLElement>(".panel-tabs [role=tab]")];
+    // (Links isn't installed here: the panel starts on the first view that applies.)
+    expect(tabs().map((t) => t.getAttribute("aria-label"))).toEqual(["Outline", "History", "Jobs"]);
+    expect(document.querySelectorAll(".side-panel section[data-section]")).toHaveLength(1);
+    expect(document.querySelector(".side-panel .panel-title")?.textContent).toBe("Outline");
+    tabs()[1]!.click();
+    await wait(20);
+    expect(document.querySelector(".side-panel .panel-title")?.textContent).toBe("History");
+    expect(shell.prefs.pref("ui.panelView", "links")()).toBe("history");
+    expect(tabs()[1]!.getAttribute("aria-selected")).toBe("true");
+  });
+});

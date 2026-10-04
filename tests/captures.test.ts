@@ -256,7 +256,8 @@ describe("the captures panel", () => {
     // The source's text is re-extracted with small differences.
     mockTexts.set(src.id, `${PAGE1.replace("sensational", "sensationnal")}\n\n${PAGE2}`);
     shell.router.go("item", { id: src.id });
-    shell.actions.run("shell.toggleSidePanel");
+    // The panel shows one view at a time: its Captures view.
+    shell.showPanelSection("captures");
     await wait(80);
     expect(document.querySelector(".side-panel .badge.moved")?.textContent).toBe("moved");
   });

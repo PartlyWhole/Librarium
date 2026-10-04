@@ -78,6 +78,8 @@ export interface Folders {
 export interface SidePanelSection {
   id: string;
   title: string;
+  /** Its button along the top of the panel (one view shows at a time). */
+  icon?: IconNode;
   /** Whether this section has something to say about the current route. */
   applies(route: { page: string; params: Record<string, string> }): boolean;
   render(host: HTMLElement, route: { page: string; params: Record<string, string> }): (() => void) | void;

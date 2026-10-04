@@ -15,7 +15,7 @@ import { pdfEngine } from "../../reader/pdf";
 import { imageEngine } from "../../reader/image";
 import { epubEngine } from "../../reader/epub";
 import { ask, modal } from "../../kit/dialog";
-import { BookOpen, Globe, FileText, Image as ImageIcon, Library as LibraryIcon, Plus, ZoomIn, ZoomOut, Maximize, ChevronUp, ChevronDown } from "lucide";
+import { BookOpen, Globe, FileText, Image as ImageIcon, Library as LibraryIcon, Plus, ZoomIn, ZoomOut, Maximize, ChevronUp, ChevronDown, Info } from "lucide";
 
 const KIND = "item";
 const EXTENSIONS = ["pdf", "epub", "png", "jpg", "jpeg", "gif", "webp", "heic", "tif", "tiff"];
@@ -369,6 +369,7 @@ export function library(shell: ShellApi): void {
   shell.sidePanel.add("library", "about", {
     id: "about",
     title: "About this item",
+    icon: Info,
     applies: (r) => r.page === "item" && !!r.params.id,
     render(host, route) {
       const r = shell.records.get(route.params.id!);

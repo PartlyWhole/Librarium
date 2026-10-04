@@ -428,6 +428,7 @@ export function captures(shell: ShellApi): void {
   shell.sidePanel.add("captures", "captures", {
     id: "captures",
     title: "Captures",
+    icon: Quote,
     applies: (r) => r.page === "item" && !!r.params.id,
     render(host, route) {
       const src = route.params.id!;

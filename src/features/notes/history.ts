@@ -12,6 +12,7 @@ import type { ShellApi } from "../../shell/api";
 import type { HistoryVersion } from "../../generated/HistoryVersion";
 import type { DiffLine } from "../../generated/DiffLine";
 import type { SaveResult } from "../../generated/SaveResult";
+import { History } from "lucide";
 
 const ORIGIN: Record<string, string> = {
   app: "Edited here",
@@ -105,6 +106,7 @@ export function historySection(shell: ShellApi) {
   return {
     id: "history",
     title: "History",
+    icon: History,
     applies: (r: { page: string }) => r.page === "note",
     render(host: HTMLElement, route: { params: Record<string, string> }) {
       const id = route.params.id ?? "";

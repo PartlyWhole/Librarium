@@ -114,10 +114,11 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       if (items.length) contextMenu(items, at, one ? one.title || "Untitled" : `${rs.length} items`);
     },
     showPanelSection(id) {
+      panelView.set(id);
       panelOpen.set(true);
       // After the panel has rendered.
       setTimeout(() => {
-        const el = [...panelEl.querySelectorAll<HTMLElement>("[data-section]")].find((x) => x.dataset.section === id);
+        const el = [...panelEl.querySelectorAll<HTMLElement>("section[data-section]")].find((x) => x.dataset.section === id);
         el?.scrollIntoView?.({ block: "start" });
         el?.focus({ preventScroll: true });
       }, 0);
@@ -192,6 +193,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   let destroyed = false;
   const sidebarOpen = prefs.pref("ui.sidebar", true);
   const panelOpen = prefs.pref("ui.sidePanel", false);
+  const panelView = prefs.pref("ui.panelView", "links");
   const libraryOpen = () => folder()?.state === "open";
   const core: Action[] = [
     { id: "shell.palette", title: "Command palette", keys: ["Mod+Shift+P"], reserved: true, palette: false, run: () => openPalette(), menu: { name: "view", group: 0 }, icon: Command },
@@ -289,7 +291,8 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const workspace = h("main", { class: "workspace" }, tabs, h("header", { class: "ws-header" }, h("div", { class: "ws-nav" }, back, fwd), titleEl, h("div", { class: "ws-end" }, headerActions, panelToggle)), pageScroll);
   const panelBody = h("div", { class: "side-panel-body" });
   const panelClose = h("button", { class: "icon-button", type: "button", "aria-label": "Close the side panel", title: `Close the side panel (${display("Mod+Alt+\\")})`, onclick: () => (panelOpen.set(false), panelToggle.focus()) }, icon(X, 15));
-  const panelEl = h("aside", { class: "side-panel", "aria-label": "Side panel" }, h("div", { class: "side-panel-head" }, panelClose), panelBody);
+  const panelTabs = h("div", { class: "panel-tabs", role: "tablist", "aria-label": "Side panel views" });
+  const panelEl = h("aside", { class: "side-panel", "aria-label": "Side panel" }, h("div", { class: "side-panel-head" }, panelTabs, panelClose), panelBody);
   const statusLeft = h("div", { class: "status-left", role: "status", "aria-live": "polite" });
   const statusJobs = h("div", { class: "status-jobs", role: "status", "aria-live": "polite" });
   const statusRight = h("div", { class: "status-right" });
@@ -422,23 +425,38 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   });
 
   // Side panel sections that apply to the current route.
+  // One view at a time, chosen by the icons along the panel's top (as in Obsidian's right
+  // sidebar); the choice is remembered, and falls back to the first view that applies here.
   let panelDisposers: (() => void)[] = [];
   effect(() => {
     const r = router.current();
+    const want = panelView();
     if (!panelOpen()) return;
     for (const d of panelDisposers) d();
     panelDisposers = [];
     const sections = sidePanel.values().filter((s) => s.applies(r));
-    panelBody.replaceChildren(
-      ...(sections.length
-        ? sections.map((s) => {
-            const body = h("div", { class: "panel-body" });
-            const d = untracked(() => s.render(body, r));
-            if (typeof d === "function") panelDisposers.push(d);
-            return h("section", { class: "panel-section", "aria-label": s.title, tabindex: "-1", dataset: { section: s.id } }, h("h2", { class: "panel-title" }, s.title), body);
-          })
-        : [h("p", { class: "empty" }, "Nothing more to show here.")]),
-    );
+    const shown = sections.find((s) => s.id === want) ?? sections[0];
+    replace(panelTabs, sections.map((s) => {
+      const on = s === shown;
+      const b = h("button", { class: `icon-button panel-tab${on ? " current" : ""}`, type: "button", role: "tab", "aria-selected": String(on), tabindex: on ? "0" : "-1", "aria-label": s.title, title: s.title, dataset: { section: s.id }, onclick: () => panelView.set(s.id) }, icon(s.icon ?? PanelRight, 16));
+      b.addEventListener("keydown", (e) => {
+        const i = sections.indexOf(s);
+        const to = e.key === "ArrowRight" ? sections[(i + 1) % sections.length] : e.key === "ArrowLeft" ? sections[(i - 1 + sections.length) % sections.length] : undefined;
+        if (!to) return;
+        e.preventDefault();
+        panelView.set(to.id);
+        setTimeout(() => panelTabs.querySelector<HTMLElement>(`[data-section="${to.id}"]`)?.focus(), 0);
+      });
+      return b;
+    }));
+    if (!shown) {
+      replace(panelBody, h("p", { class: "empty" }, "Nothing more to show here."));
+      return;
+    }
+    const body = h("div", { class: "panel-body" });
+    const d = untracked(() => shown.render(body, r));
+    if (typeof d === "function") panelDisposers.push(d);
+    replace(panelBody, h("section", { class: "panel-section", role: "tabpanel", "aria-label": shown.title, tabindex: "-1", dataset: { section: shown.id } }, h("h2", { class: "panel-title" }, shown.title), body));
   });
 
   // The menu's enabled states follow navigation and the library's state.
