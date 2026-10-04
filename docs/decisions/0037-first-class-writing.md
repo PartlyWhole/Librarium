@@ -47,7 +47,10 @@ The user wants writing to be first class, as in Obsidian. A comparison (in
   - Tab and ⇧Tab move an item with its subtree, by the parent's marker width.
   - Numbered lists are renumbered: a nested list starts at 1, and a top-level list keeps its
     first number.
-  - Wrapped lines hang under the item's text (a line decoration in `ch`).
+  - Wrapped lines hang under the item's text. The item's indentation and marker are set in
+    the monospace font (`.cm-list-prefix`), whose character width is measured once, so the
+    hang is exact in em at every level. An inline-block bullet must reset `text-indent`, or it
+    inherits the line's negative indent and drifts left.
 - **Clipboard** (`clipboard.ts`, `html2md.ts`):
   - **HTML → Markdown:** HTML with structure pastes as Markdown, by our own converter over an
     inert `DOMParser` document. No dependency was added, and nothing runs or loads. A code
@@ -78,7 +81,6 @@ The user wants writing to be first class, as in Obsidian. A comparison (in
 
 - **Clicking a link's words opens it rather than placing the cursor.** Edit the words from
   the keyboard, or by clicking beside them.
-- **Hanging indents are approximate** with a proportional font (`ch` units).
 - **Not yet done:** hover previews, callouts, tags, images in notes (this needs a decision:
   library items or an attachments folder), a table editor, a properties editor, templates,
   slash commands, math and focus mode.

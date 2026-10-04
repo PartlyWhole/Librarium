@@ -44,6 +44,6 @@ describe("lists", () => {
   it("hangs wrapped lines of an item under its text", () => {
     const v = editor("- a long item\n\nplain", 0);
     const line = v.contentDOM.querySelector<HTMLElement>(".cm-line")!;
-    expect(line.style.paddingLeft).toBe("2ch");
+    expect(line.style.paddingLeft).toBe("1.2em");
   });
 });

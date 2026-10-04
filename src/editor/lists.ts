@@ -128,7 +128,31 @@ export function renumber(view: EditorView): void {
   if (changes.length) view.dispatch({ changes, userEvent: "input.indent" });
 }
 
-/** Wrapped lines of a list item hang under its text. */
+/** The width of one character of the monospace font, in em (measured once; 0.6 without layout). */
+let monoEm = 0;
+function monoWidth(): number {
+  if (monoEm) return monoEm;
+  monoEm = 0.6;
+  if (typeof document === "undefined" || !document.body) return monoEm;
+  const probe = document.createElement("span");
+  probe.className = "cm-list-prefix";
+  probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre;font-size:100px";
+  probe.textContent = "0".repeat(20);
+  document.body.appendChild(probe);
+  const w = probe.getBoundingClientRect().width;
+  probe.remove();
+  if (w > 0) monoEm = w / 20 / 100;
+  return monoEm;
+}
+
+/** A task's checkbox, with its margin (as styled for `.cm-task`), in em. */
+const CHECKBOX_EM = 1.35;
+
+/**
+ * Wrapped lines of a list item hang under its text. The item's indentation and marker are set
+ * in the monospace font (so nested items line up at every level, whatever the text's font),
+ * and the line's hanging indent is that prefix's width.
+ */
 export const hangingIndent = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
@@ -136,17 +160,26 @@ export const hangingIndent = ViewPlugin.fromClass(
       this.decorations = this.build(view);
     }
     update(u: ViewUpdate) {
-      if (u.docChanged || u.viewportChanged) this.decorations = this.build(u.view);
+      if (u.docChanged || u.viewportChanged || u.selectionSet) this.decorations = this.build(u.view);
     }
     build(view: EditorView): DecorationSet {
+      const { state } = view;
+      const mono = monoWidth();
+      const prefix = Decoration.mark({ class: "cm-list-prefix" });
       const b = new RangeSetBuilder<Decoration>();
       for (const { from, to } of view.visibleRanges) {
         for (let pos = from; pos <= to; ) {
-          const line = view.state.doc.lineAt(pos);
-          const m = /^(\s*)([-*+]|\d+[.)])(\s+)(\[[ xX]\]\s)?/.exec(line.text);
+          const line = state.doc.lineAt(pos);
+          const m = /^(\s*)([-*+]|\d+[.)])(\s+)(\[[ xX]\](\s|$))?/.exec(line.text);
           if (m) {
-            const w = m[0].length;
-            b.add(line.from, line.from, Decoration.line({ attributes: { style: `padding-left: ${w}ch; text-indent: -${w}ch` } }));
+            // As the live preview shows it: raw while the line is edited; else a dot (or, for
+            // a task, its checkbox alone).
+            const editing = state.selection.ranges.some((r) => r.from <= line.to && r.to >= line.from);
+            const task = !!m[4];
+            const em = !editing && task ? m[1]!.length * mono + CHECKBOX_EM + (m[5] ? mono : 0) : m[0].length * mono;
+            const w = `${em.toFixed(3)}em`;
+            b.add(line.from, line.from, Decoration.line({ attributes: { style: `padding-left: ${w}; text-indent: -${w}` } }));
+            b.add(line.from, line.from + m[0].length, prefix);
           }
           pos = line.to + 1;
         }
