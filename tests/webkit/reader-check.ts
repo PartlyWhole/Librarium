@@ -177,7 +177,33 @@ async function run() {
   const fv: any = stage.querySelector("foliate-view");
   const docs = (fv?.renderer?.getContents?.() ?? []).map((c: { doc: Document }) => c.doc);
   results.epubDocs = docs.length;
-  results.epubScriptRan = docs.some((d: Document) => d.title === "script ran");
+  results.epubScriptRan = docs.some((d: Document) => / ran$/.test(d.title));
+  results.epubPolicy = docs.every((d: Document) => /script-src 'none'/.test(d.querySelector("meta[http-equiv=Content-Security-Policy]")?.getAttribute("content") ?? ""));
+  // Reading on: the chapter bar, keys and scrolling past a chapter's end turn chapters.
+  step("epub chapters");
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const bar = stage.querySelector(".epub-bar")!;
+  const [prevCh, nextCh] = [...bar.querySelectorAll("button")] as HTMLButtonElement[];
+  const contents = bar.querySelector("select") as HTMLSelectElement;
+  results.epubContents = [...contents.options].map((o) => o.textContent).join("|");
+  results.epubStartsAt = epub.view.position();
+  results.epubPrevHidden = prevCh!.disabled;
+  nextCh!.click();
+  await wait(600);
+  results.epubAfterNext = epub.view.position();
+  results.epubContentsFollows = contents.selectedIndex;
+  results.epubNextHiddenAtEnd = nextCh!.disabled;
+  const frameDoc = () => fv.renderer.getContents()[0].doc as Document;
+  frameDoc().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+  await wait(600);
+  results.epubAfterLeft = epub.view.position();
+  // A deliberate scroll (after a pause) past the end of the (short) first chapter.
+  await wait(300);
+  frameDoc().dispatchEvent(new WheelEvent("wheel", { deltaY: 60, bubbles: true }));
+  frameDoc().dispatchEvent(new WheelEvent("wheel", { deltaY: 60, bubbles: true }));
+  await wait(600);
+  results.epubAfterWheel = epub.view.position();
+  results.epubScriptRanLater = / ran$/.test(frameDoc().title);
   step("epub find");
   results.epubFind = await epub.view.find("generosity");
   epub.view.zoomIn();

@@ -351,8 +351,11 @@ mark { background: var(--selection); color: inherit; border-radius: 2px; padding
 .pdfViewer .ws-page { box-shadow: 0 1px 3px rgb(0 0 0 / 12%); border: 0; margin: 12px auto; }
 .image-container { display: grid; place-items: center; padding: 16px; }
 .image-view { max-width: 100%; height: auto; box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
-.epub-container { background: var(--bg); }
-.epub-view { display: block; height: 100%; }
+.epub-container { background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
+.epub-view { display: block; flex: 1; min-height: 0; }
+.epub-bar { flex: none; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 8px; border-top: 1px solid var(--border); }
+.epub-bar select { max-width: min(50%, 360px); }
+.epub-bar button:disabled { visibility: hidden; }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }

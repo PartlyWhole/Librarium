@@ -149,8 +149,9 @@ Rules that keep it honest:
   - `complete.ts`: `[[` completion; plus embeds from extensions.
   - The note page (`features/notes/page.ts`) adds autosave, the word count, and making notes
     from unresolved links. `features/notes/history.ts` is the History panel.
-- **Reader** (`src/reader/`): PDF.js (legacy build), images, EPUB through vendored foliate-js
-  (book scripts disabled); marks for captures; region capture.
+- **Reader** (`src/reader/`): PDF.js (legacy build), images, EPUB through vendored foliate-js;
+  marks for captures; region capture. EPUB pages are cleaned and given a no-scripts policy
+  (`epub-safe.ts`, 0043); chapters turn by scrolling on, keys, and the chapter bar.
 - **Kit** (`src/kit/`): small, dependency-free pieces (signals, DOM helper, dialogs, menus,
   combobox, tree (virtualized), selection, select list, drag and drop, toasts).
 
@@ -170,6 +171,8 @@ combobox). Every action must be in a menu (shell test).
   - The development Dock icon is `icons/icon.icns`, baked into the binary at compile time;
     `src-tauri/build.rs` reruns when `icons/` changes so a new icon shows after the restart.
 - **WebKit, PDFs and saved pages**
+  - In an iframe sandboxed without `allow-scripts`, WebKit runs no event listeners at all, not
+    even the parent's (bug 218086). Stop a book's scripts by other means (0043).
   - `pdf-extract` reads nothing from WebKit's PDFs; PDFKit does.
   - Count images inside Form XObjects.
   - Strip soft hyphens.

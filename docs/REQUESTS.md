@@ -50,6 +50,29 @@ How urgent (optional):
 
 ## Done
 
+### R-026 · EPUBs show only their first page
+> "I only see the first page of the epubs"
+
+- **Changed:**
+  - Books now read on. Scroll past the end of a chapter (pause, then keep scrolling) and
+    the next chapter opens; scroll up past the start for the previous one.
+  - A bar under the book has the previous chapter, the contents (a list to jump to any
+    chapter) and the next chapter.
+  - The cause went deeper than missing buttons. WebKit ignored every event inside book pages,
+    because they were sandboxed without scripts. That also broke keys, and starting a
+    capture from a selection in a book. Book pages now handle events, and the book's own
+    scripts are stopped in three other ways.
+- **Use:** scroll on, or Space / Page Down / Page Up; ← and → turn chapters; the bar's
+  Contents list jumps anywhere.
+- **Code:** `src/reader/epub.ts`, `src/reader/epub-safe.ts`, `vendor/foliate-js/` (sandbox,
+  PATCHES.md), `src/shell/shell.css` (`.epub-bar`).
+- **Decision:** 0043.
+- **Tested:** WebKit checks: the contents, next, ←, scrolling on, and that scripts, handlers
+  and `javascript:` links never run and every page has the policy. Unit tests for the cleaning.
+  The feel of trackpad scrolling past a chapter's end needs the real app.
+- **Left:** selecting and capturing in books should be retried in the real app now that
+  events arrive.
+
 ### R-025 · The app icon
 > "add this" (librarium-icon-kit.zip) · "sorry, this is better"
 > (librarium-refined-icon-kit.zip) · "I still see this" (the old purple Dock icon) ·

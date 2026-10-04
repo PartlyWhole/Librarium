@@ -76,7 +76,7 @@ def epub(path):
         z.writestr("OEBPS/nav.xhtml", f'<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol>{nav}</ol></nav></body></html>')
         for i, (t, ps) in enumerate(chapters):
             body = "".join(f"<p>{p}</p>" for p in ps)
-            z.writestr(f"OEBPS/text/c{i}.xhtml", f'<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>{t}</title></head><body><h1>{t}</h1>{body}<script>document.title="script ran"</script></body></html>')
+            z.writestr(f"OEBPS/text/c{i}.xhtml", f'<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>{t}</title></head><body><h1>{t}</h1>{body}<script>document.title="script ran"</script><img src="missing.png" alt="" onerror="document.title=&quot;handler ran&quot;"/><a href="javascript:void(document.title=&quot;link ran&quot;)">x</a></body></html>')
 
 epub(OUT / "notebooks.epub")
 print("fixtures written to", OUT)
