@@ -70,10 +70,10 @@ Markdown syntax, `links.ts` parses `[[label|id]]` (shared fixture with the Rust 
   clipboard (the full form stays for pasting inside the app).
 - Tests: converter fixtures; copy filter.
 
-### E5. Structure and code ✅ when done
+### E5. Structure and code ✅
 
 - **Folding** by heading and by list/quote/code block: a fold gutter shown on hover, and
-  ⌥⌘[ / ⌥⌘] (fold, unfold), ⌃⌥⌘[ / ⌃⌥⌘] (fold all, unfold all). Fold state is per device
+  ⌥⌘[ / ⌥⌘] (fold, unfold), ⌃⌥[ / ⌃⌥] (fold all, unfold all; CodeMirror's keys). Fold state is per device
   (never written to the file).
 - **Code blocks are highlighted** by language (a small built-in set loaded lazily: JS/TS,
   Python, Rust, JSON, CSS, HTML, shell, SQL, Markdown), with a theme from the app's colours.

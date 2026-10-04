@@ -16,6 +16,7 @@ import { parseLinks } from "./links";
 import { formatKeymap, wrapOnType } from "./format";
 import { hangingIndent, listKeymap } from "./lists";
 import { clipboard, clipboardKeymap } from "./clipboard";
+import { codeHighlighting, folding } from "./code";
 
 let active: EditorView | null = null;
 
@@ -70,6 +71,8 @@ export function createEditor(o: EditorOptions): EditorView {
     highlightSelectionMatches(),
     EditorView.lineWrapping,
     markdownSupport(),
+    codeHighlighting,
+    ...folding,
     livePreview({ titleOf: o.titleOf, embedsHandled: contributions.some((c) => c.handlesEmbeds) }),
     linkCompletion(o.targets),
     clipboard,

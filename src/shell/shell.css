@@ -563,3 +563,25 @@ body.dragging-items, body.dragging-items * { cursor: grabbing !important; }
 /* Asking before a link opens in the browser. */
 .link-ask p { margin: 0 0 8px; }
 .link-url { font-family: var(--font-mono); font-size: 12px; padding: 6px 8px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--r1); word-break: break-all; max-height: 6em; overflow: auto; user-select: text; -webkit-user-select: text; }
+
+/* Code blocks: tokens coloured (only inside code); folding arrows show on hover. */
+.cm-code-block .tok-keyword, .cm-code-block .tok-operator { color: #a855f7; }
+.cm-code-block .tok-string, .cm-code-block .tok-string2 { color: #16a34a; }
+.cm-code-block .tok-number, .cm-code-block .tok-bool, .cm-code-block .tok-atom { color: #d97706; }
+.cm-code-block .tok-comment { color: var(--faint); font-style: italic; }
+.cm-code-block .tok-variableName.tok-definition, .cm-code-block .tok-propertyName { color: #2563eb; }
+.cm-code-block .tok-typeName, .cm-code-block .tok-className { color: #0891b2; }
+:root[data-theme="dark"] .cm-code-block .tok-keyword { color: #c4b5fd; }
+:root[data-theme="dark"] .cm-code-block .tok-string { color: #86efac; }
+:root[data-theme="dark"] .cm-code-block .tok-variableName.tok-definition, :root[data-theme="dark"] .cm-code-block .tok-propertyName { color: #93c5fd; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cm-code-block .tok-keyword { color: #c4b5fd; }
+  :root:not([data-theme="light"]) .cm-code-block .tok-string { color: #86efac; }
+  :root:not([data-theme="light"]) .cm-code-block .tok-variableName.tok-definition, :root:not([data-theme="light"]) .cm-code-block .tok-propertyName { color: #93c5fd; }
+}
+/* The fold arrows sit in the margin, left of the text, which stays where it was. */
+.cm-editor .cm-gutters { background: transparent; border: 0; color: var(--faint); }
+.cm-editor:has(.cm-foldGutter) { margin-left: -20px; }
+.cm-foldGutter .cm-gutterElement { width: 20px; box-sizing: border-box; text-align: center; opacity: 0; transition: opacity 0.15s; cursor: pointer; }
+.cm-editor:hover .cm-foldGutter .cm-gutterElement, .cm-foldGutter .cm-gutterElement:focus-within { opacity: 1; }
+.cm-foldPlaceholder { background: var(--hover); border: 0; color: var(--muted); padding: 0 6px; border-radius: var(--r1); }

@@ -2,6 +2,7 @@
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { tags, Tag } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
+import { codeLanguages } from "./code";
 
 export const highlightTag = Tag.define();
 
@@ -27,5 +28,5 @@ export const Highlight: MarkdownConfig = {
 const HighlightDelim = { resolve: "Highlight", mark: "HighlightMark" };
 
 export function markdownSupport() {
-  return markdown({ base: markdownLanguage, extensions: [Highlight], addKeymap: true });
+  return markdown({ base: markdownLanguage, extensions: [Highlight], addKeymap: true, codeLanguages });
 }
