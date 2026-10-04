@@ -51,6 +51,9 @@ const state = {
   /** Each kind's folders that exist on disk (empty ones too), as "kind:path"; records'
    * folders count as well. */
   folders: new Set<string>(),
+  nextOrigin: new Map<string, string>(),
+  /** Version history: record → versions (oldest first). */
+  history: new Map<string, { hash: string; ms: number; origin: string; body: string; title: string; path: string }[]>(),
   /** Arrangements by hand: kind → folder → keys. */
   order: {} as Record<string, Record<string, string[]>>,
 };
@@ -67,6 +70,26 @@ function pathFor(info: RecordInfo, folder: string, title = info.title): string {
   const top = info.kind === "item" ? "items" : info.kind === "capture" ? "captures" : "notes";
   const sub = folder ? `${folder}/` : "";
   return info.kind === "item" ? `${top}/${sub}${info.id}-${slug(title)}/record.json` : `${top}/${sub}${info.id}-${slug(title)}.md`;
+}
+
+/** Two texts compared line by line (a plain longest-common-subsequence diff). */
+function lineDiff(a: string, b: string): { op: string; text: string }[] {
+  const x = a.replace(/\n$/, "").split("\n");
+  const y = b.replace(/\n$/, "").split("\n");
+  const L = Array.from({ length: x.length + 1 }, () => new Array<number>(y.length + 1).fill(0));
+  for (let i = x.length - 1; i >= 0; i--) for (let j = y.length - 1; j >= 0; j--) L[i]![j] = x[i] === y[j] ? L[i + 1]![j + 1]! + 1 : Math.max(L[i + 1]![j]!, L[i]![j + 1]!);
+  const out: { op: string; text: string }[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < x.length || j < y.length) {
+    if (i < x.length && j < y.length && x[i] === y[j]) {
+      out.push({ op: "equal", text: x[i]! });
+      i++;
+      j++;
+    } else if (j < y.length && (i >= x.length || L[i]![j + 1]! >= L[i + 1]![j]!)) out.push({ op: "insert", text: y[j++]! });
+    else out.push({ op: "delete", text: x[i++]! });
+  }
+  return out;
 }
 
 function allFolders(kind: string): string[] {
@@ -142,8 +165,15 @@ function setArchived(p: { id: string; base_version?: string }, at: string | null
   return { info: r.info, seq: touch(r, "updated") };
 }
 
-function touch(r: Rec, op: "created" | "updated" | "renamed") {
+function touch(r: Rec, op: "created" | "updated" | "renamed", origin = "app") {
   r.info.version = version(r.body, r.info);
+  // History, as the kernel keeps it (without the spacing): one version per distinct text.
+  if (r.info.kind === "note" || r.info.kind === "capture") {
+    const vs = state.history.get(r.info.id) ?? [];
+    if (vs[vs.length - 1]?.hash !== r.info.version) vs.push({ hash: r.info.version, ms: Date.now() + vs.length, origin: state.nextOrigin.get(r.info.id) ?? origin, body: r.body, title: r.info.title, path: r.info.path });
+    state.nextOrigin.delete(r.info.id);
+    state.history.set(r.info.id, vs);
+  }
   state.seq++;
   const seq = state.seq;
   queueMicrotask(() => emit("event.change", { seq, id: r.info.id, kind: r.info.kind, op, origin: "app" }));
@@ -355,6 +385,37 @@ const api: Record<string, (p: any) => unknown> = {
     }
     return { moved, failed };
   },
+  "history.versions": (p) => [...(state.history.get(p.id) ?? [])].reverse().map((v) => ({ hash: v.hash, ms: v.ms, origin: v.origin, size: v.body.length, title: v.title, path: v.path, current: v.hash === state.records.get(p.id)?.info.version })),
+  "history.read": (p) => {
+    const v = (state.history.get(p.id) ?? []).find((x) => x.hash === p.hash);
+    if (!v) fail("not-found", "That version isn’t in this note’s history.");
+    return v.body;
+  },
+  "history.diff": (p) => {
+    const v = (state.history.get(p.id) ?? []).find((x) => x.hash === p.hash);
+    if (!v) fail("not-found", "That version isn’t in this note’s history.");
+    return lineDiff(v.body, need(p.id).body);
+  },
+  "history.restore": (p) => {
+    const r = need(p.id);
+    if (p.base_version !== r.info.version) fail("conflict", "The note changed since; look again before restoring.");
+    const v = (state.history.get(p.id) ?? []).find((x) => x.hash === p.hash);
+    if (!v) fail("not-found", "That version isn’t in this note’s history.");
+    state.nextOrigin.set(p.id, "restore");
+    r.body = v.body;
+    const seq = touch(r, "updated");
+    return { outcome: "saved", version: r.info.version, seq };
+  },
+  "history.deleted": () => [...state.history].filter(([id]) => !state.records.has(id)).map(([id, vs]) => ({ id, kind: "note", title: vs[vs.length - 1]!.title, path: vs[vs.length - 1]!.path, ms: vs[vs.length - 1]!.ms })),
+  "history.bringBack": (p) => {
+    const vs = state.history.get(p.id) ?? [];
+    const v = vs[vs.length - 1];
+    if (!v || state.records.has(p.id)) fail("conflict", "It is already in the library.");
+    const info: RecordInfo = { id: p.id, kind: "note", title: v.title, path: v.path, version: "", created: null, read_only: null, fields: {}, conflicts: [] };
+    const r = { info, body: v.body };
+    state.records.set(p.id, r);
+    return { info, seq: touch(r, "created") };
+  },
   "folders.list": () => ({ spaces: FOLDERED.map((kind) => ({ kind, folders: allFolders(kind), order: structuredClone(state.order[kind] ?? {}) })) }),
   "folders.setOrder": (p) => {
     const o = (state.order[folderKind(p.kind)] ??= {});
@@ -497,6 +558,8 @@ export const mock = {
     state.snapshotRemovals.clear();
     state.folders.clear();
     state.order = {};
+    state.history.clear();
+    state.nextOrigin.clear();
     state.deleted = [];
     state.inspect = { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false };
   },

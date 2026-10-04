@@ -102,6 +102,10 @@ Rules that keep it honest:
   `.librarium/order.json`.
 - **Archive and deletion** (0029): archiving sets `archive.at`; permanent deletion needs an
   archived record and a single-use token from a confirmation, then is an intent.
+- **Version history** (`history.rs`, 0038): Markdown records' versions in the library's
+  `.librarium/history/` (objects by sha256, one JSONL log per Mac); taken after app writes
+  (spaced 5 minutes, finished by the maintenance tick), on outside changes and around
+  restores; pruned by age; erased by permanent deletion; deleted notes can be brought back.
 
 ## 5. Features (backend)
 
@@ -133,8 +137,16 @@ Rules that keep it honest:
   (`kit/dnd.ts`) because Tauri claims the platform's drags for file drops.
 - **Links to the web** (`links.ts`, 0036): a dialog asks before opening in the browser; a
   Tauri navigation guard keeps the window in the app.
-- **Editor** (`src/editor/`): CodeMirror 6 with live preview, `[[` completion, embeds from
-  extensions. Plan: `docs/plans/editor-and-history.md`.
+- **Editor** (`src/editor/`, 0037): CodeMirror 6.
+  - `livepreview.ts`: marks hidden per construct, link IDs atomic.
+  - `format.ts`: formatting commands, the Format menu, wrapping, multiple cursors.
+  - `lists.ts`: subtree indent, renumbering, hanging indent.
+  - `clipboard.ts` and `html2md.ts`: HTML pasted as Markdown, copying without IDs.
+  - `code.ts`: language highlighting, folding.
+  - `stats.ts`: counts and the outline.
+  - `complete.ts`: `[[` completion; plus embeds from extensions.
+  - The note page (`features/notes/page.ts`) adds autosave, the word count, and making notes
+    from unresolved links. `features/notes/history.ts` is the History panel.
 - **Reader** (`src/reader/`): PDF.js (legacy build), images, EPUB through vendored foliate-js
   (book scripts disabled); marks for captures; region capture.
 - **Kit** (`src/kit/`): small, dependency-free pieces (signals, DOM helper, dialogs, menus,

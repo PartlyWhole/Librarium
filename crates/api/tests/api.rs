@@ -267,3 +267,48 @@ fn only_web_and_mail_addresses_are_opened_in_the_browser() {
     }
     assert_eq!(*desktop.opened.lock().unwrap(), ["https://example.org/a?b=c", "mailto:someone@example.org"]);
 }
+
+#[test]
+fn a_note_keeps_versions_that_compare_and_restore() {
+    let (a, _fs) = api();
+    a.call("folder.open", json!({ "path": "/lib" })).unwrap();
+    let w = a
+        .call("records.create", json!({ "kind": "page", "title": "Draft", "body": "first line\nsecond line\n" }))
+        .unwrap();
+    let id = w["info"]["id"].as_str().unwrap().to_string();
+    let first = a.call("history.versions", json!({ "id": id })).unwrap();
+    assert_eq!(first.as_array().unwrap().len(), 1);
+    assert_eq!(first[0]["current"], true);
+    let hash = first[0]["hash"].as_str().unwrap().to_string();
+    let v = w["info"]["version"].as_str().unwrap().to_string();
+    a.call("records.save", json!({ "id": id, "base_version": v, "body": "first line\nchanged\n" })).unwrap();
+    // The comparison: the old line removed, the new one added, bodies only.
+    let diff = a.call("history.diff", json!({ "id": id, "hash": hash })).unwrap();
+    let ops: Vec<(String, String)> = diff
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| (l["op"].as_str().unwrap().into(), l["text"].as_str().unwrap().into()))
+        .collect();
+    assert_eq!(
+        ops,
+        [
+            ("equal".into(), "first line".into()),
+            ("delete".into(), "second line".into()),
+            ("insert".into(), "changed".into())
+        ]
+    );
+    // Restoring needs the version shown, keeps the text before, and brings the text back.
+    let now = a.call("records.get", json!({ "id": id })).unwrap()["version"].as_str().unwrap().to_string();
+    let e = a.call("history.restore", json!({ "id": id, "hash": hash, "base_version": "stale" })).unwrap_err();
+    assert_eq!(e.code, librarium_contracts::ErrorCode::Conflict);
+    a.call("history.restore", json!({ "id": id, "hash": hash, "base_version": now })).unwrap();
+    assert!(a.call("records.read", json!({ "id": id })).unwrap()["body"].as_str().unwrap().ends_with("second line\n"));
+    let vs = a.call("history.versions", json!({ "id": id })).unwrap();
+    let origins: Vec<&str> = vs.as_array().unwrap().iter().map(|v| v["origin"].as_str().unwrap()).collect();
+    assert_eq!(origins, ["restore", "before-restore", "app"]);
+    // Another record's version can't be read through this one.
+    let other = a.call("records.create", json!({ "kind": "page", "title": "Other", "body": "x\n" })).unwrap();
+    let oid = other["info"]["id"].as_str().unwrap();
+    assert!(a.call("history.read", json!({ "id": oid, "hash": hash })).is_err());
+}

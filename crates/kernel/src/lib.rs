@@ -9,6 +9,7 @@ pub mod drafts;
 pub mod folders;
 pub mod frontmatter;
 pub mod hash;
+pub mod history;
 pub mod hosts;
 pub mod jobs;
 pub mod kinds;

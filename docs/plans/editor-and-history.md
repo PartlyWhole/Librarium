@@ -1,6 +1,6 @@
 # Plan: first-class writing, and version history
 
-Status: in progress (2026-10-03). Each phase lands as its own commit, with tests and a
+Status: done (2026-10-03): the editor (decision 0037) and version history (decision 0038). Each phase lands as its own commit, with tests and a
 decision record; this file is updated as phases finish (✅).
 
 The user's decisions (2026-10-03):
@@ -98,7 +98,7 @@ templates and slash commands, math, focus mode.
 
 ## Part 2. Version history
 
-### Shape (decision 0038 when done)
+### Shape ✅ (decision 0038)
 
 - **Kernel module `history`** (`crates/kernel/src/history.rs`), working through the
   `FileSystem` port (so the test file system and the crash sweeps apply). The old
@@ -126,7 +126,7 @@ templates and slash commands, math, focus mode.
   it.
 - **Deleted outside the app** (Finder, sync): the record's history stays and it is listed
   under "Recently deleted" (restore puts it back at its path, with its ID).
-- **Delete permanently** erases the record's history: its lines leave this Mac's log, a
+- **Delete permanently** erases the record's history (done): its lines leave this Mac's log, a
   `forget` line hides it from other Macs' logs, and its objects go once nothing refers to
   them.
 - **The index** (record → versions) is rebuilt in memory from the logs at open; it is derived
@@ -140,7 +140,7 @@ templates and slash commands, math, focus mode.
 - `history.restore {id, hash, base_version}` → takes a version of the current text first,
   then writes the old text as a normal save.
 - `history.deleted {}` and `history.restoreDeleted {id}`.
-- **Interface:** a "History" side-panel section for an open note: versions grouped by day,
+- **Interface** ✅: a "History" side-panel section for an open note: versions grouped by day,
   each with its time and what happened (edited here, changed outside the app, restored); a
   click opens a comparison (removed and added lines) with Restore. "Show history" (⌥⌘Y) in
   the File menu. The Archive page gets "Recently deleted".

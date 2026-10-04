@@ -14,6 +14,7 @@ import { toast } from "../../kit/toast";
 import { effect, signal, untracked } from "../../kit/signal";
 import { count } from "../../kit/format";
 import { call } from "../../backend";
+import type { DeletedNote } from "../../generated/DeletedNote";
 import type { ShellApi } from "../../shell/api";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import type { Written } from "../../generated/Written";
@@ -183,8 +184,27 @@ export function archive(shell: ShellApi): void {
           );
         });
       });
+      // Notes deleted outside the app (Finder, sync): their history can bring them back.
+      const deleted = h("section", { class: "recently-deleted" });
+      const loadDeleted = () =>
+        void call<DeletedNote[]>("history.deleted").then((list) => {
+          replace(deleted, list.length ? [
+            h("h2", { class: "list-heading" }, "Deleted outside Librarium"),
+            h("p", { class: "muted small" }, "These notes were deleted in Finder or by sync. Their last version is kept in the library's history."),
+            h("ul", { class: "plain-list" }, list.map((d) => h("li", { class: "archive-row" },
+              h("span", { class: "item-link" }, h("span", null, d.title || "Untitled"), h("span", { class: "muted small" }, `last seen ${new Date(Number(d.ms)).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`)),
+              h("button", { class: "button", type: "button", onclick: () => void call<Written>("history.bringBack", { id: d.id }).then((w) => (shell.records.put(w.info, w.seq), toast(`Brought back “${w.info.title || "Untitled"}”.`), loadDeleted()), (e: { message?: string }) => toast(e?.message ?? String(e))) }, icon(ArchiveRestore, 14), "Bring back"),
+            ))),
+          ] : []);
+        }, () => {});
+      loadDeleted();
+      const keep = effect(() => {
+        shell.records.byId();
+        if (!host.contains(deleted)) host.appendChild(deleted);
+      });
       return () => {
         stop();
+        keep();
         bar.dispose();
       };
     },

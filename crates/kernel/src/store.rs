@@ -169,6 +169,8 @@ pub struct Store {
     pub clock: Arc<dyn Clock>,
     pub ids: Arc<dyn IdGenerator>,
     pub versions: Arc<dyn VersionStore>,
+    /// Past versions of Markdown records, kept in the library (decision 0038).
+    pub history: crate::history::History,
     pub kinds: Arc<Kinds>,
     pub changes: ChangeLog,
     pub(crate) state: RwLock<State>,
@@ -215,6 +217,24 @@ fn io_err(e: io::Error, what: &str) -> BackendError {
         _ => ErrorCode::Io,
     };
     BackendError::new(code, format!("{what}: {e}")).with_data(serde_json::json!({ "io": format!("{:?}", e.kind()) }))
+}
+
+/// This Mac's name in the library's history: a random ID kept in Application Support.
+fn device_id(fs: &dyn FileSystem, app_dir: &Path, ids: &dyn IdGenerator) -> String {
+    let p = app_dir.join("device.json");
+    if let Ok(b) = fs.read(&p) {
+        if let Some(d) = serde_json::from_slice::<Value>(&b).ok().and_then(|v| v["device"].as_str().map(str::to_string))
+        {
+            return d;
+        }
+    }
+    let d = ids.next_id().to_string();
+    let _ = fs.create_dir_all(app_dir);
+    let tmp = app_dir.join(format!(".device.json.librarium-tmp-{}", std::process::id()));
+    if fs.write_new(&tmp, serde_json::json!({ "device": d }).to_string().as_bytes()).is_ok() {
+        let _ = fs.rename(&tmp, &p);
+    }
+    d
 }
 
 pub(crate) fn rel_str(p: &Path) -> String {
@@ -273,7 +293,10 @@ impl Store {
             }
         }
         let records = state.by_id.len() as u64;
+        let device = device_id(&*ports.fs, &app_dir, &*ports.ids);
+        let history = crate::history::History::new(ports.fs.clone(), &root, device);
         Ok(Store {
+            history,
             root,
             app_dir,
             fs: ports.fs,
@@ -741,6 +764,10 @@ impl<'a> Tx<'a> {
         let e = s.entry_from(rel, &meta, bytes, &d, id);
         s.upsert(e.clone())?;
         let _ = s.versions.recorded(rel, bytes);
+        if op != ChangeOp::Removed && s.kind_def(&e.kind).is_ok_and(|d| d.format == Format::Markdown) {
+            let origin = s.history.next_origin(id);
+            s.history.take(id, &e.kind, rel, &e.title, bytes, origin, s.clock.now_ms());
+        }
         let seq = s.changes.emit(id, &e.kind, op, ChangeOrigin::App);
         Ok((e, seq))
     }
@@ -1082,6 +1109,43 @@ impl<'a> Tx<'a> {
         self.indexed(&e.path, &out, ChangeOp::Updated)
     }
 
+    /// Brings back a Markdown record that was deleted (from its history): its file is written
+    /// again, with its own ID, where it was (or, if that place is taken, by its canonical
+    /// name in the same folder).
+    pub fn bring_back(&self, id: Id, was_at: &str, bytes: &[u8]) -> Result<(Entry, u64)> {
+        let s = self.store;
+        if s.get(id).is_some() {
+            return Err(BackendError::conflict("It is already in the library."));
+        }
+        let def = s
+            .kind_for_path(was_at)
+            .filter(|d| d.format == Format::Markdown)
+            .cloned()
+            .ok_or_else(|| BackendError::invalid("only notes can be brought back"))?;
+        if was_at.split('/').any(|p| p.is_empty() || p == ".." || p.starts_with('.')) || !was_at.ends_with(".md") {
+            return Err(BackendError::invalid("not a place for a note"));
+        }
+        let d = s.decode(was_at, bytes).ok_or_else(|| BackendError::invalid("that version can't be read"))?;
+        if d.id != Some(id) {
+            return Err(BackendError::invalid("that version belongs to another record"));
+        }
+        let free = |rel: &str| matches!(s.fs.stat(&s.abs(rel)), Ok(None));
+        let rel = if free(was_at) {
+            was_at.to_string()
+        } else {
+            let slug = s.slug_for(&def.kind, &d.title, &d.fields);
+            let alt = s.record_path(&def, id, &slug, s.subfolder_of(&def, was_at).as_deref());
+            if !free(&alt) {
+                return Err(BackendError::conflict("Something else is where it was."));
+            }
+            alt
+        };
+        let abs = s.abs(&rel);
+        s.fs.create_dir_all(abs.parent().unwrap()).map_err(|e| io_err(e, "making its folder"))?;
+        s.safe_write(&abs, bytes, true, self.dur).map_err(|e| io_err(e, "writing it back"))?;
+        self.indexed(&rel, bytes, ChangeOp::Created)
+    }
+
     /// Renames and/or moves a record: the file name follows the title. Written as an intent:
     /// rename first, then rewrite the frontmatter.
     pub fn relocate(&self, id: Id, title: Option<&str>, subfolder: Option<Option<&str>>) -> Result<(Entry, u64)> {
@@ -1293,6 +1357,10 @@ impl<'a> Tx<'a> {
         let r = self.apply(&intent).map(|(_, seq)| seq);
         if r.is_ok() {
             s.clear_intent(&p);
+            // Deleted permanently: so is its history (the user's decision, 0038).
+            if let Err(e) = s.history.forget(id, s.clock.now_ms()) {
+                eprintln!("librarium: the history of {id} wasn't erased: {e}");
+            }
         }
         r
     }

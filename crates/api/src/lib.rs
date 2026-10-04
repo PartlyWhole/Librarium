@@ -7,7 +7,7 @@ use librarium_contracts::api::{
     RecordText, RelocateParams, SaveParams, SaveResult, SetFieldsParams, SettingsParams, StoreStatus, WorkerPong,
     Written,
 };
-use librarium_contracts::api::{Draft, FolderInfo, LogParams};
+use librarium_contracts::api::{DeletedNote, DiffLine, Draft, FolderInfo, HistoryVersion, LogParams};
 use librarium_contracts::api::{
     FolderMoveParams, FolderMoved, FolderOrderParams, FolderPathParams, FolderSpace, FoldersList, MoveFailure,
     MoveRecordsParams, MovedRecords,
@@ -73,6 +73,12 @@ pub const METHODS: &[&str] = &[
     methods::FOLDERS_REMOVE,
     methods::FOLDERS_SET_ORDER,
     methods::APP_OPEN_URL,
+    methods::HISTORY_VERSIONS,
+    methods::HISTORY_READ,
+    methods::HISTORY_DIFF,
+    methods::HISTORY_RESTORE,
+    methods::HISTORY_DELETED,
+    methods::HISTORY_BRING_BACK,
 ];
 
 /// The settings key holding the library folder.
@@ -172,6 +178,114 @@ impl Api {
         if let Some(s) = self.sink.read().unwrap().as_ref() {
             s.notify(RpcNotification::new(method, params));
         }
+    }
+
+    // ---- version history (decision 0038) ----------------------------------------------------
+
+    /// A record's past versions, newest first.
+    pub fn history_versions(&self, id: Id) -> Result<Vec<HistoryVersion>> {
+        let lib = self.library()?;
+        let current = lib.store.get(id).map(|e| e.hash);
+        Ok(lib
+            .store
+            .history
+            .versions(id)
+            .into_iter()
+            .map(|v| HistoryVersion {
+                current: current.as_deref() == Some(v.hash.as_str()),
+                origin: serde_json::to_value(v.origin)
+                    .ok()
+                    .and_then(|o| o.as_str().map(str::to_string))
+                    .unwrap_or_default(),
+                hash: v.hash,
+                ms: v.ms,
+                size: v.size,
+                title: v.title,
+                path: v.path,
+            })
+            .collect())
+    }
+
+    /// A version's text (only of that record).
+    fn history_text(&self, id: Id, hash: &str) -> Result<String> {
+        let lib = self.library()?;
+        if !lib.store.history.versions(id).iter().any(|v| v.hash == hash) {
+            return Err(BackendError::not_found("That version isn’t in this note’s history."));
+        }
+        Ok(String::from_utf8_lossy(&lib.store.history.read(hash)?).into_owned())
+    }
+
+    /// A version against the file now, line by line (bodies only: the title is the page's).
+    pub fn history_diff(&self, id: Id, hash: &str) -> Result<Vec<DiffLine>> {
+        let lib = self.library()?;
+        let old = self.history_text(id, hash)?;
+        let e = lib.store.get(id).ok_or_else(|| BackendError::not_found("That note is gone."))?;
+        let now = String::from_utf8_lossy(
+            &lib.store.fs.read(&lib.store.abs(&e.path)).map_err(|e| BackendError::io(e.to_string()))?,
+        )
+        .into_owned();
+        let (a, b) = (body_of(&old), body_of(&now));
+        Ok(librarium_kernel::history::line_diff(a, b)
+            .into_iter()
+            .map(|(op, text)| DiffLine { op: op.into(), text })
+            .collect())
+    }
+
+    /// Puts a version's text back (the title and properties stay as they are now). The text
+    /// just before is kept as a version first, so a restore can be undone.
+    pub fn history_restore(&self, id: Id, hash: &str, base_version: &str) -> Result<SaveResult> {
+        let lib = self.library()?;
+        let old = self.history_text(id, hash)?;
+        let e = lib.store.get(id).ok_or_else(|| BackendError::not_found("That note is gone."))?;
+        if e.hash != base_version {
+            return Err(BackendError::conflict("The note changed since; look again before restoring."));
+        }
+        let now_bytes = lib.store.fs.read(&lib.store.abs(&e.path)).map_err(|e| BackendError::io(e.to_string()))?;
+        let store = &lib.store;
+        store.history.take(
+            id,
+            &e.kind,
+            &e.path,
+            &e.title,
+            &now_bytes,
+            librarium_kernel::history::Origin::BeforeRestore,
+            store.clock.now_ms(),
+        );
+        store.history.expect(id, librarium_kernel::history::Origin::Restore);
+        let body = body_of(&old).to_string();
+        let base = base_version.to_string();
+        lib.write(Lane::Interactive, move |tx| tx.save_body(id, &base, None, &body))
+    }
+
+    /// Notes deleted outside the app, that history can bring back (newest first).
+    pub fn history_deleted(&self) -> Result<Vec<DeletedNote>> {
+        let lib = self.library()?;
+        let mut out: Vec<DeletedNote> = lib
+            .store
+            .history
+            .records()
+            .into_iter()
+            .filter(|v| lib.store.get(v.id).is_none())
+            .map(|v| DeletedNote { id: v.id, kind: v.kind, title: v.title, path: v.path, ms: v.ms })
+            .collect();
+        out.sort_by(|a, b| b.ms.cmp(&a.ms));
+        Ok(out)
+    }
+
+    /// Writes a deleted note back from its newest version, with its ID.
+    pub fn history_bring_back(&self, id: Id) -> Result<Written> {
+        let lib = self.library()?;
+        let v = lib
+            .store
+            .history
+            .versions(id)
+            .into_iter()
+            .next()
+            .ok_or_else(|| BackendError::not_found("There is no history of that note."))?;
+        let bytes = lib.store.history.read(&v.hash)?;
+        lib.store.history.expect(id, librarium_kernel::history::Origin::Restore);
+        let (e, seq) = lib.write(Lane::Interactive, move |tx| tx.bring_back(id, &v.path, &bytes))?;
+        Ok(Written { info: e.info(), seq })
     }
 
     /// A link tried to take the window away from the app (it was stopped): the interface asks
@@ -681,6 +795,28 @@ impl Api {
                 }
                 Ok(Value::Null)
             }
+            methods::HISTORY_VERSIONS => to_json(self.history_versions(params::<IdParams>(p)?.id)?),
+            methods::HISTORY_READ | methods::HISTORY_DIFF | methods::HISTORY_RESTORE => {
+                #[derive(serde::Deserialize)]
+                struct P {
+                    id: Id,
+                    hash: String,
+                    #[serde(default)]
+                    base_version: Option<String>,
+                }
+                let q: P = params(p)?;
+                match method {
+                    methods::HISTORY_READ => to_json(self.history_text(q.id, &q.hash)?),
+                    methods::HISTORY_DIFF => to_json(self.history_diff(q.id, &q.hash)?),
+                    _ => to_json(self.history_restore(
+                        q.id,
+                        &q.hash,
+                        q.base_version.as_deref().ok_or_else(|| BackendError::invalid("base_version is required"))?,
+                    )?),
+                }
+            }
+            methods::HISTORY_DELETED => to_json(self.history_deleted()?),
+            methods::HISTORY_BRING_BACK => to_json(self.history_bring_back(params::<IdParams>(p)?.id)?),
             methods::APP_OPEN_URL => {
                 let url = p.get("url").and_then(|v| v.as_str()).unwrap_or_default().to_string();
                 self.open_url(&url)?;
@@ -725,4 +861,9 @@ impl RpcHandler for Handler {
             Err(e) => RpcResponse::err(request.id, e),
         }
     }
+}
+
+/// A Markdown file's text after its frontmatter.
+fn body_of(text: &str) -> &str {
+    librarium_kernel::frontmatter::split(text).1
 }

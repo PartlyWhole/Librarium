@@ -7,6 +7,7 @@ import { parseLinks } from "../../editor/links";
 import type { RecordText } from "../../generated/RecordText";
 import { toast } from "../../kit/toast";
 import { renderNote } from "./page";
+import { historySection } from "./history";
 import { FORMATS } from "../../editor/format";
 import { activeEditor } from "../../editor/editor";
 import { outline } from "../../editor/stats";
@@ -71,6 +72,17 @@ export function notes(shell: ShellApi): void {
       shell.router.go("note", { id: w.info.id, focus: "title" });
     },
   });
+  // Version history: past versions of the note shown, to compare and restore.
+  shell.sidePanel.add("notes", "history", historySection(shell), 6);
+  shell.actions.add("notes", {
+    id: "notes.history",
+    title: "Show history",
+    keys: ["Mod+Alt+Y"],
+    when: () => shell.router.current().page === "note",
+    menu: { name: "file", group: 3 },
+    run: () => shell.showPanelSection("history"),
+  });
+
   // The outline: the shown note's headings; a click goes there.
   shell.sidePanel.add("notes", "outline", {
     id: "outline",

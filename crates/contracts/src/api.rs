@@ -42,6 +42,12 @@ pub mod methods {
     pub const FOLDERS_REMOVE: &str = "folders.remove";
     pub const FOLDERS_SET_ORDER: &str = "folders.setOrder";
     pub const APP_OPEN_URL: &str = "app.openUrl";
+    pub const HISTORY_VERSIONS: &str = "history.versions";
+    pub const HISTORY_READ: &str = "history.read";
+    pub const HISTORY_DIFF: &str = "history.diff";
+    pub const HISTORY_RESTORE: &str = "history.restore";
+    pub const HISTORY_DELETED: &str = "history.deleted";
+    pub const HISTORY_BRING_BACK: &str = "history.bringBack";
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -225,6 +231,40 @@ pub struct RelocateParams {
     #[serde(default, deserialize_with = "some_option")]
     #[ts(optional, type = "string | null")]
     pub subfolder: Option<Option<String>>,
+}
+
+/// A past version of a note (version history, decision 0038).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct HistoryVersion {
+    pub hash: String,
+    #[ts(type = "number")]
+    pub ms: i64,
+    /// `app`, `outside`, `before-restore` or `restore`.
+    pub origin: String,
+    #[ts(type = "number")]
+    pub size: u64,
+    pub title: String,
+    pub path: String,
+    /// The same text as the file now.
+    pub current: bool,
+}
+
+/// One line of a comparison: `equal`, `delete` (only in the old version) or `insert` (only now).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct DiffLine {
+    pub op: String,
+    pub text: String,
+}
+
+/// A note deleted outside the app, that its history can bring back.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct DeletedNote {
+    pub id: crate::Id,
+    pub kind: String,
+    pub title: String,
+    pub path: String,
+    #[ts(type = "number")]
+    pub ms: i64,
 }
 
 /// The user's folders, for each kind kept in folders.

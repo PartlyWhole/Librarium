@@ -201,6 +201,12 @@ impl Library {
                     }
                 }
                 let now = s.clock.now_ms();
+                // History: the latest text of records written since their last version.
+                s.history.tick(now, |id| {
+                    let e = s.get(id)?;
+                    let bytes = s.fs.read(&s.abs(&e.path)).ok()?;
+                    Some((e.kind, e.path, e.title, bytes))
+                });
                 if now - last_full.load(Ordering::SeqCst) >= every {
                     last_full.store(now, Ordering::SeqCst);
                     if tx.full_check().is_ok() {

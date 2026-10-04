@@ -440,6 +440,21 @@ impl Tx<'_> {
             });
         }
         if let Some(op) = op {
+            // Changed outside the app: a version of it, as it now is. (Not for a record first
+            // seen: on a first run or a rebuilt index every note is "new".)
+            if let (Some(Seen::Read { bytes, .. }), ChangeOp::Updated | ChangeOp::Renamed) = (orig_seen, op) {
+                if s.kind_def(&entry.kind).is_ok_and(|d| d.format == Format::Markdown) {
+                    s.history.take(
+                        id,
+                        &entry.kind,
+                        &entry.path,
+                        &entry.title,
+                        bytes,
+                        crate::history::Origin::Outside,
+                        s.clock.now_ms(),
+                    );
+                }
+            }
             s.changes.emit(id, &entry.kind, op, ChangeOrigin::Outside);
             match op {
                 ChangeOp::Created => report.created.push(id),

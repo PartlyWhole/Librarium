@@ -588,3 +588,21 @@ body.dragging-items, body.dragging-items * { cursor: grabbing !important; }
 .outline { list-style: none; margin: 0; padding: 0; }
 .outline-link { display: block; width: 100%; text-align: left; padding: 3px 6px; border-radius: var(--r1); color: var(--ink); text-decoration: none; }
 .outline-link:hover { background: var(--hover); }
+
+/* Version history. */
+.history-day { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 12px 0 4px; }
+.history-list { list-style: none; margin: 0; padding: 0; }
+.history-item { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 4px 6px; border: 0; border-radius: var(--r1); background: none; color: var(--ink); font: inherit; text-align: left; cursor: default; }
+.history-item:hover, .history-item:focus-visible { background: var(--hover); }
+.history-time { min-width: 5.5em; font-variant-numeric: tabular-nums; }
+.modal.wide { max-width: min(880px, 94vw); width: 880px; }
+.diff { max-height: 60vh; overflow: auto; font: 13px/1.5 var(--font-mono); border: 1px solid var(--border); border-radius: var(--r1); padding: 6px 0; background: var(--bg-alt); user-select: text; -webkit-user-select: text; }
+.diff-line { padding: 0 10px 0 24px; white-space: pre-wrap; word-break: break-word; position: relative; }
+.diff-line.delete { background: rgb(220 38 38 / 12%); }
+.diff-line.insert { background: rgb(22 163 74 / 12%); }
+.diff-sign { position: absolute; left: 8px; color: var(--muted); }
+.diff-skip { padding: 2px 24px; color: var(--faint); font-family: var(--font-ui); font-size: 12px; }
+.diff-key { font-family: var(--font-mono); font-size: 11px; padding: 0 4px; border-radius: 3px; }
+.diff-key.delete { background: rgb(220 38 38 / 12%); }
+.diff-key.insert { background: rgb(22 163 74 / 12%); }
+.recently-deleted { margin-top: 28px; }
