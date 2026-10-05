@@ -848,19 +848,37 @@ impl<'a> Tx<'a> {
         body: &str,
         sidecars: Vec<(String, Vec<u8>)>,
     ) -> Result<(Entry, u64)> {
+        self.create_with_sidecars_in(id, kind, title, fields, body, sidecars, None)
+    }
+    /// Like [`Tx::create_with_sidecars_id`], in one of the kind's subfolders (the sidecars go
+    /// beside the record).
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_with_sidecars_in(
+        &self,
+        id: Id,
+        kind: &str,
+        title: &str,
+        fields: Vec<(String, FmValue)>,
+        body: &str,
+        sidecars: Vec<(String, Vec<u8>)>,
+        subfolder: Option<&str>,
+    ) -> Result<(Entry, u64)> {
         let s = self.store;
         let def = s.kind_def(kind)?.clone();
         if s.get(id).is_some() {
             return Err(BackendError::invalid("that ID is taken"));
         }
-        let dir = s.root.join(&def.folder);
+        let dir = match subfolder {
+            Some(sub) => s.root.join(&def.folder).join(sub),
+            None => s.root.join(&def.folder),
+        };
         s.fs.create_dir_all(&dir).map_err(|e| io_err(e, "creating the folder"))?;
         for (suffix, bytes) in &sidecars {
             check_suffix(suffix)?;
             s.safe_write(&dir.join(format!("{id}{suffix}")), bytes, false, self.dur)
                 .map_err(|e| io_err(e, "writing a sidecar"))?;
         }
-        self.create_with_id(id, kind, title, fields, body, None)
+        self.create_with_id(id, kind, title, fields, body, subfolder)
     }
 
     /// Replaces a Markdown record's sidecar (paired by the ID inside it; the name follows the ID).
@@ -1231,6 +1249,11 @@ impl<'a> Tx<'a> {
                 }
             };
             s.fs.create_dir_all(to.parent().unwrap()).map_err(|err| io_err(err, "creating the folder"))?;
+            // A Markdown record's sidecars (`<id>.*` beside it: a board's drawing, a capture's
+            // anchor) go to its new folder first, so redoing an interrupted move finishes it.
+            if def.format == Format::Markdown && from.parent() != to.parent() {
+                self.move_sidecars(id, from.parent().unwrap(), to.parent().unwrap())?;
+            }
             s.fs.rename_exclusive(&from, &to).map_err(|err| io_err(err, "renaming"))?;
             s.fs.flush_dir(to.parent().unwrap(), self.dur.flush()).map_err(|err| io_err(err, "flushing"))?;
             if from.parent() != to.parent() {
@@ -1254,6 +1277,25 @@ impl<'a> Tx<'a> {
             }
         }
         self.rewrite(&def, &path, &edits, renamed)
+    }
+
+    /// Moves a Markdown record's sidecars (`<id>.*`, not the record) from one folder to another.
+    /// Idempotent: a sidecar already moved is skipped.
+    fn move_sidecars(&self, id: Id, from_dir: &Path, to_dir: &Path) -> Result<()> {
+        let s = self.store;
+        let prefix = format!("{id}.");
+        for f in s.fs.list(from_dir).unwrap_or_default() {
+            if f.is_dir || !f.name.starts_with(&prefix) || f.name.ends_with(".md") {
+                continue;
+            }
+            let (a, b) = (from_dir.join(&f.name), to_dir.join(&f.name));
+            if s.fs.stat(&b).ok().flatten().is_some() {
+                continue;
+            }
+            s.fs.rename_exclusive(&a, &b).map_err(|err| io_err(err, "moving a sidecar"))?;
+        }
+        let _ = s.fs.flush_dir(to_dir, self.dur.flush());
+        Ok(())
     }
 
     /// Rewrites a record's frontmatter (or `record.json`) fields in place, then indexes it.

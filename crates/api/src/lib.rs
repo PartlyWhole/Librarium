@@ -621,7 +621,12 @@ impl Api {
             spaces: s
                 .foldered()
                 .into_iter()
-                .map(|d| FolderSpace { folders: s.folders(&d.kind), order: s.folder_order(&d.kind), kind: d.kind })
+                .map(|d| FolderSpace {
+                    folders: s.folders(&d.kind),
+                    order: s.folder_order(&d.kind),
+                    kinds: s.space_kinds(&d),
+                    kind: d.kind,
+                })
                 .collect(),
         })
     }

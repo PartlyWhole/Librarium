@@ -36,6 +36,8 @@ pub fn export_types(dir: &Path) -> Result<(), String> {
         crate::api::SetFieldsParams,
         crate::api::RelocateParams,
         crate::api::Written,
+        crate::api::BoardLoaded,
+        crate::api::BoardSaved,
         crate::api::SettingsParams,
         crate::api::FolderInfo,
         crate::api::LogParams,

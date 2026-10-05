@@ -5,8 +5,8 @@ Request R-057:
 > etc. Basically a note but can draw/write on it like a whiteboard. This is going to be a big
 > feature because there are a lot of tools already with excalidraw. Please plan carefully"
 
-Status: **D1 and D2 decided (React for boards only; beside notes). Phase 0 passed. D3 (file
-format) waits for the user.** See §8 for phase 0's results.
+Status: **D1–D3 decided (React for boards only, 0061; beside notes; the two-file format,
+0062). Phase 0 passed (§8). Phase 1 (kind and storage) done.** Next: phase 2, the board page.
 
 In this plan, *fact* means checked (against the code, the brief or the Excalidraw package
 0.18.1, unpacked and read). *Proposal* means my recommendation. *Assumption* means not yet
@@ -71,7 +71,7 @@ section (notes in `notes/`, items in `items/`).
 
 ### D3. The file format (§10: "don't guess on data formats")
 
-- **A (recommended): a Markdown record plus a plain Excalidraw file beside it.**
+- **A (recommended; chosen by the user on 2026-10-05, decision 0062): a Markdown record plus a plain Excalidraw file beside it.**
   - `notes/<id>-<slug>.md`: frontmatter (`kind: "board"`) and a readable body generated from
     the board. The body holds its texts, in reading order, and its links (`[[label|id]]`)
     and captures (`![[label|id]]`), so search, backlinks, "used by" and Obsidian all see

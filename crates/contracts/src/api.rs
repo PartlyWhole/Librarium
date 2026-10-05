@@ -274,10 +274,12 @@ pub struct FoldersList {
 }
 
 /// One kind's folders (`/`-separated paths, sorted) and the order the user arranged them in:
-/// `{ folder: [record ID or "folder:<name>", …] }`, the top level as `""`.
+/// `{ folder: [record ID or "folder:<name>", …] }`, the top level as `""`. `kinds` lists every
+/// kind kept in these folders, the space's own first (boards are kept beside notes).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct FolderSpace {
     pub kind: String,
+    pub kinds: Vec<String>,
     pub folders: Vec<String>,
     #[ts(type = "Record<string, string[]>")]
     pub order: std::collections::BTreeMap<String, Vec<String>>,
@@ -343,6 +345,26 @@ pub struct Written {
     pub info: RecordInfo,
     #[ts(type = "number")]
     pub seq: u64,
+}
+
+/// A board as opened: its record, its drawing (Excalidraw's JSON, as stored beside it) and the
+/// drawing's SHA-256. `stale_page` says the readable page was written from another drawing
+/// (the drawing was changed outside, or a save was interrupted): the next save rewrites it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct BoardLoaded {
+    pub info: RecordInfo,
+    pub scene: String,
+    pub scene_sha: String,
+    pub stale_page: bool,
+}
+
+/// A board saved: its record now, and the SHA-256 of the drawing written.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct BoardSaved {
+    pub info: RecordInfo,
+    #[ts(type = "number")]
+    pub seq: u64,
+    pub scene_sha: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]

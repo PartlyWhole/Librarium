@@ -26,6 +26,7 @@ librarium-changes-fsevents = { path = "../crates/adapters/changes-fsevents" }
 librarium-index-sqlite = { path = "../crates/adapters/index-sqlite" }
 librarium-versions-none = { path = "../crates/adapters/versions-none" }
 librarium-feature-notes = { path = "../crates/features/notes" }
+librarium-feature-boards = { path = "../crates/features/boards" }
 librarium-feature-daily = { path = "../crates/features/daily" }
 librarium-feature-captures = { path = "../crates/features/captures" }
 librarium-feature-archive = { path = "../crates/features/archive" }

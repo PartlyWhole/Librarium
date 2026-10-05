@@ -27,6 +27,8 @@ pub struct App {
 pub fn kinds() -> Kinds {
     let mut k = Kinds::new();
     librarium_feature_notes::contribute_kinds(&mut k).expect("notes kinds");
+    // After notes: boards share the Notes folders, whose primary kind is the note.
+    librarium_feature_boards::contribute_kinds(&mut k).expect("boards kinds");
     librarium_feature_daily::contribute_kinds(&mut k).expect("daily kinds");
     librarium_feature_captures::contribute_kinds(&mut k).expect("captures kinds");
     librarium_feature_library::contribute_kinds(&mut k).expect("library kinds");
@@ -52,6 +54,7 @@ pub fn job_kinds() -> librarium_kernel::registry::Registry<librarium_kernel::job
 pub fn methods() -> librarium_kernel::registry::Registry<librarium_kernel::methods::ApiMethod> {
     let mut r = librarium_kernel::methods::registry();
     librarium_feature_notes::contribute_methods(&mut r).expect("notes methods");
+    librarium_feature_boards::contribute_methods(&mut r).expect("boards methods");
     librarium_feature_daily::contribute_methods(&mut r).expect("daily methods");
     librarium_feature_search::contribute_methods(&mut r).expect("search methods");
     librarium_feature_links::contribute_methods(&mut r).expect("links methods");

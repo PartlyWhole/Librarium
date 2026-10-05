@@ -433,7 +433,7 @@ const api: Record<string, (p: any) => unknown> = {
     state.records.set(p.id, r);
     return { info, seq: touch(r, "created") };
   },
-  "folders.list": () => ({ spaces: FOLDERED.map((kind) => ({ kind, folders: allFolders(kind), order: structuredClone(state.order[kind] ?? {}) })) }),
+  "folders.list": () => ({ spaces: FOLDERED.map((kind) => ({ kind, kinds: [kind], folders: allFolders(kind), order: structuredClone(state.order[kind] ?? {}) })) }),
   "folders.setOrder": (p) => {
     const o = (state.order[folderKind(p.kind)] ??= {});
     if (p.order.length) o[p.path] = [...new Set<string>(p.order)];

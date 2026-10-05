@@ -2207,6 +2207,7 @@ dependencies = [
  "librarium-changes-fsevents",
  "librarium-contracts",
  "librarium-feature-archive",
+ "librarium-feature-boards",
  "librarium-feature-captures",
  "librarium-feature-daily",
  "librarium-feature-library",
@@ -2265,6 +2266,18 @@ dependencies = [
  "librarium-kernel",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "librarium-feature-boards"
+version = "0.1.0"
+dependencies = [
+ "librarium-contracts",
+ "librarium-kernel",
+ "librarium-testkit",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

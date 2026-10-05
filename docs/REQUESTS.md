@@ -44,15 +44,7 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Waiting for you
 
-### Boards (R-057): one decision left before phase 1 — details in `docs/plans/boards.md` §2
-- **D1. React for Excalidraw: decided (2026-10-05):** React for boards only (A), decision 0061.
-- **D2. Where boards live: decided (2026-10-05):** beside notes, as a `board` kind in the
-  Notes folders (A).
-- **D3. File format.**
-  - **A (recommended):** `<id>-slug.md`, with a readable body the app writes (texts, links,
-    captures), plus `<id>.excalidraw` (plain Excalidraw JSON) beside it.
-  - **B:** Obsidian Excalidraw's single compressed file.
-  - **C:** one Markdown file with the JSON inside it.
+(nothing)
 
 ---
 
@@ -81,7 +73,20 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
     tested).
   - Fonts served locally, and Excalidraw's CDN fallback pointed at them.
   - Nested packages patched (`npm audit`: 0).
-- **Next:** D3 (file format) under Waiting for you, then phase 1 (the kind and its storage).
+- **Decided:** the two-file format (D3, decision 0062).
+- **Phase 1 (the kind and its storage) done:**
+  - **What a board is:** a `board` kind kept in the Notes folders. On disk it's
+    `<id>-title.md` (a readable page) plus `<id>.excalidraw` (the drawing).
+  - **Calls:** `boards.create`, `boards.load` and `boards.save`. A save writes both files,
+    and is refused if either changed since the board was opened.
+  - **Kernel changes:** kinds stored alike may share a folder. Folder lists, moves and
+    removal cover them all. A record moved to another folder now takes its side files.
+  - **Tests:** Rust tests for each, including a save interrupted at every step.
+  - **Code:** `crates/features/boards`, `crates/kernel/src/{kinds,folders,store}.rs`,
+    `crates/contracts` (`BoardLoaded`, `BoardSaved`, `FolderSpace.kinds`).
+  - **Changed on purpose:** the API test now expects `kinds` in the folder list.
+- **Next:** phase 2, the board page (open, draw, autosave, drafts, outside changes, undo).
+  Boards don't show in the app until then.
 
 ---
 

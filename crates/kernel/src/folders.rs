@@ -81,17 +81,36 @@ impl Store {
         self.all_orders().remove(&def.folder).unwrap_or_default()
     }
 
-    /// The kinds kept in the user's folders.
+    /// The kinds kept in the user's folders: one per top folder (its primary; kinds sharing it,
+    /// like boards beside notes, are in [`Store::space_kinds`]).
     pub fn foldered(&self) -> Vec<RecordKindDef> {
-        self.kinds.all().filter(|d| d.subfolder_field.is_some()).cloned().collect()
+        self.kinds
+            .all()
+            .filter(|d| {
+                d.subfolder_field.is_some() && self.kinds.by_folder(&d.folder).is_some_and(|p| p.kind == d.kind)
+            })
+            .cloned()
+            .collect()
     }
 
-    /// A kind kept in folders, by name.
+    /// A kind kept in folders, by name (a kind sharing another's folders included).
     pub fn foldered_kind(&self, kind: &str) -> Result<RecordKindDef> {
-        self.foldered()
-            .into_iter()
-            .find(|d| d.kind == kind)
+        self.kinds
+            .all()
+            .find(|d| d.kind == kind && d.subfolder_field.is_some())
+            .cloned()
             .ok_or_else(|| BackendError::invalid(format!("“{kind}” records aren’t kept in folders")))
+    }
+
+    /// Every kind kept in the same folders as `def` (itself included, the primary first).
+    pub fn space_kinds(&self, def: &RecordKindDef) -> Vec<String> {
+        self.kinds.sharing(&def.folder).into_iter().map(|d| d.kind.clone()).collect()
+    }
+
+    /// The records of every kind kept in `def`'s folders.
+    fn space_records(&self, def: &RecordKindDef) -> Vec<crate::store::Entry> {
+        let kinds = self.space_kinds(def);
+        self.list(None).into_iter().filter(|e| kinds.contains(&e.kind)).collect()
     }
 
     /// Every folder of a kind, from the disk (empty ones too) and from records' paths, sorted.
@@ -116,7 +135,7 @@ impl Store {
                 stack.push((p, r));
             }
         }
-        for e in self.list(Some(&def.kind)) {
+        for e in self.space_records(&def) {
             if let Some(sub) = self.subfolder_of(&def, &e.path).filter(|s| !s.is_empty()) {
                 let parts: Vec<&str> = sub.split('/').collect();
                 for i in 1..=parts.len() {
@@ -132,10 +151,10 @@ impl Store {
         self.fs.stat(&self.abs(&format!("{}/{path}", def.folder))).ok().flatten().is_some_and(|m| m.is_dir)
     }
 
-    /// Records inside a kind's folder (at any depth).
+    /// Records inside a kind's folder (at any depth), of every kind kept there.
     pub fn records_in_folder(&self, def: &RecordKindDef, path: &str) -> Vec<Entry> {
         let prefix = format!("{}/{path}/", def.folder);
-        self.list(Some(&def.kind)).into_iter().filter(|e| e.path.starts_with(&prefix)).collect()
+        self.space_records(def).into_iter().filter(|e| e.path.starts_with(&prefix)).collect()
     }
 }
 
@@ -185,7 +204,9 @@ impl Tx<'_> {
     /// Carries out a folder move. Idempotent: redone at startup, it finishes what's left.
     pub(crate) fn apply_move_folder(&self, kind: &str, from: &str, to: &str) -> Result<usize> {
         let s = self.store;
-        let defs = vec![s.foldered_kind(kind)?];
+        // Every kind kept in these folders moves with them (boards beside notes).
+        let first = s.foldered_kind(kind)?;
+        let defs: Vec<RecordKindDef> = s.space_kinds(&first).iter().filter_map(|k| s.kinds.get(k).cloned()).collect();
         // The folders themselves, one rename each (other files inside go along).
         for d in &defs {
             let (a, b) = (s.abs(&format!("{}/{from}", d.folder)), s.abs(&format!("{}/{to}", d.folder)));

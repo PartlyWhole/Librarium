@@ -1,0 +1,20 @@
+[package]
+name = "librarium-feature-boards"
+description = "Boards: a note you can draw on (Excalidraw), kept beside notes."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+librarium-contracts.workspace = true
+librarium-kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+
+[dev-dependencies]
+librarium-testkit.workspace = true
+
+[lints]
+workspace = true

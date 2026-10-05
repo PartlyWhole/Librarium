@@ -234,7 +234,7 @@ fn folders_are_listed_made_moved_and_removed() {
     let id = w["info"]["id"].as_str().unwrap().to_string();
     a.call("folders.create", json!({ "kind": "page", "path": "Reading" })).unwrap();
     let l = a.call("folders.list", json!({})).unwrap();
-    assert_eq!(l, json!({ "spaces": [{ "kind": "page", "folders": ["Reading"], "order": {} }] }));
+    assert_eq!(l, json!({ "spaces": [{ "kind": "page", "kinds": ["page"], "folders": ["Reading"], "order": {} }] }));
     // An arrangement is kept, and follows the folder when it moves.
     a.call("folders.setOrder", json!({ "kind": "page", "path": "", "order": ["folder:Reading", id] })).unwrap();
     a.call("folders.setOrder", json!({ "kind": "page", "path": "Reading", "order": [id] })).unwrap();

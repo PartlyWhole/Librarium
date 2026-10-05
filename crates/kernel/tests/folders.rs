@@ -156,3 +156,68 @@ fn an_arrangement_follows_renames_and_goes_with_a_removed_folder() {
     let file = h.read(".librarium/order.json");
     assert!(file.contains("\"things\"") && file.ends_with("}\n"), "a plain file, readable without the app: {file}");
 }
+
+#[test]
+fn kinds_share_a_folder_only_when_stored_alike() {
+    let mut k = common::kinds();
+    let other = |format, slugged, field: Option<&str>| librarium_kernel::kinds::RecordKindDef {
+        kind: "odd".into(),
+        version: 1,
+        format,
+        folder: "pages".into(),
+        slugged,
+        subfolder_field: field.map(Into::into),
+    };
+    use librarium_kernel::kinds::Format;
+    assert!(k.add("test", other(Format::JsonDir, true, Some("test.folder"))).is_err(), "another format");
+    assert!(k.add("test", other(Format::Markdown, false, Some("test.folder"))).is_err(), "other slugs");
+    assert!(k.add("test", other(Format::Markdown, true, Some("test.place"))).is_err(), "another field");
+    assert_eq!(k.sharing("pages").iter().map(|d| d.kind.as_str()).collect::<Vec<_>>(), ["page", "sketch"]);
+}
+
+#[test]
+fn kinds_sharing_folders_are_one_space() {
+    let h = H::new();
+    let lib = h.open();
+    // A sketch lives in the pages' folders; a file there is read as the kind it names.
+    let (p, _) = lib.write(Lane::Interactive, |tx| tx.create("page", "Note", vec![], "", Some("Notebook"))).unwrap();
+    let (sk, _) = lib.write(Lane::Interactive, |tx| tx.create("sketch", "Map", vec![], "", Some("Drawings"))).unwrap();
+    let skid = sk.id;
+    assert_eq!(sk.path, format!("pages/Drawings/{skid}-map.md"));
+    assert_eq!(lib.store.get(skid).unwrap().kind, "sketch");
+    // One space: the folders of both, listed for either kind; one entry in the list of spaces.
+    assert_eq!(lib.store.folders("page"), ["Drawings", "Notebook"]);
+    assert_eq!(lib.store.folders("sketch"), ["Drawings", "Notebook"]);
+    let spaces: Vec<String> = lib.store.foldered().into_iter().map(|d| d.kind).collect();
+    assert_eq!(spaces, ["page", "thing"]);
+    let def = lib.store.foldered_kind("page").unwrap();
+    assert_eq!(lib.store.space_kinds(&def), ["page", "sketch"]);
+    // A folder holding a sketch isn't empty.
+    let e = lib.write(Lane::Interactive, |tx| tx.remove_folder("page", "Drawings")).unwrap_err();
+    assert_eq!(e.code, ErrorCode::Conflict);
+    // Moving a folder moves the sketch in it too, and its folder field follows.
+    lib.write(Lane::Interactive, |tx| tx.move_folder("page", "Drawings", "Notebook/Drawings")).unwrap();
+    let moved = lib.store.get(skid).unwrap();
+    assert_eq!(moved.path, format!("pages/Notebook/Drawings/{skid}-map.md"));
+    assert_eq!(moved.fields["test.folder"], "Notebook/Drawings");
+    assert_eq!(lib.store.get(p.id).unwrap().path, format!("pages/Notebook/{}-note.md", p.id));
+}
+
+#[test]
+fn a_record_moved_to_another_folder_takes_its_sidecars() {
+    let h = H::new();
+    let lib = h.open();
+    let (sk, _) = lib.write(Lane::Interactive, |tx| tx.create("sketch", "Map", vec![], "", None)).unwrap();
+    let id = sk.id;
+    lib.write(Lane::Interactive, move |tx| tx.write_sidecar(id, ".drawing", b"{\"elements\":[]}")).unwrap();
+    h.fs.write_outside(&h.abs(&format!("pages/{id}.region-1.png")), b"png");
+    lib.write(Lane::Interactive, move |tx| tx.move_to_folder(id, Some("Later"))).unwrap();
+    assert_eq!(lib.store.get(id).unwrap().path, format!("pages/Later/{id}-map.md"));
+    assert_eq!(h.read(&format!("pages/Later/{id}.drawing")), "{\"elements\":[]}");
+    assert_eq!(h.read(&format!("pages/Later/{id}.region-1.png")), "png");
+    assert!(h.fs.stat(&h.abs(&format!("pages/{id}.drawing"))).unwrap().is_none());
+    // Renaming within a folder leaves them where they are (their names carry only the ID).
+    lib.write(Lane::Interactive, move |tx| tx.relocate(id, Some("Big map"), None)).unwrap();
+    assert_eq!(lib.store.get(id).unwrap().path, format!("pages/Later/{id}-big-map.md"));
+    assert_eq!(h.read(&format!("pages/Later/{id}.drawing")), "{\"elements\":[]}");
+}

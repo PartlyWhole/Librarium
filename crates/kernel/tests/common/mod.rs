@@ -57,6 +57,19 @@ pub fn kinds() -> Kinds {
         },
     )
     .unwrap();
+    // Kept beside pages, in their folders (as boards are beside notes).
+    k.add(
+        "test",
+        RecordKindDef {
+            kind: "sketch".into(),
+            version: 1,
+            format: Format::Markdown,
+            folder: "pages".into(),
+            slugged: true,
+            subfolder_field: Some("test.folder".into()),
+        },
+    )
+    .unwrap();
     k.add_slug_field("test", SlugField { kind: "page".into(), field: "test.date".into() }).unwrap();
     k
 }

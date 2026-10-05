@@ -89,6 +89,8 @@ Rules that keep it honest:
 - **Records.** Kinds are contributed by features: Markdown (`notes/…/<id>-slug.md`,
   `captures/<id>.md` plus sidecars) or folder records (`items/…/<id>-slug/record.json` with
   binaries). A kind with a `subfolder_field` lives in the user's folders (notes, items).
+  Kinds stored alike may share a top folder (boards beside notes, 0062); the first is its
+  primary. A Markdown record's sidecars (`<id>.*`) move with it.
 - **Writes** go through one writer thread with two lanes (interactive first). Every multi-file
   operation is an **intent** written to Application Support first and redone at startup
   (`Intent::{Relocate, Identify, Delete, MoveFolder}` in `store.rs`). Files are written by
@@ -123,6 +125,9 @@ Rules that keep it honest:
 - **search**: SQLite FTS5 index as a derived view (0018).
 - **daily**: `daily.today` makes or finds today's note (0035).
 - **archive**: archive, restore, prepare-delete, delete.
+- **boards** (0061, 0062; plan `docs/plans/boards.md`): `boards.create/load/save`. A board is
+  its readable page (`.md`) and its drawing (`<id>.excalidraw`), saved together, checked
+  against the version and the drawing's SHA-256.
 
 ## 6. The interface
 

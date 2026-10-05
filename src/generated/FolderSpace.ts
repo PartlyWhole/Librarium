@@ -2,6 +2,7 @@
 
 /**
  * One kind's folders (`/`-separated paths, sorted) and the order the user arranged them in:
- * `{ folder: [record ID or "folder:<name>", …] }`, the top level as `""`.
+ * `{ folder: [record ID or "folder:<name>", …] }`, the top level as `""`. `kinds` lists every
+ * kind kept in these folders, the space's own first (boards are kept beside notes).
  */
-export type FolderSpace = { kind: string, folders: Array<string>, order: Record<string, string[]>, };
+export type FolderSpace = { kind: string, kinds: Array<string>, folders: Array<string>, order: Record<string, string[]>, };

@@ -69,12 +69,18 @@ impl Kinds {
             part_users: Registry::new(slots::PART_USERS),
         }
     }
+    /// Adds a kind. Kinds may share a top folder (boards beside notes) only if they are stored
+    /// the same way there: the same format, slugs and subfolder field. The folder's first kind
+    /// is its primary (what a file there is read as when it names no kind).
     pub fn add(&mut self, contributor: &str, def: RecordKindDef) -> Result<(), DuplicateId> {
         if let Some(other) = self.kinds.iter().find(|e| e.value.folder == def.folder) {
-            return Err(DuplicateId {
-                slot: slots::RECORD_KINDS,
-                id: format!("{} (folder {} is taken by {})", def.kind, def.folder, other.id),
-            });
+            let o = &other.value;
+            if o.format != def.format || o.slugged != def.slugged || o.subfolder_field != def.subfolder_field {
+                return Err(DuplicateId {
+                    slot: slots::RECORD_KINDS,
+                    id: format!("{} (folder {} is taken by {}, stored differently)", def.kind, def.folder, other.id),
+                });
+            }
         }
         let id = def.kind.clone();
         self.kinds.add(contributor, &id, def)
@@ -86,8 +92,13 @@ impl Kinds {
     pub fn get(&self, kind: &str) -> Option<&RecordKindDef> {
         self.kinds.get(kind)
     }
+    /// The folder's primary kind (the first added).
     pub fn by_folder(&self, folder: &str) -> Option<&RecordKindDef> {
         self.kinds.iter().map(|e| &e.value).find(|k| k.folder == folder)
+    }
+    /// Every kind kept in a top folder, the primary first.
+    pub fn sharing(&self, folder: &str) -> Vec<&RecordKindDef> {
+        self.kinds.iter().map(|e| &e.value).filter(|k| k.folder == folder).collect()
     }
     pub fn all(&self) -> impl Iterator<Item = &RecordKindDef> {
         self.kinds.iter().map(|e| &e.value)
