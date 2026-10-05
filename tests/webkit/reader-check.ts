@@ -735,7 +735,11 @@ async function run() {
     await swipeOnce([2, 1, 1, 6, 16, 26, 20, 14, 9, 6, 4, 2, 1]);
     await new Promise((r) => setTimeout(r, 900));
     const afterTwo = left();
-    results.epubSwipe = { start, afterOne, afterTwo, prevented, events: momentum.length, sawAnimation };
+    // A long momentum tail with bumps in it (as trackpads send) turns one page, not several.
+    await swipeOnce([5, 14, 26, 30, 22, 15, 9, 6, 4, 9, 6, 4, 3, 8, 5, 3, 2, 7, 4, 2, 1, 3, 1, 1]);
+    await new Promise((r) => setTimeout(r, 900));
+    const afterBumpy = left();
+    results.epubSwipe = { start, afterOne, afterTwo, afterBumpy, prevented, events: momentum.length, sawAnimation };
     book.view.destroy();
   }
 

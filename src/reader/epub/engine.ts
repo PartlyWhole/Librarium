@@ -326,10 +326,13 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
 
     // A trackpad swipe turns one page (in pages, not when scrolling). After the fingers lift, the
     // trackpad keeps sending a fading stream (momentum): that doesn't turn again, but a new swipe
-    // (a sudden rise) does, even before the stream has ended.
+    // (a sudden, clear rise) does, even before the stream has ended. Momentum isn't a smooth
+    // fade (it has bumps), so after a turn swipes rest for a moment: one swipe, one page.
+    const SWIPE_REST = 500;
     let swipe = 0;
     let swiped = false;
     let lastAbs = 0;
+    let turnedAt = -Infinity;
     let swipeTimer: ReturnType<typeof setTimeout> | undefined;
     function onWheel(e: WheelEvent) {
       const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
@@ -342,17 +345,20 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         swiped = false;
         lastAbs = 0;
       }, 220);
-      if (swiped && abs > Math.max(6, lastAbs * 1.8)) {
+      const resting = performance.now() - turnedAt < SWIPE_REST;
+      if (swiped && !resting && abs >= 12 && abs > lastAbs * 1.8) {
         // A new swipe within the old one's momentum.
         swiped = false;
         swipe = 0;
       }
       lastAbs = abs;
-      if (swiped) return;
+      if (swiped || resting) return;
       swipe += e.deltaX;
       if (Math.abs(swipe) < 24) return;
       swiped = true;
-      void flip(swipe > 0 ? "right" : "left");
+      turnedAt = performance.now();
+      // Not queued behind a turn under way (keys are): a swipe then is the same gesture.
+      if (!flipping) void flip(swipe > 0 ? "right" : "left");
     }
     frame.addEventListener("wheel", onWheel, { passive: false });
 

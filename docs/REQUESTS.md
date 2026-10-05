@@ -56,6 +56,28 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-048 · Swiping in an EPUB sometimes turned several pages
+> "Sometimes scrolling pages on epub will turn multiple pages. Please add some kind of pause"
+
+- **Diagnosis:** after you lift your fingers, the trackpad keeps sending a fading stream of
+  scroll events (momentum). That stream isn't smooth: it has small bumps. Librarium watches for
+  a sudden rise in the stream so that a new swipe during momentum still turns. The bumps were
+  big enough to look like a new swipe, so one swipe could turn two or three pages.
+- **Changed:**
+  - After a swipe turns a page, swiping rests for half a second.
+  - A new swipe during momentum must rise clearly (not just a bump) to count.
+  - A swipe while a page is still turning isn't saved up for later. The arrow keys still are,
+    so quick key presses aren't lost.
+- **Use:** nothing new. One swipe turns one page. To go faster, swipe again after a moment or
+  use the arrow keys.
+- **Code:** `src/reader/epub/engine.ts` (`onWheel`, `SWIPE_REST`).
+- **Tested:** a new WebKit check sends a swipe with a long, bumpy momentum tail. Without the fix
+  it turns 2 pages; with it, 1. The existing swipe checks still pass, including a new swipe
+  during momentum. All 64 WebKit checks, 171 interface tests and the Rust tests pass; lint is
+  clean. How it feels on your trackpad can only be judged in the real app; the pause can be
+  tuned (`SWIPE_REST`, 500 ms).
+- **Left:** nothing.
+
 ### R-047 · A PDF capture's highlight broken into words, with a purple box around it
 > "How come the highlight is disjoint? And there is a purple box? Should just be a continuous
 > highlight right?"

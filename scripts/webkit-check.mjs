@@ -72,6 +72,7 @@ const checks = [
   ["the same across a page turn at a larger text size", r.epubTurnArmedZoomed === true && r.epubDragTurnZoomed?.start === "Paragraph 2." && r.epubDragTurnZoomed.length > 1000 && r.epubDragTurnZoomed.after !== r.epubDragTurnZoomed.before],
   ["EPUB: a trackpad swipe turns one page (its momentum doesn't turn more), with an animation", r.epubSwipe?.afterOne === r.epubSwipe?.start - 1 && r.epubSwipe.sawAnimation === true],
   ["EPUB: a new swipe within the last one's momentum turns again", r.epubSwipe?.afterTwo === r.epubSwipe?.start - 2],
+  ["EPUB: a swipe whose momentum has bumps in it still turns one page", r.epubSwipe?.afterBumpy === r.epubSwipe?.start - 3],
   ["EPUB: a sideways swipe doesn't scroll the columns itself", r.epubSwipe?.prevented === r.epubSwipe?.events],
   ["a picture in a book, clicked, is selected to capture as an image", r.epubPicture?.image === true && r.epubPicture.text === "" && r.epubPicture.cfi === true],
   ["image opens and zooms", r.imagePainted === true && r.imageZoomed === true],
