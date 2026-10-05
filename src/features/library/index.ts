@@ -21,6 +21,16 @@ const KIND = "item";
 const ORIGINAL = "library.original";
 const EXTENSIONS = ["pdf", "epub", "png", "jpg", "jpeg", "gif", "webp", "heic", "tif", "tiff"];
 
+/** Where images put into notes are kept: a folder of the Library (decision 0051). */
+const ATTACHMENTS = "Attachments";
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "heic", "tif", "tiff"];
+/** An item's folder in the Library ("" at the top). */
+const folderOfItem = (r: RecordInfo) => {
+  const parts = r.path.split("/").slice(1, -2);
+  return parts.join("/");
+};
+const isAttachment = (r: RecordInfo) => r.kind === KIND && (folderOfItem(r) === ATTACHMENTS || folderOfItem(r).startsWith(`${ATTACHMENTS}/`));
+
 function formatOf(r: RecordInfo): string {
   return String(r.fields["library.format"] ?? "");
 }
@@ -109,6 +119,33 @@ export function library(shell: ShellApi): void {
   // Reading settings and places, per device (settings.json), for engines that keep them.
   const readerStore: ReaderStore = { get: (k) => shell.prefs.get(k), set: (k, v) => shell.prefs.pref<unknown>(k, null).set(v) };
   const manageSnapshots = (r: RecordInfo, showing: string) => manageSnapshotsDialog(shell, r, showing);
+  // An attachment made a standalone item: out of Attachments, to the Library's top (notes that show
+  // it keep showing it: they point at its ID).
+  shell.recordActions.add("library", "promote-attachment", {
+    label: (n) => (n === 1 ? "Move to the Library" : `Move ${n} to the Library`),
+    applies: (r) => isAttachment(r) && !r.read_only,
+    run: async (rs) => {
+      const from = new Map(rs.map((r) => [r.id, folderOfItem(r)]));
+      try {
+        const r = await call<{ moved: Written[]; failed: { id: string; error: string }[] }>("records.move", { ids: rs.map((x) => x.id), folder: null });
+        for (const w of r.moved) shell.records.put(w.info, w.seq);
+        for (const f of r.failed) toast(f.error);
+        if (!r.moved.length) return;
+        const what = r.moved.length === 1 ? `“${r.moved[0]!.info.title}”` : count(r.moved.length, "item");
+        shell.undo.done(`Moved ${what} to the Library.`, {
+          label: `moving ${what}`,
+          undo: async () => {
+            for (const w of r.moved) {
+              const back = await call<{ moved: Written[] }>("records.move", { ids: [w.info.id], folder: from.get(w.info.id) || null });
+              for (const b of back.moved) shell.records.put(b.info, b.seq);
+            }
+          },
+        });
+      } catch (e) {
+        toast(String((e as { message?: string }).message ?? e));
+      }
+    },
+  });
   shell.recordActions.add("library", "remove-older-snapshots", {
     label: (n) => (n === 1 ? "Remove older snapshots…" : `Remove older snapshots of ${n} pages…`),
     applies: (r) => r.kind === KIND && snapshotsOf(r).length > 1 && !r.read_only,
@@ -245,13 +282,25 @@ export function library(shell: ShellApi): void {
     for (const w of written) shell.records.put(w.info, w.seq);
     if (!written.length) return;
     ed.dispatchEvent(new CustomEvent("librarium:insert-embeds", { detail: { links: written.map((w) => ({ label: w.info.title || "Image", id: w.info.id })), ...at } }));
-    shell.status.show(written.length === 1 ? `Added “${written[0]!.info.title}” to the library.` : `Added ${count(written.length, "item")} to the library.`);
+    const attached = written.filter((w) => isAttachment(w.info)).length;
+    shell.status.show(
+      attached === written.length
+        ? written.length === 1 ? `Attached “${written[0]!.info.title}” (in the Library’s ${ATTACHMENTS}).` : `Attached ${count(written.length, "image")} (in the Library’s ${ATTACHMENTS}).`
+        : written.length === 1 ? `Added “${written[0]!.info.title}” to the library.` : `Added ${count(written.length, "item")} to the library.`,
+    );
   };
   const embedPaths = async (ed: HTMLElement, paths: string[], at: { x: number; y: number }) => {
+    // Images become attachments (the Library's Attachments folder); PDFs and EPUBs go to the top.
+    const isImage = (p: string) => IMAGE_EXTENSIONS.includes(p.split(".").pop()!.toLowerCase());
+    const imported: Written[] = [];
     try {
-      const r = await call<ImportResult>("library.import", { paths });
-      for (const f of r.failed) toast(f.error);
-      embedIn(ed, r.imported, at);
+      for (const [list, folder] of [[paths.filter(isImage), ATTACHMENTS], [paths.filter((p) => !isImage(p)), null]] as const) {
+        if (!list.length) continue;
+        const r = await call<ImportResult>("library.import", { paths: list, ...(folder ? { folder } : {}) });
+        for (const f of r.failed) toast(f.error);
+        imported.push(...r.imported);
+      }
+      embedIn(ed, imported, at);
     } catch (e) {
       toast(String((e as { message?: string }).message ?? e));
     }
@@ -272,7 +321,7 @@ export function library(shell: ShellApi): void {
         const stamp = new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }).replace(/[/:]/g, ".");
         const name = f.name && f.name !== "image.png" ? f.name : `Pasted image ${stamp}.${ext}`;
         try {
-          written.push(await call<Written>("library.importData", { name, data: await base64(f) }));
+          written.push(await call<Written>("library.importData", { name, data: await base64(f), ...(f.type.startsWith("image/") ? { folder: ATTACHMENTS } : {}) }));
         } catch (e) {
           toast(String((e as { message?: string }).message ?? e));
         }

@@ -1,4 +1,4 @@
-/** Images in notes are library items (R-021): pasted or dropped, stored, embedded, shown. */
+/** Images in notes are library items (R-021), kept in Attachments (R-042): pasted or dropped, stored, embedded, shown. */
 import { describe, expect, it } from "vitest";
 import { mock, seed } from "./mock/backend";
 import { createShell } from "../src/shell/shell";
@@ -26,10 +26,28 @@ describe("images in notes", () => {
     await wait(80);
     const call = mock.state.calls.find((c) => c.method === "library.importData");
     expect((call?.params as { name: string }).name).toBe("chart.png");
+    // Kept in the Library's Attachments folder (R-042).
+    expect((call?.params as { folder?: string }).folder).toBe("Attachments");
     const item = shell.records.list("item").find((r) => r.title === "chart")!;
     expect(item).toBeDefined();
+    expect(item.path).toMatch(/^items\/Attachments\//);
+    expect(shell.status.message()).toContain("Attached “chart”");
     // The note now embeds it, on its own line.
     await wait(1100);
     expect(mock.state.records.get(n.id)!.body).toContain(`![[chart|${item.id}]]`);
+    // Promoted to a standalone item: out of Attachments, to the Library's top; Undo puts it back.
+    const acts = shell.recordActionsFor([item]);
+    const promote = acts.find((a) => a.label === "Move to the Library")!;
+    expect(promote).toBeDefined();
+    promote.run();
+    await wait(60);
+    const moved = shell.records.get(item.id)!;
+    expect(moved.path).toMatch(/^items\/[^/]+\/record\.json$/);
+    expect(shell.recordActionsFor([moved]).some((a) => a.label === "Move to the Library")).toBe(false);
+    // The note still shows it (it points at the ID).
+    expect(mock.state.records.get(n.id)!.body).toContain(`![[chart|${item.id}]]`);
+    await shell.undo.undoLast();
+    await wait(60);
+    expect(shell.records.get(item.id)!.path).toMatch(/^items\/Attachments\//);
   });
 });
