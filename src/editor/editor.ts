@@ -21,6 +21,15 @@ import { codeHighlighting } from "./code";
 import { folding } from "./folding";
 
 let active: EditorView | null = null;
+
+/** While ⌘ is held, `[[…]]` being edited reacts to the pointer as a link (⌘-click opens it). */
+if (typeof window !== "undefined") {
+  const mod = (on: boolean) => document.documentElement.classList.toggle("mod-held", on);
+  window.addEventListener("keydown", (e) => mod(e.metaKey), true);
+  window.addEventListener("keyup", (e) => mod(e.metaKey), true);
+  window.addEventListener("mousemove", (e) => mod(e.metaKey), { capture: true, passive: true });
+  window.addEventListener("blur", () => mod(false));
+}
 /** Bumped when any editor's text or focus changes (Edit ▸ Undo follows it). */
 export const editorChanged = signal(0);
 
@@ -108,17 +117,15 @@ export function createEditor(o: EditorOptions): EditorView {
       if (u.focusChanged && !u.view.hasFocus) o.onBlur?.();
     }),
     EditorView.domEventHandlers({
-      // A link whose source shows only because the cursor sits at its edge (as right after
-      // typing or completing it) opens on a plain click, like a shown link. Clicking inside a
-      // link being edited places the cursor, as before.
+      // A link being edited (its `[[…]]` showing) opens with ⌘-click, as in Obsidian; a plain
+      // click places the cursor in it. Handled on mousedown so the cursor doesn't move first.
       mousedown(e, view) {
-        if (e.button !== 0 || e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return false;
+        if (e.button !== 0 || !e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return false;
         const src = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink-source");
         if (!src) return false;
         const pos = view.posAtDOM(src);
         const l = parseLinks(view.state.doc.toString()).find((x) => pos >= x.from && pos <= x.to);
-        if (!l || view.state.selection.ranges.some((r) => r.from < l.to && r.to > l.from)) return false;
-        if (!l.id && (!o.create || view.state.readOnly)) return false;
+        if (!l || (!l.id && (!o.create || view.state.readOnly))) return false;
         e.preventDefault();
         follow(view, l.id, l.label, l.from, false);
         return true;
@@ -136,17 +143,6 @@ export function createEditor(o: EditorOptions): EditorView {
           e.preventDefault();
           follow(view, null, t.dataset.label, view.posAtDOM(t), newTab);
           return true;
-        }
-        // ⌘-click on a link's source opens it too.
-        if (e.metaKey) {
-          const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
-          if (pos !== null) {
-            const l = parseLinks(view.state.doc.toString()).find((x) => pos >= x.from && pos <= x.to && x.id);
-            if (l?.id) {
-              o.open(l.id, { newTab: true });
-              return true;
-            }
-          }
         }
         return false;
       },

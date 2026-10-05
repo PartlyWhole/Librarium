@@ -1,3 +1,4 @@
+import { EditorView } from "@codemirror/view";
 /** Writing comfort: word counts, the outline, and making a note from an unresolved link. */
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
@@ -60,6 +61,18 @@ describe("a note page", () => {
     await wait(50);
     const saved = mock.state.records.get(n.id)!.body;
     expect(saved).toContain(`[[New idea|${made.id}]]`);
+  });
+
+  it("makes the note on ⌘-click of an unresolved link being edited", async () => {
+    const { shell } = await open("See [[Other idea]]\n");
+    const view = EditorView.findFromDOM(document.querySelector(".cm-editor") as HTMLElement)!;
+    view.dispatch({ selection: { anchor: 10 } });
+    const src = document.querySelector<HTMLElement>(".cm-wikilink-source")!;
+    src.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, metaKey: true }));
+    await wait(60);
+    const made = shell.records.list("note").find((r) => r.title === "Other idea")!;
+    expect(made).toBeDefined();
+    expect(shell.router.current()).toEqual({ page: "note", params: { id: made.id } });
   });
 
   it("offers an outline of its headings in the side panel", async () => {

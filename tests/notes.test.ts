@@ -128,14 +128,16 @@ describe("links", () => {
     expect(shell.router.current().params.id).toBe(weil.id);
   });
 
-  it("a plain click opens a link just typed, whose source shows with the cursor at its end", async () => {
-    const { shell, view } = await open("");
+  it("a link being edited opens with ⌘-click; a plain click only places the cursor", async () => {
+    const { shell, view, id } = await open("");
     const weil = shell.records.list("note").find((r) => r.title === "Simone Weil")!;
     const text = `See [[Weil|${weil.id}]]`;
     view.dispatch({ changes: { from: 0, insert: text }, selection: { anchor: text.length } });
-    const src = view.contentDOM.querySelector(".cm-wikilink-source") as HTMLElement;
-    expect(src).not.toBeNull();
-    src.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    const src = () => view.contentDOM.querySelector(".cm-wikilink-source") as HTMLElement;
+    expect(src()).not.toBeNull();
+    src().dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    expect(shell.router.current().params.id).toBe(id);
+    src().dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, metaKey: true }));
     expect(shell.router.current().params.id).toBe(weil.id);
   });
 

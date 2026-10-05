@@ -297,7 +297,9 @@ select { width: auto; }
 .cm-quote { border-left: 3px solid var(--border-strong); padding-left: 12px !important; color: var(--muted); }
 .cm-wikilink { color: var(--accent-text); cursor: pointer; text-decoration: underline; text-decoration-color: var(--selection); text-underline-offset: 2px; }
 .cm-wikilink.unresolved { color: var(--muted); text-decoration-style: dashed; }
+.cm-wikilink:hover { text-decoration-color: currentColor; background: var(--hover); border-radius: 2px; }
 .cm-wikilink-source { color: var(--muted); }
+.mod-held .cm-wikilink-source:hover { color: var(--accent-text); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 /* Markdown's marks while their construct is edited: there, but quiet. */
 .cm-mark-dim { color: var(--faint); }
 .cm-md-link, .cm-url { color: var(--accent-text); cursor: pointer; text-decoration: underline; text-decoration-color: var(--selection); text-underline-offset: 2px; }

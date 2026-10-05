@@ -75,20 +75,30 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
-### R-058 · A link just made could not be clicked
+### R-058 · Links that behave as in Obsidian
 > "I am unable to click on the link I just made" (screenshot: `[[Questions]]`, cursor at its end)
+> "I want it to behave like Obsidian: if I hover over, it reacts to that; if i move my typing
+> cursor to it, it shows [[...]]; otherwise it renders as a link. Even if it shows [[...]], I
+> can still click on the link with cmd+click, so I can still edit it normally if I don't use
+> cmd"
 
-- **Changed:** after typing or completing a link, the cursor sits right after `]]`, so the
-  editor showed the link's source and a plain click only moved the cursor (only ⌘-click
-  opened it). Now a plain click on that link opens it (or, with no target yet, makes the note
-  and links it). Clicking inside a link you are editing still places the cursor.
-- **Use:** click the link. To edit its words with the mouse, click inside it once the cursor
-  is already in it, or use the keyboard.
-- **Code:** `src/editor/editor.ts` (`mousedown` on `.cm-wikilink-source`, `follow`).
-- **Decision:** 0037 amended.
-- **Tested:** Vitest (`tests/notes.test.ts`: opens with the cursor at the end; doesn't open
-  while editing inside; the first fails without the fix); full suite 205 passing. Preview:
-  typed `[[Simone`, accepted, clicked: Simone Weil opened. Not checked in the real app.
+- **Changed:** a link reads as a link unless the cursor is in it or right beside it (as just
+  after typing it), when it shows `[[…]]` for editing. A shown link reacts to hover (light
+  background, solid underline, pointer) and opens on a click. While `[[…]]` shows, a plain
+  click edits it and ⌘-click opens it; holding ⌘ makes it react to hover as a link. A link
+  with no note yet makes the note either way. (First fix, `0648fa8`, opened `[[…]]` on a plain
+  click; replaced at the user's request.)
+- **Use:** click a link to open it; move the cursor into it to edit; ⌘-click while editing to
+  open. ⌘-click a shown link opens it in a new tab, as before.
+- **Code:** `src/editor/editor.ts` (`mousedown` for ⌘-click on `.cm-wikilink-source`,
+  `follow`, the `mod-held` class), `src/shell/shell.css` (hover styles).
+- **Commits:** `0648fa8`, and the one recording this · **Decision:** 0037 amended.
+- **Tested:** Vitest (`tests/notes.test.ts`: plain click on `[[…]]` doesn't open, ⌘-click
+  does; `tests/writing.test.ts`: ⌘-click on an unresolved `[[…]]` makes the note); full suite
+  passing. Preview: typed and accepted a link; plain click placed the cursor; away from the
+  cursor it rendered and reacted to hover; ⌘-click on `[[…]]` opened the note. Not checked in
+  the real app.
+- **Left:** hover previews of the linked note (Obsidian's ⌘-hover popup) are still not built.
 
 ### R-056 · The source cited twice; Edit as the pencil icon
 > "why is the source repeated twice when theres two disjoint captures? It should always be the
