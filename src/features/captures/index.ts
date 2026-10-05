@@ -52,8 +52,8 @@ interface DraftPart extends CapturePart {
 interface Draft {
   parts: DraftPart[];
   words: string;
-  /** Editing a saved capture's parts (instead of making a new capture). */
-  editing?: { id: string; title: string };
+  /** Editing a saved capture's parts (instead of making a new capture); `title` may be renamed. */
+  editing?: { id: string; title: string; original: string };
 }
 
 const byOrder = (a: DraftPart, b: DraftPart) => {
@@ -209,8 +209,14 @@ export function captures(shell: ShellApi): void {
         if (!d?.parts.length) return;
         if (d.editing) {
           try {
-            const w = await call<Written>("captures.update", { id: d.editing.id, parts: d.parts.map(toPart) });
+            let w = await call<Written>("captures.update", { id: d.editing.id, parts: d.parts.map(toPart) });
             shell.records.put(w.info, w.seq);
+            // Renamed while editing.
+            const title = d.editing.title.replace(/\s+/g, " ").trim();
+            if (title && title !== d.editing.original && title !== w.info.title) {
+              w = await call<Written>("records.relocate", { id: d.editing.id, title });
+              shell.records.put(w.info, w.seq);
+            }
             setDraft(k, null);
             toast("Capture updated.", { action: { label: "Open", run: () => shell.openRecord(w.info.id) } });
           } catch (e) {
@@ -318,7 +324,7 @@ export function captures(shell: ShellApi): void {
             cfi: frag("epubcfi("),
           });
         }
-        setDraft(k, { parts, words: "", editing: { id, title: r.title || "Capture" } });
+        setDraft(k, { parts, words: "", editing: { id, title: r.title || "Capture", original: r.title || "Capture" } });
         shell.showPanelSection("captures");
         void view.showPlace?.(JSON.parse(JSON.stringify([...(a.parts[0]?.selector ?? []), ...(a.parts[0]?.boxes?.length ? [{ type: "librarium:boxes", boxes: a.parts[0].boxes }] : [])])));
       };
@@ -690,7 +696,7 @@ export function captures(shell: ShellApi): void {
           const status = h("span", { class: `badge ${statusOf.get(c.id) ?? ""}` }, statusOf.get(c.id) ?? "");
           const isEditing = editing?.[1].editing?.id === c.id;
           const li = h("li", { class: `capture-row${c.id === open ? " current" : ""}${isEditing ? " editing" : ""}`, "aria-current": c.id === open ? "true" : undefined },
-            h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(c.id)) }, c.title || "Capture"), " ", status,
+            isEditing ? titleField(editing![0], editing![1]) : h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(c.id)) }, c.title || "Capture"), " ", status,
             isEditing ? editingControls(editing![0], editing![1]) : h("div", { class: "row tight capture-tools" },
               iconButton(LocateFixed, "Show in the source", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, where(a), { again: true }))),
               iconButton(Pencil, "Edit selection", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, { ...where(a), edit: c.id }, { again: true }))),
@@ -719,6 +725,23 @@ export function captures(shell: ShellApi): void {
       };
     },
   });
+
+  /** The name of a capture being edited, to change with its parts (saved with them). */
+  function titleField(k: string, d: Draft): HTMLElement {
+    const input = h("input", { class: "edit-title", type: "text", value: d.editing!.title, "aria-label": "Name of the capture", spellcheck: true }) as HTMLInputElement;
+    // Kept in the draft without redrawing the list (which would take the focus away).
+    input.addEventListener("input", () => {
+      const cur = drafts.peek().get(k);
+      if (cur?.editing) drafts.peek().set(k, { ...cur, editing: { ...cur.editing, title: input.value } });
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) {
+        e.preventDefault();
+        void active?.save();
+      }
+    });
+    return input;
+  }
 
   /** The parts of a capture being edited, with Cancel and Save, in its row of the Captures list. */
   function editingControls(k: string, d: Draft): HTMLElement {

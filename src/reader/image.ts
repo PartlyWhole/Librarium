@@ -23,6 +23,7 @@ export const imageEngine: ReaderEngine = {
     };
     let lines: OcrLine[] = [];
     let marks: Mark[] = [];
+    let editingParts = false;
     const layOut = () => {
       if (lines.length) ocrLayer(holder, lines);
       drawMarks(holder, marks);
@@ -74,7 +75,10 @@ export const imageEngine: ReaderEngine = {
       },
       clearSelection: () => window.getSelection()?.removeAllRanges(),
       editParts(parts, onChange) {
-        let current = parts;
+        // The parts as edited so far; the capture's place outlined when shown goes.
+        let current = parts.map((p) => ({ ...p }));
+        editingParts = true;
+        holder.querySelectorAll(".region-mark").forEach((n) => n.remove());
         let editors: { destroy(): void }[] = [];
         const sel = (r: Range) => ({ text: r.toString().trim(), boxes: boxesIn(r, holder), end: endOf(r) });
         const crop = (r: { x: number; y: number; w: number; h: number }) => {
@@ -106,22 +110,28 @@ export const imageEngine: ReaderEngine = {
           editors = [];
           for (const p of current) {
             if (p.region) {
-              editors.push(regionEditor({ over: holder, region: p.region, onDrag: (r) => onChange({ key: p.key, done: false, region: r }), onDone: (r) => onChange({ key: p.key, done: true, region: { ...r, png: crop(r) } }) }));
+              editors.push(regionEditor({ over: holder, region: p.region, onDrag: (r) => onChange({ key: p.key, done: false, region: r }), onDone: (r) => ((p.region = r), onChange({ key: p.key, done: true, region: { ...r, png: crop(r) } })) }));
               continue;
             }
             const range = rangeOf(p);
             const l = layer();
             if (!range || !l) continue;
-            editors.push(rangeEditor({ overlay: frame, range, screenRects: (r) => [...r.getClientRects()], caretAt: (x, y) => caretIn(document, l, x, y), onDrag: (r) => onChange({ key: p.key, done: false, text: sel(r) }), onDone: (r) => onChange({ key: p.key, done: true, text: sel(r) }), edges: { bounds: () => frame.getBoundingClientRect(), margin: 28, delay: 0, repeat: 30, nudge: (_dx: number, dy: number) => void (frame.scrollTop += dy * 20) } }));
+            editors.push(rangeEditor({ overlay: frame, range, screenRects: (r) => [...r.getClientRects()], caretAt: (x, y) => caretIn(document, l, x, y), onDrag: (r) => onChange({ key: p.key, done: false, text: sel(r) }), onDone: (r) => {
+              const t = sel(r);
+              p.boxes = t.boxes;
+              onChange({ key: p.key, done: true, text: t });
+            }, edges: { bounds: () => frame.getBoundingClientRect(), margin: 28, delay: 0, repeat: 30, nudge: (_dx: number, dy: number) => void (frame.scrollTop += dy * 20) } }));
           }
         };
         build();
         return {
           update(next) {
-            current = next;
+            current = next.map((p) => ({ ...p }));
             build();
           },
           stop() {
+            editingParts = false;
+            holder.querySelectorAll(".region-mark").forEach((n) => n.remove());
             editors.forEach((e) => e.destroy());
             editors = [];
           },
@@ -146,7 +156,10 @@ export const imageEngine: ReaderEngine = {
       async showPlace(selectors) {
         const region = regionOf(selectors);
         if (region) {
-          outlineRegion(holder, region).scrollIntoView({ block: "center" });
+          const outline = outlineRegion(holder, region);
+          outline.scrollIntoView({ block: "center" });
+          // While its parts are edited, the place is shown without an outline.
+          if (editingParts) outline.remove();
           return true;
         }
         const quote = selectors.find((s) => s.type === "TextQuoteSelector")?.exact;

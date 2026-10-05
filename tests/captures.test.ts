@@ -530,7 +530,7 @@ describe("editing what a capture holds", () => {
       expect(v.editing.parts).toEqual([expect.objectContaining({ boxes: [{ page: 1, x: 10, y: 5, w: 60, h: 2 }] })]);
       expect(document.querySelector(".capture-edit-bar")?.textContent).toContain("Editing “It avoids shock and…”");
       expect(document.querySelector(".capture-draft")).toBeNull();
-      expect(document.querySelector(".side-panel .capture-row.editing .list-link")?.textContent).toBe("It avoids shock and…");
+      expect((document.querySelector(".side-panel .capture-row.editing .edit-title") as HTMLInputElement | null)?.value).toBe("It avoids shock and…");
     } finally {
       engine.open = original;
     }
@@ -590,5 +590,33 @@ describe("the Captures list in the side panel", () => {
     } finally {
       engine.open = original;
     }
+  });
+});
+
+describe("renaming a capture while editing it", () => {
+  it("saves the new name with the parts", async () => {
+    const { shell, src } = await boot(true);
+    const v = fakeView(() => ({ text: "It avoids shock", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] }), { editParts: () => ({ update() {}, stop() {} }) });
+    const t = mountTool(shell, src, v.view);
+    t.capture();
+    await wait(30);
+    button(t.aside, "Save capture").click();
+    await wait(60);
+    const cap = shell.records.list("capture")[0]!;
+    v.clickMark([`${cap.id}#0`]);
+    button([...document.querySelectorAll(".selection-pop")].find((p) => !(p as HTMLElement).hidden)!, "Edit").click();
+    await wait(60);
+    shell.router.go("capture", { id: cap.id });
+    await wait(80);
+    const field = document.querySelector(".side-panel .capture-row.editing .edit-title") as HTMLInputElement;
+    expect(field.value).toBe(cap.title);
+    field.value = "On shock";
+    field.dispatchEvent(new Event("input"));
+    // Typing doesn't redraw the list (the field keeps the focus).
+    expect(document.querySelector(".side-panel .edit-title")).toBe(field);
+    button(document.querySelector(".capture-edit-bar")!, "Save changes").click();
+    await wait(80);
+    expect(shell.records.get(cap.id)!.title).toBe("On shock");
+    t.dispose();
   });
 });

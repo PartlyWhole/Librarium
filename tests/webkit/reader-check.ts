@@ -519,16 +519,28 @@ async function run() {
     articleEditor?.stop();
     results.editPdfStopped = !stage.querySelector(".range-handle");
   }
-  // A region: resize it by its corner; its picture is taken again.
+  // A region: shown first (outlined), then edited: no outline under it. Resize it by its corner;
+  // its picture is taken again; after the pages render again (zoom), it stays as resized.
+  await article.view.showPlace?.([{ type: "FragmentSelector", value: "page=1", refinedBy: { type: "FragmentSelector", value: "xywh=percent:10,1,20,1" } }]);
+  await new Promise((r) => setTimeout(r, 200));
+  const outlinedBefore = stage.querySelectorAll(".region-mark").length;
   const regionEdits: typeof edits = [];
   const rEditor = article.view.editParts?.([{ key: "r", region: { page: 1, x: 10, y: 1, w: 20, h: 1 } }], (e) => regionEdits.push(e as never));
   await new Promise((r) => setTimeout(r, 100));
+  const outlinedWhileEditing = stage.querySelectorAll(".region-mark").length;
   const se = stage.querySelector(".region-edit .rh.se");
   if (se) await dragBy(se, 120, 40);
   await new Promise((r) => setTimeout(r, 400));
   const lastRegion = regionEdits.filter((e) => e.done).at(-1)?.region;
-  results.editPdfRegion = lastRegion ? { grew: lastRegion.w > 20 && lastRegion.h > 1, png: (lastRegion.png ?? "").startsWith("data:image/png") && (lastRegion.png ?? "").length > 200 } : null;
+  article.view.zoomIn();
+  await new Promise((r) => setTimeout(r, 900));
+  const frameNow = stage.querySelector(".region-edit") as HTMLElement | null;
+  results.editPdfRegion = lastRegion
+    ? { grew: lastRegion.w > 20 && lastRegion.h > 1, png: (lastRegion.png ?? "").startsWith("data:image/png") && (lastRegion.png ?? "").length > 200, outlinedBefore, outlinedWhileEditing, keptAfterRender: !!frameNow && Math.abs(Number.parseFloat(frameNow.style.width) - lastRegion.w) < 0.05 && stage.querySelectorAll(".region-edit").length === 1 }
+    : null;
   rEditor?.stop();
+  article.view.zoomReset();
+  await new Promise((r) => setTimeout(r, 500));
   // Dragged to the bottom edge, the document scrolls and the passage carries on.
   {
     const pc = stage.querySelector(".pdf-container") as HTMLElement;

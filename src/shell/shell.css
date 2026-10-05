@@ -749,3 +749,5 @@ body.dragging-handle, body.dragging-handle * { user-select: none !important; -we
 .edit-part { display: flex; align-items: flex-start; gap: 6px; padding: 4px 6px; border-left: 3px solid var(--accent); background: var(--bg-alt); border-radius: 0 var(--r1) var(--r1) 0; font-size: var(--small); }
 .edit-part-text { flex: 1; }
 .edit-part-img { flex: 1; max-width: 100%; max-height: 120px; object-fit: contain; object-position: left; border-radius: var(--r1); }
+.edit-title { width: 100%; box-sizing: border-box; font: inherit; font-weight: 600; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: var(--r1); background: var(--bg); color: var(--ink); }
+.edit-title:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--selection); }

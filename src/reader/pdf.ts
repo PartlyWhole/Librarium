@@ -47,6 +47,8 @@ export const pdfEngine: ReaderEngine = {
     let painted = false;
     // A region to outline survives page re-renders (PDF.js clears unknown children).
     let marked: { page: number; region: { x: number; y: number; w: number; h: number } } | null = null;
+    // While a capture's parts are edited, places are shown without outlines (the parts are drawn).
+    let editingParts = false;
     const drawMark = (scroll: boolean) => {
       if (!marked) return;
       const div = viewer.getPageView(marked.page - 1)?.div as HTMLElement | undefined;
@@ -175,7 +177,15 @@ export const pdfEngine: ReaderEngine = {
         return selOf(sel.getRangeAt(0));
       },
       editParts(parts, onChange) {
-        let current = parts;
+        // The parts as edited so far (a page that renders again shows them where they are now).
+        let current = parts.map((p) => ({ ...p }));
+        editingParts = true;
+        // The capture's place, outlined when it was shown, would sit under what is being edited.
+        const clearPlace = () => {
+          marked = null;
+          container.querySelectorAll(".region-mark").forEach((n) => n.remove());
+        };
+        clearPlace();
         let editors: { destroy(): void }[] = [];
         let dragging = false;
         const pageDiv = (n: number) => viewer.getPageView(n - 1)?.div as HTMLElement | undefined;
@@ -221,6 +231,7 @@ export const pdfEngine: ReaderEngine = {
                 onDrag: (r) => ((dragging = true), onChange({ key: p.key, done: false, region: { page: n, ...r } })),
                 onDone: async (r) => {
                   dragging = false;
+                  p.region = { page: n, ...r };
                   onChange({ key: p.key, done: true, region: { page: n, ...r, png: await renderRegion(doc, n, r) } });
                 },
               }));
@@ -237,7 +248,12 @@ export const pdfEngine: ReaderEngine = {
                 return layer ? caretIn(document, layer, x, y) : null;
               },
               onDrag: (r) => ((dragging = true), onChange({ key: p.key, done: false, text: selOf(r) })),
-              onDone: (r) => ((dragging = false), onChange({ key: p.key, done: true, text: selOf(r) })),
+              onDone: (r) => {
+                dragging = false;
+                const t = selOf(r);
+                p.boxes = t.boxes;
+                onChange({ key: p.key, done: true, text: t });
+              },
               // Dragged to the top or bottom, the document scrolls.
               edges: { bounds: () => container.getBoundingClientRect(), margin: 28, delay: 0, repeat: 30, nudge: (_dx: number, dy: number) => void (container.scrollTop += dy * 20) },
             }));
@@ -249,10 +265,12 @@ export const pdfEngine: ReaderEngine = {
         build();
         return {
           update(next) {
-            current = next;
+            current = next.map((p) => ({ ...p }));
             build();
           },
           stop() {
+            editingParts = false;
+            clearPlace();
             eventBus.off("textlayerrendered", rendered);
             editors.forEach((e) => e.destroy());
             editors = [];
@@ -316,6 +334,10 @@ export const pdfEngine: ReaderEngine = {
           viewer.currentPageNumber = drawn.page;
           marked = { page: drawn.page, region: drawn.region };
           drawMark(true);
+          if (editingParts) {
+            marked = null;
+            container.querySelectorAll(".region-mark").forEach((n) => n.remove());
+          }
           return true;
         }
         const page = pageOf(selectors);
@@ -325,6 +347,10 @@ export const pdfEngine: ReaderEngine = {
         if (region) {
           marked = { page, region };
           drawMark(true);
+          if (editingParts) {
+            marked = null;
+            container.querySelectorAll(".region-mark").forEach((n) => n.remove());
+          }
           return true;
         }
         marked = null;

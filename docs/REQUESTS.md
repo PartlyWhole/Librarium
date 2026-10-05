@@ -50,11 +50,44 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## In progress
 
-(nothing)
+### R-040 · A page for captures
+> "I want a page that contains, organizes and helps me look for captures. Page icon button
+> should be on ribbon"
 
----
+### R-041 · Trackpad page turns in books, with an animation
+> "I want horizontal scrolling (i'm using mousepad) to work well with flipping pages on epub
+> (like apple books); there should be a transition animation; it sometimes works but sometimes
+> unresponsive"
 
-## Done
+### R-042 · Images in notes, kept as attachments in the Library
+> "I want image support for notes (images uploaded should be Library items -- perhaps to keep
+> things organized, there should be an attachments section of the library that hold things
+> uploaded and attached directly to notes -- perhaps they can be promoted to a standalone
+> library item that other notes can reference; I'm not sure if this should apply to other kinds
+> of files like pdfs/epubs; maybe just stick with images for now)"
+
+### R-043 · Editing an image capture shows the old region
+> "Editing an image capture doesn't update the capture region as I changed it. I have to save it
+> (which doesn't update the region) and then reopen the page. Sometimes I even see the old region
+> underneath the new one."
+
+- **Diagnosis:**
+  1. Starting an edit shows the capture, which outlined its old region. In PDFs that outline is
+     redrawn with every page render, so it sat under the frame being edited, and stayed after
+     saving.
+  2. The reader didn't record where a part had been dragged to. When pages rendered again (on
+     scroll or zoom), the frame went back to the old region, so the next drag, and what you
+     saw, started from there.
+- **Changed:**
+  - While a capture is edited, its place is shown without an outline, and any earlier outline
+    is removed.
+  - Readers keep each part where it was dragged to (regions, PDF and image passages, EPUB
+    passages).
+- **Code:** `src/reader/pdf.ts`, `src/reader/image.ts`, `src/reader/epub/engine.ts`.
+- **Tested:** a WebKit check: the region is shown (outlined), then edited: no outline under it.
+  It's resized, the PDF zoomed (pages render again), and it stays as resized. The check fails
+  without the fix.
+- **Left:** nothing.
 
 ### R-039 · Show with the other buttons on the capture page
 > "In the capture page, move the show button on the same row as the other buttons (edit, copy, etc)"

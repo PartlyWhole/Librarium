@@ -484,7 +484,8 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         return null;
       },
       editParts(parts, onChange) {
-        let current = parts;
+        // The parts as edited so far (a page turn shows them where they are now).
+        let current = parts.map((p) => ({ ...p }));
         let editors: { destroy(): void }[] = [];
         let dragging = false;
         const build = () => {
@@ -517,7 +518,12 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
                 return f.doc.body ? caretIn(f.doc, f.doc.body, mx, my, { x: x - b.left, y: y - b.top }) : null;
               },
               onDrag: (r) => ((dragging = true), onChange({ key: p.key, done: false, text: selOf(f, r) })),
-              onDone: (r) => ((dragging = false), onChange({ key: p.key, done: true, text: selOf(f, r) })),
+              onDone: (r) => {
+                dragging = false;
+                const t = selOf(f, r);
+                p.cfi = t.cfi;
+                onChange({ key: p.key, done: true, text: t });
+              },
               edges: dragEdges(f),
             }));
           }
@@ -527,7 +533,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         build();
         return {
           update(next) {
-            current = next;
+            current = next.map((p) => ({ ...p }));
             build();
           },
           stop() {

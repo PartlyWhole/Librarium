@@ -62,6 +62,7 @@ const checks = [
   ["editing a saved article: dragging the start handle forward drops the first word, snapping to words", !!r.editPdfStart && !/^Line 3/.test(r.editPdfStart) && /^\S+/.test(r.editPdfStart) && r.editPdfStopped === true],
   ["editing a saved article: dragged to the bottom edge, it scrolls and the passage carries on", (r.editPdfScroll?.scrolled ?? 0) > 100 && (r.editPdfScroll?.length ?? 0) > 300 && r.editPdfScroll.starts === "Line "],
   ["editing a region: resizing by its corner takes its picture again", r.editPdfRegion?.grew === true && r.editPdfRegion.png === true],
+  ["editing a region: the place's old outline goes, and the region stays as resized when pages render again", r.editPdfRegion?.outlinedBefore >= 1 && r.editPdfRegion.outlinedWhileEditing === 0 && r.editPdfRegion.keptAfterRender === true],
   ["editing an EPUB passage: dragging its end takes in more text, with a new CFI", !!r.editEpub?.after && r.editEpub.after.length > r.editEpub.before.length && r.editEpub.cfiChanged === true],
   ["editing an EPUB passage at a larger text size works the same", !!r.editEpubZoomed?.after && r.editEpubZoomed.after.length > r.editEpubZoomed.before.length && r.editEpubZoomed.cfiChanged === true],
   ["editing an EPUB passage: held at the book's edge, the page turns and the passage carries on there", r.epubTurnArmed === true && r.epubDragTurn?.start === "Paragraph 2." && r.epubDragTurn.length > 1500 && r.epubDragTurn.after !== r.epubDragTurn.before && r.epubDragTurn.armedOff === true],
