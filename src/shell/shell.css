@@ -478,7 +478,7 @@ body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6
 @media (max-width: 600px) { .archive-row { flex-wrap: wrap; } }
 
 /* Making a capture: the panel beside the document, the button by a selection, pending marks */
-.reader-body { flex: 1; min-height: 0; display: flex; }
+.reader-body { flex: 1; min-height: 0; display: flex; position: relative; }
 .reader-body .reader-stage { min-width: 0; }
 .reader-aside { width: 320px; flex: none; border-left: 1px solid var(--border); background: var(--bg); overflow: auto; }
 .capture-draft { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -737,3 +737,15 @@ body.dragging-handle, body.dragging-handle * { user-select: none !important; -we
 .drag-shield { position: fixed; inset: 0; z-index: 1000; cursor: grabbing; background: transparent; }
 /* Dragging a passage's end into the edge of a book: the arrow there shows the page will turn. */
 .epub-container.armed-next .epub-arrow.next, .epub-container.armed-prev .epub-arrow.prev { opacity: 1; color: var(--accent-text); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+/* Editing a capture: a small bar over the document, and the parts in the Captures list. */
+.capture-edit-bar { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 30; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); box-shadow: 0 8px 28px rgb(0 0 0 / 22%); font-size: var(--small); white-space: nowrap; max-width: calc(100% - 32px); }
+.edit-bar-title { overflow: hidden; text-overflow: ellipsis; }
+.capture-edit-bar .button { padding: 3px 12px; }
+.capture-row.current > .list-link { font-weight: 600; color: var(--accent-text); }
+.capture-row.current { background: var(--hover); border-radius: var(--r1); }
+.capture-row.editing { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r1); }
+.edit-controls { display: grid; gap: 6px; margin-top: 6px; }
+.edit-hint { margin: 0; font-size: var(--small); color: var(--muted); }
+.edit-part { display: flex; align-items: flex-start; gap: 6px; padding: 4px 6px; border-left: 3px solid var(--accent); background: var(--bg-alt); border-radius: 0 var(--r1) var(--r1) 0; font-size: var(--small); }
+.edit-part-text { flex: 1; }
+.edit-part-img { flex: 1; max-width: 100%; max-height: 120px; object-fit: contain; object-position: left; border-radius: var(--r1); }

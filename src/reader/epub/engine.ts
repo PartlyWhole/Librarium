@@ -47,6 +47,17 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     contentsBtn.hidden = !book.toc.length;
     const aa = h("button", { class: "epub-aa", type: "button", title: "Reading settings", "aria-label": "Reading settings", "aria-expanded": "false", onclick: () => togglePopover("settings") }, "Aa");
 
+    // Settled: the first page is shown and its fonts have loaded. Places are measured only then
+    // (just after opening, Readium is still going to the remembered page and the layout moves).
+    let settledNow: () => void = () => {};
+    const firstShown = new Promise<void>((r) => (settledNow = r));
+    let settling: Promise<void> | null = null;
+    const settled = () =>
+      (settling ??= (async () => {
+        await firstShown;
+        for (const f of frames()) await laidOut(f.doc);
+      })());
+
     // Where the reader is.
     let current: Locator | undefined;
     let painted = false;
@@ -189,6 +200,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         if (!painted) {
           painted = true;
           events.firstPaint(performance.now() - t0);
+          settledNow();
         }
         for (const f of frames()) attach(f.win);
         draw();
@@ -587,6 +599,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     async function showRange(path: string, pick: (doc: Document) => Range | null): Promise<boolean> {
       const item = book.spine.find((x) => x.href === path);
       if (!item) return false;
+      await settled();
       const href = hrefOf(path);
       const here = () => frames().find((f) => f.index >= 0 && book.spine[f.index]!.href === path && f.el.style.visibility !== "hidden");
       const inChapter = current && decodeURIComponent(current.href.split("#")[0]!) === path;
@@ -597,11 +610,23 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         f = here();
       }
       if (!f) return false;
+      await laidOut(f.doc);
       const range = pick(f.doc);
       if (!range) return false;
-      const p = progressionOf(f, range);
-      if (p > 0) await go(new Locator({ href, type: item.type, locations: new LocatorLocations({ progression: p }) }));
+      // Go to its page, then make sure it is on screen (the layout can still move): again if not.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const p = progressionOf(f, range);
+        if (p > 0) await go(new Locator({ href, type: item.type, locations: new LocatorLocations({ progression: p }) }));
+        await new Promise((r) => setTimeout(r, 60));
+        if (onScreen(f, range)) break;
+      }
       return true;
+    }
+    /** Whether a range starts on the page shown. */
+    function onScreen(f: { doc: Document; el: HTMLIFrameElement }, range: Range): boolean {
+      const r = screenRects(f, range)[0];
+      const b = stage.getBoundingClientRect();
+      return !!r && r.left >= b.left - 1 && r.left < b.right && r.top >= b.top - 1 && r.top < b.bottom;
     }
     /**
      * Where a range's page starts in its chapter, as Readium counts progression: the distance
@@ -727,6 +752,20 @@ function findInDoc(doc: Document, query: string): Range[] {
     out.push(r);
   }
   return out;
+}
+
+/**
+ * When a book page has finished laying out: its fonts loaded and its pictures loaded (each up to
+ * two seconds), then two frames. A real book's page keeps moving while these arrive, so a place
+ * measured earlier can be pages off.
+ */
+async function laidOut(doc: Document): Promise<void> {
+  const cap = <T,>(p: Promise<T>) => Promise.race([p, new Promise((r) => setTimeout(r, 2000))]);
+  await cap((doc as Document & { fonts?: { ready: Promise<unknown> } }).fonts?.ready ?? Promise.resolve());
+  const pending = [...doc.images].filter((i) => !i.complete);
+  await cap(Promise.all(pending.map((i) => new Promise((r) => (i.addEventListener("load", r, { once: true }), i.addEventListener("error", r, { once: true }))))));
+  const win = doc.defaultView;
+  if (win) await new Promise((r) => win.requestAnimationFrame(() => win.requestAnimationFrame(r)));
 }
 
 /** The picture a range holds on its own (an image, or an SVG's image), if any. */

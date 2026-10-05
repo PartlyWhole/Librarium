@@ -278,6 +278,11 @@ export function captures(shell: ShellApi): void {
       const onKey = (e: KeyboardEvent) => {
         if (e.key === "Escape" && !pop.hidden) hidePop();
         if (e.key === "Escape" && !markPop.hidden) markPop.hidden = true;
+        // ⌘↩ saves the changes to a capture being edited.
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && drafts.peek().get(k)?.editing) {
+          e.preventDefault();
+          void save();
+        }
       };
       document.addEventListener("scroll", onScroll, true);
       window.addEventListener("keydown", onKey);
@@ -314,6 +319,7 @@ export function captures(shell: ShellApi): void {
           });
         }
         setDraft(k, { parts, words: "", editing: { id, title: r.title || "Capture" } });
+        shell.showPanelSection("captures");
         void view.showPlace?.(JSON.parse(JSON.stringify([...(a.parts[0]?.selector ?? []), ...(a.parts[0]?.boxes?.length ? [{ type: "librarium:boxes", boxes: a.parts[0].boxes }] : [])])));
       };
       const toEdit = (p: DraftPart): EditPart => {
@@ -384,10 +390,19 @@ export function captures(shell: ShellApi): void {
           () => {},
         );
       });
+      const editBar = h("div", { class: "capture-edit-bar", role: "toolbar", "aria-label": "Editing a capture" });
       const stopPanel = effect(() => {
         const d = draftOf(k);
         const savedMarks = saved().filter((c) => c.id !== d?.editing?.id).flatMap((c) => c.parts.map((p, i) => ({ id: `${c.id}#${i}`, boxes: p.boxes, region: p.region, cfi: p.region ? undefined : (p.cfi ?? undefined), saved: true })));
         view.setMarks?.([...savedMarks, ...(d?.parts ?? []).map((p) => ({ id: p.key, boxes: p.boxes, region: p.region, cfi: p.region ? undefined : p.cfi }))]);
+        // Editing a saved capture: the reader stays whole; its controls are in the Captures list
+        // (side panel) and a small bar over the document.
+        if (d?.editing) {
+          panel.remove();
+          untracked(() => renderEditBar(d));
+          return;
+        }
+        editBar.remove();
         if (!d?.parts.length) {
           panel.remove();
           return;
@@ -395,6 +410,14 @@ export function captures(shell: ShellApi): void {
         untracked(() => renderPanel(d));
         if (!panel.isConnected) ctx.aside.appendChild(panel);
       });
+      function renderEditBar(d: Draft) {
+        replace(editBar,
+          h("span", { class: "edit-bar-title" }, `Editing “${d.editing!.title}”`, h("span", { class: "muted" }, ` · ${d.parts.length === 1 ? "1 part" : `${d.parts.length} parts`}`)),
+          h("button", { class: "button", type: "button", onclick: () => setDraft(k, null) }, "Cancel"),
+          h("button", { class: "button primary", type: "button", title: "Save changes (⌘↩)", disabled: !d.parts.length, onclick: () => void save() }, "Save changes"));
+        const body = ctx.aside.parentElement;
+        if (body && !editBar.isConnected) body.appendChild(editBar);
+      }
       function renderPanel(d: Draft) {
         const items: HTMLElement[] = [];
         d.parts.forEach((p, i) => {
@@ -418,18 +441,6 @@ export function captures(shell: ShellApi): void {
           }
         });
         const hadFocus = panel.contains(document.activeElement) && document.activeElement?.classList.contains("words-input");
-        if (d.editing) {
-          replace(panel,
-            h("div", { class: "capture-draft-head" }, h("h2", null, `Editing “${d.editing.title}”`)),
-            ...items,
-            h("p", { class: "draft-hint" }, `Drag the handles at a passage’s ends to change it${view.pickRegion ? ", or a region’s frame to resize or move it" : ""}. Select more text${view.pickRegion ? " or drag a region (⇧⌘R)" : ""} to add a part.`),
-            h("p", { class: "muted small" }, "Your words stay as they are."),
-            h("div", { class: "ask-buttons" },
-              h("button", { class: "button", type: "button", onclick: () => setDraft(k, null) }, "Cancel"),
-              h("button", { class: "button primary", type: "button", title: "Save changes (⌘↩)", disabled: !d.parts.length, onclick: () => void save() }, "Save changes")),
-          );
-          return;
-        }
         replace(panel,
           h("div", { class: "capture-draft-head" }, h("h2", null, d.parts.length > 1 ? `New capture · ${d.parts.length} parts` : "New capture")),
           ...items,
@@ -450,6 +461,7 @@ export function captures(shell: ShellApi): void {
       return () => {
         stopEditor();
         stopEditRoute();
+        editBar.remove();
         editor?.stop();
         stopSaved();
         unwatchMarks();
@@ -657,33 +669,45 @@ export function captures(shell: ShellApi): void {
     id: "captures",
     title: "Captures",
     icon: Quote,
-    applies: (r) => r.page === "item" && !!r.params.id,
+    // On a library item, and on one of its captures (the list stays, the open one marked).
+    applies: (r) => (r.page === "item" || r.page === "capture") && !!r.params.id,
     render(host, route) {
-      const src = route.params.id!;
+      const open = route.page === "capture" ? route.params.id! : null;
+      const src = open ? String(shell.records.get(open)?.fields[F.source] ?? "") : route.params.id!;
       let alive = true;
+      const statusOf = new Map<string, string>();
       const stop = effect(() => {
         const list = shell.records.list(KIND).filter((c) => c.fields[F.source] === src && !isArchived(c));
+        const editing = [...drafts().entries()].find(([, d]) => d.editing && list.some((c) => c.id === d.editing!.id));
         if (!list.length) return replace(host, h("p", { class: "muted" }, "Nothing captured here yet. Select a passage and choose Capture."));
-        const ul = h("ul", { class: "backlinks" });
+        const ul = h("ul", { class: "backlinks capture-list" });
         replace(host, ul);
-        for (const c of list.sort((a, b) => (a.created ?? "").localeCompare(b.created ?? ""))) {
-          const status = h("span", { class: "badge" });
-          const li = h("li", { class: "capture-row" }, h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(c.id)) }, c.title || "Capture"), " ", status, h("div", { class: "row tight capture-tools" },
-            iconButton(LocateFixed, "Show in the source", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, where(a), { again: true }))),
-            iconButton(Copy, "Copy embed", () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note."))),
-            iconButton(Trash2, "Delete", () => void deleteCapture(c), true)));
+        for (const c of list.sort((x, y) => (x.created ?? "").localeCompare(y.created ?? ""))) {
+          const status = h("span", { class: `badge ${statusOf.get(c.id) ?? ""}` }, statusOf.get(c.id) ?? "");
+          const isEditing = editing?.[1].editing?.id === c.id;
+          const li = h("li", { class: `capture-row${c.id === open ? " current" : ""}${isEditing ? " editing" : ""}`, "aria-current": c.id === open ? "true" : undefined },
+            h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(c.id)) }, c.title || "Capture"), " ", status,
+            isEditing ? editingControls(editing![0], editing![1]) : h("div", { class: "row tight capture-tools" },
+              iconButton(LocateFixed, "Show in the source", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, where(a), { again: true }))),
+              iconButton(Pencil, "Edit selection", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, { ...where(a), edit: c.id }, { again: true }))),
+              iconButton(Copy, "Copy embed", () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note."))),
+              iconButton(Trash2, "Delete", () => void deleteCapture(c), true)));
           li.addEventListener("contextmenu", (e) => {
             e.preventDefault();
             captureMenu(c, { x: e.clientX, y: e.clientY });
           });
           ul.appendChild(li);
-          void call<Anchor>("captures.anchor", { id: c.id }).then(statuses).then((s) => {
-            if (!alive) return;
-            const worst = s.some((x) => x.status === "lost") ? "lost" : s.some((x) => x.status === "moved") ? "moved" : "";
-            status.textContent = worst === "lost" ? "lost" : worst === "moved" ? "moved" : "";
-            status.className = `badge ${worst}`;
-          }, () => {});
+          if (!statusOf.has(c.id)) {
+            void call<Anchor>("captures.anchor", { id: c.id }).then(statuses).then((st) => {
+              if (!alive) return;
+              const worst = st.some((x) => x.status === "lost") ? "lost" : st.some((x) => x.status === "moved") ? "moved" : "";
+              statusOf.set(c.id, worst);
+              status.textContent = worst;
+              status.className = `badge ${worst}`;
+            }, () => {});
+          }
         }
+        if (open) ul.querySelector(".current")?.scrollIntoView?.({ block: "nearest" });
       });
       return () => {
         alive = false;
@@ -691,6 +715,20 @@ export function captures(shell: ShellApi): void {
       };
     },
   });
+
+  /** The parts of a capture being edited, with Cancel and Save, in its row of the Captures list. */
+  function editingControls(k: string, d: Draft): HTMLElement {
+    const parts = d.parts.map((p, i) =>
+      h("div", { class: "edit-part" },
+        p.preview ? h("img", { class: "edit-part-img", src: p.preview, alt: "A captured picture" }) : h("span", { class: "edit-part-text" }, p.quote.length > 90 ? `${p.quote.slice(0, 90)}…` : p.quote),
+        h("button", { type: "button", class: "icon-button small", "aria-label": `Remove part ${i + 1}`, title: "Remove this part", onclick: () => setDraft(k, { ...d, parts: d.parts.filter((x) => x !== p) }) }, icon(X, 14))));
+    return h("div", { class: "edit-controls" },
+      h("p", { class: "edit-hint" }, "Editing: drag the handles at a passage’s ends, or a region’s frame. Select more to add a part."),
+      ...parts,
+      h("div", { class: "ask-buttons" },
+        h("button", { class: "button", type: "button", onclick: () => setDraft(k, null) }, "Cancel"),
+        h("button", { class: "button primary", type: "button", disabled: !d.parts.length, onclick: () => void active?.save() }, "Save changes")));
+  }
 
   // Captures show under the item they were made from (in the Library's tree).
   let bySource: { from: unknown; map: Map<string, RecordInfo[]> } | null = null;

@@ -437,7 +437,8 @@ async function run() {
   // Opened with a place at a saved text size (Show from a note or another tab): the place is
   // asked for as soon as the book opens.
   longBook.view.destroy();
-  const sized = new Map<string, unknown>([["reader.epub", { fontSize: 1.3 }]]);
+  // With a remembered reading place elsewhere in the book (Readium goes there first).
+  const sized = new Map<string, unknown>([["reader.epub", { fontSize: 1.3 }], ["reader.place.long.epub", { href: "c.xhtml", type: "application/xhtml+xml", locations: { progression: 0.6, position: 40 } }]]);
   const reopenedLong = await open(epubEngine, "long.epub", "epub", undefined, { get: (k) => sized.get(k), set: (k, v) => sized.set(k, v) });
   reopenedLong.view.setMarks?.(zcfi ? [{ id: "z", boxes: [], cfi: zcfi }] : []);
   await reopenedLong.view.showPlace?.([{ type: "TextQuoteSelector", exact: "zephyrine" }, { type: "FragmentSelector", value: zcfi ?? "" }]);

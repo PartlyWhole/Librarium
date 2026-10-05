@@ -16,8 +16,9 @@ as good, and it all had to work in PDFs, saved web articles and EPUBs.
   (pencil), or from Edit in a highlight's popover. The route's `edit` param starts it in the
   open document (0048).
 - **The draft:** the "capture being made" draft holds the capture's parts, marked as editing.
-  The side panel says "Editing", lists the parts (each removable), and has Cancel and Save
-  changes. Selecting more text, or dragging a region, adds a part. The capture's saved highlight
+  The reader stays whole (R-038). The capture's row in the side panel's Captures list holds the
+  parts (each removable) with Cancel and Save changes, and a small bar over the document has
+  Cancel and Save changes too. Selecting more text, or dragging a region, adds a part. The capture's saved highlight
   gives way to the parts being edited.
 - **Readers** implement `editParts(parts, onChange)`:
   - **Text parts** get handles at both ends, as in Apple Books: start knob above, end knob below

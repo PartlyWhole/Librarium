@@ -183,6 +183,9 @@ combobox). Every action must be in a menu (shell test).
 - **WebKit, PDFs and saved pages**
   - In an iframe sandboxed without `allow-scripts`, WebKit runs no event listeners at all, not
     even the parent's (bug 218086). Stop a book's scripts by other means (0043, 0045).
+  - Measure a place in a book only once its page has laid out (`laidOut`: fonts and images
+    loaded). Just after opening, Readium is still going to the remembered page, and a real
+    book's layout moves as its fonts and pictures arrive.
   - Readium's progression is the distance scrolled over the distance that can be scrolled
     (the width less one page), and its text search can miss. To show a range, find it in the
     page and go to its page by progression (`showRange`).

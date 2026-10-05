@@ -364,7 +364,7 @@ describe("showing a capture in its source", () => {
       shell.showPanelSection("captures");
       await wait(60);
       const tools = document.querySelector(".side-panel .capture-tools")!;
-      expect([...tools.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"))).toEqual(["Show in the source", "Copy embed", "Delete"]);
+      expect([...tools.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"))).toEqual(["Show in the source", "Edit selection", "Copy embed", "Delete"]);
       const show = tools.querySelector('[aria-label="Show in the source"]') as HTMLButtonElement;
       show.click();
       await wait(60);
@@ -425,7 +425,14 @@ describe("editing what a capture holds", () => {
     button(pop, "Edit").click();
     await wait(60);
     expect(v.editing.parts).toEqual([expect.objectContaining({ boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }], quote: "It avoids shock" })]);
-    expect(t.aside.querySelector("h2")?.textContent).toBe(`Editing “${cap.title}”`);
+    // The reader stays whole: no panel beside it; a bar over it, and the Captures list (side
+    // panel) holds the parts.
+    expect(t.aside.querySelector(".capture-draft")).toBeNull();
+    const bar = () => document.querySelector(".capture-edit-bar") as HTMLElement;
+    expect(bar().textContent).toContain(`Editing “${cap.title}”`);
+    shell.router.go("capture", { id: cap.id });
+    await wait(80);
+    expect(document.querySelector(".side-panel .capture-row.editing")).not.toBeNull();
     // Its saved highlight gives way to the part being edited.
     expect(v.marks.current.filter((m) => m.saved)).toEqual([]);
     expect(v.marks.current).toEqual([expect.objectContaining({ boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] })]);
@@ -438,15 +445,16 @@ describe("editing what a capture holds", () => {
     // Let go: anchored again in the stored text.
     v.editing.onChange!({ key, done: true, text: { text: "It avoids shock and sensational events.", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 60, h: 2 }] } });
     await wait(40);
-    expect(t.aside.querySelector(".capture-quote")?.textContent).toBe("It avoids shock and sensational events.");
-    button(t.aside, "Save changes").click();
+    expect(document.querySelector(".side-panel .edit-part-text")?.textContent).toBe("It avoids shock and sensational events.");
+    button(bar(), "Save changes").click();
     await wait(60);
     const after = shell.records.get(cap.id)!;
     expect(after.fields["captures.quote"]).toBe("It avoids shock and sensational events.");
     expect(anchors.get(cap.id).parts[0].boxes).toEqual([{ page: 1, x: 10, y: 5, w: 60, h: 2 }]);
     expect(anchors.get(cap.id).parts[0].selector[0]).toMatchObject({ type: "TextQuoteSelector", exact: "It avoids shock and sensational events." });
     expect(v.editing.stopped).toBe(true);
-    expect(t.aside.querySelector(".capture-draft")).toBeNull();
+    expect(document.querySelector(".capture-edit-bar")).toBeNull();
+    expect(document.querySelector(".side-panel .capture-row.editing")).toBeNull();
     t.dispose();
   });
 
@@ -470,13 +478,16 @@ describe("editing what a capture holds", () => {
     await wait(60);
     expect(v.editing.parts.map((p) => !!p.region)).toEqual([false, true]);
     expect(v.editing.parts[1]!.region).toEqual({ page: 2, x: 10, y: 20, w: 30, h: 10 });
+    // The Captures list (side panel), on the capture's page, holds the parts.
+    shell.router.go("capture", { id: cap.id });
+    await wait(80);
     // Resize the region: drawn as it moves, its picture taken again when let go.
     const rkey = v.editing.parts[1]!.key;
     v.editing.onChange!({ key: rkey, done: true, region: { page: 2, x: 5, y: 15, w: 50, h: 20, png: "data:image/png;base64,BBBB" } });
     await wait(30);
-    expect((t.aside.querySelector("img.capture-region") as HTMLImageElement).src).toBe("data:image/png;base64,BBBB");
+    expect((document.querySelector(".side-panel .edit-part-img") as HTMLImageElement).src).toBe("data:image/png;base64,BBBB");
     // Cancel: nothing changes.
-    button(t.aside, "Cancel").click();
+    button(document.querySelector(".capture-edit-bar")!, "Cancel").click();
     await wait(30);
     expect(anchors.get(cap.id).parts[1].selector[0].refinedBy.value).toBe("xywh=percent:10,20,30,10");
     // Again, then remove the text part and save: one part left, the region as resized.
@@ -485,11 +496,11 @@ describe("editing what a capture holds", () => {
     await wait(60);
     v.editing.onChange!({ key: v.editing.parts[1]!.key, done: true, region: { page: 2, x: 5, y: 15, w: 50, h: 20, png: "data:image/png;base64,BBBB" } });
     await wait(30);
-    (t.aside.querySelector('[aria-label="Remove this part"]') as HTMLButtonElement).click();
+    (document.querySelector('.side-panel [aria-label="Remove part 1"]') as HTMLButtonElement).click();
     await wait(30);
     expect(v.editing.updates).toBeGreaterThan(0);
     expect(v.editing.parts.map((p) => !!p.region)).toEqual([true]);
-    button(t.aside, "Save changes").click();
+    button(document.querySelector(".capture-edit-bar")!, "Save changes").click();
     await wait(60);
     expect(shell.records.get(cap.id)!.fields["captures.parts"]).toBe(1);
     expect(anchors.get(cap.id).parts[0].selector[0].refinedBy.value).toBe("xywh=percent:5,15,50,20");
@@ -514,7 +525,9 @@ describe("editing what a capture holds", () => {
       await wait(120);
       expect(shell.router.current()).toMatchObject({ page: "item", params: { id: src.id, edit: cap.id } });
       expect(v.editing.parts).toEqual([expect.objectContaining({ boxes: [{ page: 1, x: 10, y: 5, w: 60, h: 2 }] })]);
-      expect(document.querySelector(".capture-draft h2")?.textContent).toBe("Editing “It avoids shock and…”");
+      expect(document.querySelector(".capture-edit-bar")?.textContent).toContain("Editing “It avoids shock and…”");
+      expect(document.querySelector(".capture-draft")).toBeNull();
+      expect(document.querySelector(".side-panel .capture-row.editing .list-link")?.textContent).toBe("It avoids shock and…");
     } finally {
       engine.open = original;
     }
@@ -545,5 +558,34 @@ describe("editing what a capture holds", () => {
     view.dispatch({ selection: { anchor: view.state.doc.length } });
     await wait(40);
     expect((view.contentDOM.querySelector(".embed img.embed-region") as HTMLImageElement | null)?.src).toBe(img);
+  });
+});
+
+describe("the Captures list in the side panel", () => {
+  it("stays on a capture's page, listing the captures of its source with the open one marked", async () => {
+    const { shell, src } = await boot(true);
+    const a = seed("capture", "First capture", "", { "captures.source": src.id, "captures.quote": "Technique integrates everything.", "captures.parts": 1 });
+    const b = seed("capture", "Second capture", "", { "captures.source": src.id, "captures.quote": "It avoids shock", "captures.parts": 1 });
+    for (const c of [a, b]) anchors.set(c.id, { id: c.id, source: src.id, snapshot: null, parts: [{ selector: [{ type: "TextQuoteSelector", exact: "x", prefix: "", suffix: "" }] }] });
+    await shell.records.load();
+    const engine = shell.readerEngines.get("pdf")!;
+    const original = engine.open;
+    engine.open = async () => fakeView(() => null).view;
+    try {
+      shell.router.go("item", { id: src.id });
+      shell.showPanelSection("captures");
+      await wait(80);
+      const rows = () => [...document.querySelectorAll(".side-panel .capture-row")];
+      expect(rows().map((r) => r.querySelector(".list-link")?.textContent)).toEqual(["First capture", "Second capture"]);
+      // Opening one: the panel stays on Captures, the open one marked.
+      (rows()[1]!.querySelector(".list-link") as HTMLElement).click();
+      await wait(80);
+      expect(shell.router.current()).toMatchObject({ page: "capture", params: { id: b.id } });
+      expect(rows().map((r) => r.querySelector(".list-link")?.textContent)).toEqual(["First capture", "Second capture"]);
+      expect(rows().map((r) => r.classList.contains("current"))).toEqual([false, true]);
+      expect([...rows()[0]!.querySelectorAll("button")].map((x) => x.getAttribute("aria-label"))).toEqual(["Show in the source", "Edit selection", "Copy embed", "Delete"]);
+    } finally {
+      engine.open = original;
+    }
   });
 });

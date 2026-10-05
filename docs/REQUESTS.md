@@ -56,6 +56,43 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-038 · The Captures panel jumps to Jobs; editing splits the reader; Show lands elsewhere
+> "When I click on a capture, it opens the capture in the main view, but right now the side
+> panel goes to "Jobs". It should show the other captures that belong to the same library item
+> (it shouldn't actually change the side panel when opening up a capture; maybe just highlight
+> the capture opened in the side panel) · editing a capture splits the reader page/panel into
+> two (the epub/article, and the capture page). It should just be the epub, and the main side
+> panel should remain the list of captures. · Showing the quote doesn't always open up directly
+> to the beginning of the quote. … when I click show source on capture page, it opens up to a
+> different point each time, but seems to work on the side panel."
+
+- **Changed:**
+  - **The Captures list stays.** On a capture's own page, the side panel keeps listing the
+    captures from the same source, with the open one highlighted. Each row has Show in the
+    source, Edit selection, Copy embed and Delete.
+  - **Editing doesn't split the reader.** The book or article stays full width. The capture
+    being edited is outlined in the Captures list, with its parts (× removes one) and Cancel /
+    Save changes. A small bar over the document has Cancel / Save changes too, and ⌘↩ saves.
+    Starting an edit opens the side panel on Captures.
+  - **Show from the capture page lands on the passage.** It opens the book fresh, and it used
+    to measure the place while the book was still settling: Readium returning to your last
+    page, and fonts and images still loading, which moves the layout. It now waits for the
+    page to finish laying out, and checks the passage is on screen (correcting if not).
+- **Code:** `src/features/captures/index.ts` (the Captures list, edit controls, the edit bar),
+  `src/reader/epub/engine.ts` (`laidOut`, `settled`, the on-screen check),
+  `src/shell/shell.css`.
+- **Tested:**
+  - Interface tests: the list stays and marks the open capture; edit mode has no panel beside
+    the reader, the bar and the list's editing row work; parts removed from the list. The edit
+    tests were updated on purpose: their controls moved from the reader's column to the bar and
+    the list.
+  - WebKit: all 56 checks, including opening at a place with a remembered reading position
+    elsewhere.
+  - Checked by eye in the preview.
+  - Not reproducible with the test books: the "different point each time" depended on a real
+    book's fonts and images loading. Please try Show from the capture page on that book.
+- **Left:** nothing.
+
 ### R-037 · Drag a passage's end across EPUB page turns
 > "support dragging across EPUB page turns"
 
