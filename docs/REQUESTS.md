@@ -56,6 +56,33 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-047 · A PDF capture's highlight broken into words, with a purple box around it
+> "How come the highlight is disjoint? And there is a purple box? Should just be a continuous
+> highlight right?"
+
+- **Diagnosis:**
+  - In a PDF, each word is a separate piece of text with a small gap after it. When a
+    capture's boxes were stored, neighbours only joined across 2 px, so the capture was saved
+    as one box per word and drawn that way.
+  - The purple box was Show's outline around the whole passage. It was meant for picture
+    regions and is wrong for text.
+- **Changed:**
+  - A capture's highlight is one continuous band per line, like a selection. This applies to
+    captures saved before the change too: they are joined when drawn.
+  - Show puts the passage in the middle of the view and brightens its own lines for about two
+    seconds, with no frame. Picture captures keep their outline.
+- **Use:** nothing new.
+- **Code:** `src/reader/host.ts` (`joinLines`, `flashPlace`, `boxesIn`, `drawMarks`),
+  `src/reader/pdf.ts`, `src/shell/shell.css` (`.place-mark`).
+- **Decision:** 0052.
+- **Tested:**
+  - On your Girard capture, using a temporary copy that was deleted afterwards: 19 word boxes
+    are now drawn as 5 lines, brightened on Show and back to normal after it.
+  - New WebKit checks: per-word boxes are drawn as lines, and Show draws the lines with no
+    frame. The earlier check that expected the outline was updated on purpose. All 63 WebKit
+    checks, 171 interface tests and the Rust tests pass; lint is clean.
+- **Left:** EPUBs and web pages already highlighted continuously, so they are unchanged.
+
 ### R-046 · Show in the Girard article went to another page
 > "the text capture I made in Girard-DionysusversusCrucified-1984 doesn't localize well -- when I
 > click show, it goes to a different page"

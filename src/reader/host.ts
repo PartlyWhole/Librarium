@@ -274,6 +274,39 @@ export function innerRect(el: HTMLElement): DOMRect {
   return new DOMRect(b.left + el.clientLeft, b.top + el.clientTop, el.clientWidth || b.width, el.clientHeight || b.height);
 }
 
+type Edges = { l: number; t: number; r: number; b: number };
+
+/**
+ * Whether a rectangle continues the line of the one before (pixels): mostly overlapping
+ * vertically, and no further on than a few spaces. A PDF's words are separate spans with gaps
+ * between them; a column gap is wider.
+ */
+function sameLine(prev: Edges, next: Edges): boolean {
+  const h = Math.min(prev.b - prev.t, next.b - next.t);
+  const overlap = Math.min(prev.b, next.b) - Math.max(prev.t, next.t);
+  return overlap > 0.5 * h && next.l <= prev.r + 2.5 * h && next.r >= prev.l - 2;
+}
+
+/**
+ * Boxes (percent of an element `width` × `height` pixels) joined into one per line, as a
+ * selection is drawn. Captures saved before boxes were joined have one box per word.
+ */
+export function joinLines(boxes: Box[], width: number, height: number): Box[] {
+  if (!width || !height) return boxes;
+  const out: (Edges & { page?: number })[] = [];
+  for (const x of boxes) {
+    const r = { l: (x.x * width) / 100, t: (x.y * height) / 100, r: ((x.x + x.w) * width) / 100, b: ((x.y + x.h) * height) / 100 };
+    const prev = out[out.length - 1];
+    if (prev && prev.page === x.page && sameLine(prev, r)) {
+      prev.l = Math.min(prev.l, r.l);
+      prev.r = Math.max(prev.r, r.r);
+      prev.t = Math.min(prev.t, r.t);
+      prev.b = Math.max(prev.b, r.b);
+    } else out.push({ ...r, page: x.page });
+  }
+  return out.map((r) => ({ ...(r.page !== undefined ? { page: r.page } : {}), x: (r.l / width) * 100, y: (r.t / height) * 100, w: ((r.r - r.l) / width) * 100, h: ((r.b - r.t) / height) * 100 }));
+}
+
 /** The boxes of a range, in percent of `over` (merged per line). */
 export function boxesIn(range: Range, over: HTMLElement, page?: number): Box[] {
   const b = innerRect(over);
@@ -288,8 +321,7 @@ export function boxesIn(range: Range, over: HTMLElement, page?: number): Box[] {
     const l = Math.max(r.left, b.left), t = Math.max(r.top, b.top), rr = Math.min(r.right, b.right), bb = Math.min(r.bottom, b.bottom);
     if (rr <= l || bb <= t) continue;
     const prev = lines[lines.length - 1];
-    const overlap = prev ? Math.min(prev.b, bb) - Math.max(prev.t, t) : 0;
-    if (prev && overlap > 0.5 * Math.min(prev.b - prev.t, bb - t) && l <= prev.r + 2) {
+    if (prev && sameLine(prev, { l, t, r: rr, b: bb })) {
       prev.l = Math.min(prev.l, l);
       prev.r = Math.max(prev.r, rr);
       prev.t = Math.min(prev.t, t);
@@ -335,8 +367,10 @@ export function endOf(range: Range): { x: number; y: number; bottom: number } | 
 export function drawMarks(over: HTMLElement, marks: Mark[], page?: number): void {
   over.querySelectorAll(":scope > .pending-mark").forEach((n) => n.remove());
   if (getComputedStyle(over).position === "static") over.style.position = "relative";
+  const box = innerRect(over);
   for (const m of marks) {
-    for (const b of m.boxes) {
+    const boxes = m.region ? m.boxes : joinLines(m.boxes.filter((b) => page === undefined || b.page === page), box.width, box.height);
+    for (const b of boxes) {
       if (page !== undefined && b.page !== page) continue;
       const el = document.createElement("div");
       el.className = `pending-mark${m.region ? " region" : ""}${m.saved ? " saved" : ""}`;
@@ -354,6 +388,26 @@ export function cropToPng(src: HTMLCanvasElement | HTMLImageElement, sx: number,
   c.height = Math.max(1, Math.round(sh));
   c.getContext("2d")!.drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
   return c.toDataURL("image/png");
+}
+
+/**
+ * Brings out a passage's place for a moment (its line boxes, percent of `over`): Show lands on
+ * the passage itself, as a selection, rather than a frame around it. Returns the first line.
+ */
+export function flashPlace(over: HTMLElement, boxes: Box[], page?: number): HTMLElement | undefined {
+  over.querySelectorAll(".region-mark, .place-mark").forEach((n) => n.remove());
+  if (getComputedStyle(over).position === "static") over.style.position = "relative";
+  const box = innerRect(over);
+  let first: HTMLElement | undefined;
+  for (const b of joinLines(boxes.filter((x) => page === undefined || x.page === page), box.width, box.height)) {
+    const el = document.createElement("div");
+    el.className = "place-mark";
+    Object.assign(el.style, { left: `${b.x}%`, top: `${b.y}%`, width: `${b.w}%`, height: `${b.h}%` });
+    over.appendChild(el);
+    setTimeout(() => el.remove(), 2600);
+    first ??= el;
+  }
+  return first;
 }
 
 /** Draws a region outline (percent) over an element. */

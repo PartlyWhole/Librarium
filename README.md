@@ -116,3 +116,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-04 | A capture's parts are edited in place: handles at a passage's ends, a frame on a region; book pictures captured as images. | [0049](docs/decisions/0049-editing-capture-parts.md) |
 | 2026-10-04 | A scan's recognised text is aligned to the words seen (ink runs); quotations flow (lines joined, hyphens rejoined). | [0050](docs/decisions/0050-scanned-pdf-text-on-ink.md) |
 | 2026-10-04 | Images put into notes are kept in the Library's Attachments folder; Move to the Library promotes one. | [0051](docs/decisions/0051-attachments.md) |
+| 2026-10-05 | Show brings out a text capture's own lines (joined into one highlight per line), not a frame around it. | [0052](docs/decisions/0052-show-passage-not-frame.md) |

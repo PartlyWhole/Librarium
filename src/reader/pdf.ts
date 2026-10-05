@@ -10,7 +10,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { EventBus, PDFFindController, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { h } from "../kit/dom";
-import { boxesIn, boxesPlace, caretIn, rangeEditor, regionEditor, snapStart, snapEnd, type EditPart, snapToWords, drawMarks, dragRect, endOf, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
+import { boxesIn, boxesPlace, caretIn, rangeEditor, regionEditor, snapStart, snapEnd, type EditPart, snapToWords, drawMarks, dragRect, endOf, flashPlace, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 import { advancesOf, splitIntoWords, type Advance, type FontData } from "./pdf-words";
 import { alignToInk } from "./pdf-ink";
@@ -47,16 +47,31 @@ export const pdfEngine: ReaderEngine = {
     linkService.setViewer(viewer);
     let painted = false;
     // A region to outline survives page re-renders (PDF.js clears unknown children).
-    let marked: { page: number; region: { x: number; y: number; w: number; h: number } } | null = null;
+    // A passage shown (Show) is brought out on its lines instead, for a moment.
+    let marked: { page: number; region: { x: number; y: number; w: number; h: number }; boxes?: Box[] } | null = null;
     // While a capture's parts are edited, places are shown without outlines (the parts are drawn).
     let editingParts = false;
     const drawMark = (scroll: boolean) => {
       if (!marked) return;
       const div = viewer.getPageView(marked.page - 1)?.div as HTMLElement | undefined;
-      if (div) {
-        const m = outlineRegion(div, marked.region);
-        if (scroll) m.scrollIntoView({ block: "center" });
+      if (!div) return;
+      if (marked.boxes) {
+        flashPlace(div, marked.boxes, marked.page);
+        if (scroll) {
+          // The passage's middle to the middle of the view.
+          const b = innerRect(div);
+          const mid = b.top + ((marked.region.y + marked.region.h / 2) / 100) * b.height;
+          const c = container.getBoundingClientRect();
+          container.scrollTop += mid - (c.top + c.height / 2);
+        }
+        const shown = marked;
+        setTimeout(() => {
+          if (marked === shown) marked = null;
+        }, 2500);
+        return;
       }
+      const m = outlineRegion(div, marked.region);
+      if (scroll) m.scrollIntoView({ block: "center" });
     };
     // Recognised text of scanned pages, laid over them so it can be selected and found.
     const recognized = new Map<number, OcrLine[]>();
@@ -212,7 +227,7 @@ export const pdfEngine: ReaderEngine = {
         // The capture's place, outlined when it was shown, would sit under what is being edited.
         const clearPlace = () => {
           marked = null;
-          container.querySelectorAll(".region-mark").forEach((n) => n.remove());
+          container.querySelectorAll(".region-mark, .place-mark").forEach((n) => n.remove());
         };
         clearPlace();
         let editors: { destroy(): void }[] = [];
@@ -362,11 +377,11 @@ export const pdfEngine: ReaderEngine = {
         const drawn = boxesPlace(selectors);
         if (drawn?.page && drawn.page >= 1 && drawn.page <= doc.numPages) {
           viewer.currentPageNumber = drawn.page;
-          marked = { page: drawn.page, region: drawn.region };
+          marked = { page: drawn.page, region: drawn.region, boxes: selectors.find((x) => x.type === "librarium:boxes")?.boxes };
           drawMark(true);
           if (editingParts) {
             marked = null;
-            container.querySelectorAll(".region-mark").forEach((n) => n.remove());
+            container.querySelectorAll(".region-mark, .place-mark").forEach((n) => n.remove());
           }
           return true;
         }
