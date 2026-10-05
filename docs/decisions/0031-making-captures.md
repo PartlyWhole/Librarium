@@ -1,6 +1,6 @@
 # 0031. Making captures: a panel beside the document
 
-- Status: accepted (supersedes the capture dialog of milestone 6)
+- Status: accepted (supersedes the capture dialog of milestone 6); where the panel sits: see 0056
 - Date: 2026-10-03
 
 ## Context and problem

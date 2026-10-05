@@ -17,19 +17,20 @@ import type { RecordInfo } from "../../generated/RecordInfo";
 import type { FoldersList } from "../../generated/FoldersList";
 import { FileText, Folder, FolderOpen } from "lucide";
 import { Contents, badFolderName, folderOf, join, keyOf, nameOf, parentOf, placed, sortEntries, within, type FolderEntry, type Sort } from "./model";
-import { canMoveInto, canPlaceIn, moveInto, newFolder, pickFolder, removeFolder, renameFolder, type FolderStore } from "./ops";
+import { canMoveInto, canPlaceIn, moveInto, newFolder, pickFolder, removeFolder, renameFolder, renameRecord, type FolderStore } from "./ops";
 import { arriveWith, makeFolderHere, renderFiles, type FilesCtx } from "./view";
 
 const folderKey = (name: string) => `folder:${name}`;
 
 /** Asks for a name (for menus where the name can't be edited in place). */
-function askName(title: string, initial: string, action: string): Promise<string | null> {
+function askName(title: string, initial: string, action: string, of: "folder" | "title" = "folder"): Promise<string | null> {
   return new Promise((resolve) => {
     let result: string | null = null;
-    const input = h("input", { class: "combo-input", value: initial, "aria-label": "Folder name", spellcheck: false }) as HTMLInputElement;
+    const input = h("input", { class: "combo-input", value: initial, "aria-label": of === "folder" ? "Folder name" : "Title", spellcheck: of === "title" }) as HTMLInputElement;
     const error = h("p", { class: "muted small", "aria-live": "polite" });
     const submit = () => {
-      const bad = badFolderName(input.value);
+      // A title can hold any characters (its file name is made from it); a folder's can't.
+      const bad = of === "folder" ? badFolderName(input.value) : input.value.trim() ? null : "A title can’t be empty.";
       if (bad) return void (error.textContent = bad);
       result = input.value.trim();
       m.close();
@@ -63,6 +64,8 @@ interface Space {
   fx: FilesCtx;
   moveRecords(rs: RecordInfo[], folders?: string[]): Promise<void>;
   showFolderMenu(path: string, at: { x: number; y: number }): void;
+  topMenu(): MenuItem[];
+  newFolderIn(parent: string): Promise<void>;
 }
 
 export function createFolders(shell: ShellApi): Folders {
@@ -236,10 +239,18 @@ export function createFolders(shell: ShellApi): Folders {
       place,
       folderMenu,
       manyMenu,
-      recordMenu: (rs) => shell.recordActionsFor(rs),
+      // The Files page renames in place (its own Rename), so not through a dialog too.
+      recordMenu: (rs) => shell.recordActionsFor(rs).filter((a) => a.label !== "Rename…"),
     };
     sp.moveRecords = moveRecords;
     sp.showFolderMenu = showFolderMenu;
+    sp.newFolderIn = newFolderIn;
+    sp.topMenu = () => [
+      { label: `Open ${def.title}`, run: () => go(sp, "") },
+      { label: "Open in new tab", run: () => shell.router.go(def.page, {}, { newTab: true }) },
+      "separator",
+      { label: "New folder…", run: () => void newFolderIn("") },
+    ];
     return sp;
   };
 
@@ -343,6 +354,18 @@ export function createFolders(shell: ShellApi): Folders {
     },
   });
   // Every record kept in folders can be moved from its menu (records of one kind at a time).
+  // Renaming from any record's menu (the sidebar's, the Files page's): its file name follows.
+  shell.recordActions.add("shell", "rename", {
+    label: "Rename…",
+    single: true,
+    applies: (r) => spaces.has(r.kind) && !r.read_only && !shell.records.isHidden(r),
+    run: async (rs) => {
+      const r = rs[0];
+      if (rs.length !== 1 || !r) return;
+      const name = await askName(`Rename “${r.title || "Untitled"}”`, r.title || "", "Rename", "title");
+      if (name) await renameRecord(shell, r.id, name);
+    },
+  }, -1);
   shell.recordActions.add("shell", "move-to-folder", {
     label: (n) => (n === 1 ? "Move to folder…" : `Move ${n} items to folder…`),
     // Not for archived records: they come back where they were.
@@ -365,6 +388,9 @@ export function createFolders(shell: ShellApi): Folders {
       return renderFiles(sp.fx, host, params, ctx);
     },
     tree,
+    topMenu: (kind: string) => spaceOf(kind)?.topMenu() ?? [],
+    newFolderIn: async (kind: string, parent: string) => void (await spaceOf(kind)?.newFolderIn(parent)),
+    spaces: () => [...spaces.values()].map((s) => ({ kind: s.def.kind, title: s.def.title, page: s.def.page })),
     dropOnTop(kind: string): DropTarget {
       return {
         accepts: (p) => canMoveInto(shell, p, "", kind),

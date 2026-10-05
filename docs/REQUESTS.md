@@ -56,6 +56,54 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-053 · Capturing split the screen; details belong in the right side bar
+> "Also, I still have this split screen when capturing. Epub should remain full main view,
+> while capture details should be on right side bar"
+
+- **Changed:** the capture you're making (its parts, your words, Discard / Save) now shows at
+  the top of the side panel's **Captures** view, above the captures already made from the
+  book. Capturing opens the side panel there. The book or document keeps the whole main
+  view. After Save or Discard, the list stays, with the new capture in it.
+- **Use:** select and capture as before (⇧⌘C, or the highlighter button); ⌘↩ saves.
+- **Code:** `src/features/captures/index.ts` (`draftShown`, the Captures view's
+  `capture-draft-host`).
+- **Decision:** 0056.
+- **Tested:**
+  - Interface tests: every capture test now finds the panel in the Captures view and checks
+    the reader's aside stays empty. A new test on the item page checks that the real side
+    panel opens with the panel in it, and that Discard removes it.
+  - In the preview, on a PDF: the reader kept the page, the panel appeared in the side panel,
+    and Save added the capture to the list.
+  - EPUBs use the same code; only the real app shows it on your books.
+- **Left:** nothing.
+
+### R-052 · Rename library items, make folders and open pages from the sidebar
+> "Can I rename library items, add folders (by right clicking on Library, Notes or folders in
+> them?) on left sidebar? I want to also go to Notes page or Library page by an option via
+> right click on side bar."
+
+- **Changed:**
+  - **Rename…** is in the right-click menu of every library item and note: in the sidebar, on
+    the Library and Notes pages' lists, in tabs and elsewhere. It asks for the new title; the
+    file name follows, and ⌘Z undoes it. It isn't offered for several items at once or for
+    archived ones. The Files page keeps renaming in place.
+  - **The Notes and Library headings** have a menu: Open Notes / Open Library, Open in new
+    tab, New folder….
+  - **The sidebar's empty space** has a menu: Go to Notes, Go to Library, New folder in
+    Notes…, New folder in Library….
+  - Folders already had New folder inside…, Rename…, Move to… and Remove folder.
+- **Use:** right-click in the sidebar.
+- **Code:** `src/shell/folders/index.ts` (rename action, `topMenu`, `newFolderIn`),
+  `src/shell/shell.ts` (heading and empty-space menus; record actions can be `single`),
+  `src/shell/slots.ts`, `src/features/notes/index.ts`, `src/features/library/index.ts`.
+- **Tested:**
+  - New interface tests cover renaming from a sidebar row (with Undo), Rename only for one
+    record, the heading menus (open, new folder) and the empty-space menu (go to, new folder).
+  - Menu tests that list the exact entries were updated on purpose to include Rename….
+  - Checked in the preview. All 181 interface tests, 64 WebKit checks and the Rust tests pass;
+    lint is clean.
+- **Left:** nothing.
+
 ### R-051 · Remove Undo history; undo and redo moves and archiving
 > "Remove undo history, but also allow undo/redo for moving folders/files around in notes and
 > library as well as archiving"

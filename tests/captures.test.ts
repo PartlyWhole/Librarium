@@ -52,9 +52,18 @@ function fakeView(get: () => Sel | null, extra: Partial<ReaderView> = {}) {
 function mountTool(shell: Shell, src: { id: string }, view: ReaderView) {
   const tool = shell.slot<ReaderTool>(READER_TOOLS).get("capture")!;
   const toolbar = document.createElement("div");
-  const aside = document.createElement("aside");
-  document.body.append(toolbar, aside);
-  const dispose = tool.mount(toolbar, { source: shell.records.get(src.id)!, view, text: async () => "", aside }) as () => void;
+  // The item page's own aside stays empty (the reader keeps the page); the capture being made
+  // shows in the side panel's Captures view, rendered here as the side panel would.
+  const readerAside = document.createElement("aside");
+  const aside = document.createElement("div");
+  document.body.append(toolbar, readerAside, aside);
+  const unpanel = shell.sidePanel.get("captures")!.render(aside, { page: "item", params: { id: src.id } });
+  const unmount = tool.mount(toolbar, { source: shell.records.get(src.id)!, view, text: async () => "", aside: readerAside }) as () => void;
+  const dispose = () => {
+    unmount();
+    if (typeof unpanel === "function") unpanel();
+    expect(readerAside.childElementCount).toBe(0);
+  };
   return { toolbar, aside, dispose, capture: () => (toolbar.querySelector('[aria-label="Capture the selection"]') as HTMLButtonElement).click() };
 }
 
@@ -252,6 +261,26 @@ describe("embeds", () => {
 });
 
 describe("the captures panel", () => {
+  it("shows the capture being made in the side panel, and the reader keeps the whole page", async () => {
+    const { shell, src } = await boot();
+    shell.router.go("item", { id: src.id });
+    await wait(60);
+    const tool = shell.slot<ReaderTool>(READER_TOOLS).get("capture")!;
+    const toolbar = document.createElement("div");
+    const readerAside = document.createElement("aside");
+    document.body.append(toolbar, readerAside);
+    const dispose = tool.mount(toolbar, { source: shell.records.get(src.id)!, view: fakeView(() => ({ text: "It avoids shock", page: 1 })).view, text: async () => "", aside: readerAside }) as () => void;
+    (toolbar.querySelector('[aria-label="Capture the selection"]') as HTMLButtonElement).click();
+    await wait(60);
+    expect(readerAside.childElementCount).toBe(0);
+    const draft = document.querySelector(".side-panel .panel-section[data-section=captures] .capture-draft");
+    expect(draft?.querySelector("blockquote")?.textContent).toBe("It avoids shock");
+    button(draft!, "Discard").click();
+    await wait(30);
+    expect(document.querySelector(".side-panel .capture-draft")).toBeNull();
+    dispose();
+  });
+
   it("says when a capture has moved in its source", async () => {
     const { shell, src } = await boot();
     const t = mountTool(shell, src, fakeView(() => ({ text: "It avoids shock and sensational events.", page: 1 })).view);

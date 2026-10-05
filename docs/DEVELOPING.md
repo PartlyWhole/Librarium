@@ -139,7 +139,9 @@ Rules that keep it honest:
   the same record without rendering again (0048); the item page moves its reader.
 - **Folders service** (`src/shell/folders/`, 0033): Notes and Library add themselves as
   folder spaces and get a Finder-like page (list/icons, sort, filter, selection, renaming,
-  context menus, a selection bar) and a sidebar tree. Dragging uses pointer events
+  context menus, a selection bar) and a sidebar tree. The sidebar's headings have a menu (open the
+  page, new folder: `topMenu`), its empty space offers Go to and New folder for each space,
+  and records get Rename… (a dialog; the Files page renames in place instead). Dragging uses pointer events
   (`kit/dnd.ts`) because Tauri claims the platform's drags for file drops.
 - **Links to the web** (`links.ts`, 0036): a dialog asks before opening in the browser; a
   Tauri navigation guard keeps the window in the app.

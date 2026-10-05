@@ -138,6 +138,9 @@ export function captures(shell: ShellApi): void {
   };
   let n = 0;
   let active: { addSelection(): Promise<void>; addRegion(): Promise<void>; save(): Promise<void> } | null = null;
+  // The capture being made, shown at the top of the side panel's Captures view (the reader
+  // keeps the whole page).
+  const draftShown = signal<{ source: string; el: HTMLElement } | null>(null);
 
   const tool: ReaderTool = {
     id: "capture",
@@ -376,8 +379,12 @@ export function captures(shell: ShellApi): void {
         if (r.page === "item" && r.params.id === ctx.source.id && r.params.edit) untracked(() => void startEdit(r.params.edit!));
       });
 
-      // The panel beside the document.
+      // The capture being made: in the side panel's Captures view, opened when it begins.
       const panel = h("section", { class: "capture-draft", "aria-label": "New capture" });
+      const hidePanel = () => {
+        panel.remove();
+        if (draftShown.peek()?.el === panel) draftShown.set(null);
+      };
       // Captures already made from this source (this snapshot of it), highlighted softly; kept
       // up to date as captures are made, archived or deleted.
       const saved = signal<SavedMarks[]>([]);
@@ -405,17 +412,20 @@ export function captures(shell: ShellApi): void {
         // Editing a saved capture: the reader stays whole; its controls are in the Captures list
         // (side panel) and a small bar over the document.
         if (d?.editing) {
-          panel.remove();
+          hidePanel();
           untracked(() => renderEditBar(d));
           return;
         }
         editBar.remove();
         if (!d?.parts.length) {
-          panel.remove();
+          hidePanel();
           return;
         }
         untracked(() => renderPanel(d));
-        if (!panel.isConnected) ctx.aside.appendChild(panel);
+        if (draftShown.peek()?.el !== panel) {
+          draftShown.set({ source: ctx.source.id, el: panel });
+          if (untracked(() => shell.router.current()).page === "item") shell.showPanelSection("captures");
+        }
       });
       function renderEditBar(d: Draft) {
         replace(editBar,
@@ -479,7 +489,7 @@ export function captures(shell: ShellApi): void {
         document.removeEventListener("scroll", onScroll, true);
         window.removeEventListener("keydown", onKey);
         pop.remove();
-        panel.remove();
+        hidePanel();
         active = null;
         b1.remove();
         b2?.remove();
@@ -799,12 +809,22 @@ export function captures(shell: ShellApi): void {
       const src = open ? String(shell.records.get(open)?.fields[F.source] ?? "") : route.params.id!;
       let alive = true;
       const statusOf = new Map<string, string>();
+      // The capture being made from this source, above the list.
+      const draftHost = h("div", { class: "capture-draft-host" });
+      const listHost = h("div");
+      replace(host, draftHost, listHost);
+      const stopDraft = effect(() => {
+        const d = draftShown();
+        if (d && d.source === src) {
+          if (d.el.parentElement !== draftHost) replace(draftHost, d.el);
+        } else draftHost.replaceChildren();
+      });
       const stop = effect(() => {
         const list = shell.records.list(KIND).filter((c) => c.fields[F.source] === src && !isArchived(c));
         const editing = [...drafts().entries()].find(([, d]) => d.editing && list.some((c) => c.id === d.editing!.id));
-        if (!list.length) return replace(host, h("p", { class: "muted" }, "Nothing captured here yet. Select a passage and choose Capture."));
+        if (!list.length) return replace(listHost, h("p", { class: "muted" }, draftShown()?.source === src ? "" : "Nothing captured here yet. Select a passage and choose Capture."));
         const ul = h("ul", { class: "backlinks capture-list" });
-        replace(host, ul);
+        replace(listHost, ul);
         for (const c of list.sort((x, y) => (x.created ?? "").localeCompare(y.created ?? ""))) {
           const status = h("span", { class: `badge ${statusOf.get(c.id) ?? ""}` }, statusOf.get(c.id) ?? "");
           const isEditing = editing?.[1].editing?.id === c.id;
@@ -835,6 +855,7 @@ export function captures(shell: ShellApi): void {
       return () => {
         alive = false;
         stop();
+        stopDraft();
       };
     },
   });

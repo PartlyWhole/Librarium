@@ -326,3 +326,61 @@ describe("the sidebar", () => {
     expect(shell.router.current()).toEqual({ page: "item", params: { id: book.id } });
   });
 });
+
+describe("the sidebar's menus", () => {
+  const treeRow = (text: string) => [...document.querySelectorAll<HTMLElement>(".tree [role=treeitem]")].find((t) => t.textContent === text)!;
+  const rightClick = (el: Element) => el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+  const menu = () => [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitem]")].map((b) => b.textContent);
+  const choose = (label: string) => [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitem]")].find((b) => b.textContent === label)!.click();
+  const answer = async (text: string) => {
+    await wait(10);
+    const input = document.querySelector<HTMLInputElement>("dialog[open] input")!;
+    input.value = text;
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await wait(40);
+  };
+
+  it("renames a library item or a note from its row, and Undo puts the title back", async () => {
+    const { shell, book } = await boot();
+    rightClick(treeRow("The Technological Society"));
+    expect(menu()).toContain("Rename…");
+    choose("Rename…");
+    await answer("Technique");
+    expect(shell.records.get(book.id)!.title).toBe("Technique");
+    await shell.undo.undoLast();
+    await wait(30);
+    expect(shell.records.get(book.id)!.title).toBe("The Technological Society");
+  });
+
+  it("offers Rename only for one record at a time", async () => {
+    const { shell, book, list } = await boot();
+    expect(shell.recordActionsFor([shell.records.get(book.id)!]).map((a) => a.label)).toContain("Rename…");
+    expect(shell.recordActionsFor([shell.records.get(book.id)!, shell.records.get(list.id)!]).map((a) => a.label)).not.toContain("Rename…");
+  });
+
+  it("the Notes and Library headings open their pages and make folders", async () => {
+    const { shell } = await boot();
+    rightClick(treeRow("Library"));
+    expect(menu()).toEqual(["Open Library", "Open in new tab", "New folder…"]);
+    choose("Open Library");
+    await wait(30);
+    expect(shell.router.current().page).toBe("library");
+    rightClick(treeRow("Notes"));
+    choose("New folder…");
+    await answer("Drafts");
+    expect(mock.state.folders.has("note:Drafts")).toBe(true);
+  });
+
+  it("the sidebar's empty space goes to Notes or the Library, or makes a folder in either", async () => {
+    const { shell } = await boot();
+    rightClick(document.querySelector(".sidebar-scroll")!);
+    expect(menu()).toEqual(["Go to Notes", "Go to Library", "New folder in Notes…", "New folder in Library…"]);
+    choose("Go to Notes");
+    await wait(30);
+    expect(shell.router.current().page).toBe("notes");
+    rightClick(document.querySelector(".sidebar-scroll")!);
+    choose("New folder in Library…");
+    await answer("Papers");
+    expect(mock.state.folders.has("item:Papers")).toBe(true);
+  });
+});

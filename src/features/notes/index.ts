@@ -160,6 +160,7 @@ export function notes(shell: ShellApi): void {
     title: "Notes",
     emptyText: "No notes yet.",
     drop: shell.folders.dropOnTop(KIND),
+    menu: () => shell.folders.topMenu(KIND),
     nodes: () => shell.folders.tree(KIND),
   }, 0);
 }

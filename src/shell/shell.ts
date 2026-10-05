@@ -129,6 +129,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     recordActionsFor(rs) {
       return recordActions
         .values()
+        .filter((a) => !a.single || rs.length === 1)
         .map((a) => ({ a, on: a.partial ? rs.filter((r) => a.applies(r)) : rs.length && rs.every((r) => a.applies(r)) ? rs : [] }))
         .filter((x) => x.on.length)
         // Destructive entries go last.
@@ -284,7 +285,20 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     const rs = ids.map((id) => records.get(id)).filter((r): r is NonNullable<typeof r> => !!r);
     if (rs.length) shell.showRecordMenu(rs, at);
   };
-  const sidebarEl = h("aside", { class: "app-sidebar", "aria-label": "Sidebar" }, h("div", { class: "sidebar-top" }, filter), h("div", { class: "sidebar-scroll" }, tree.el));
+  const sidebarScroll = h("div", { class: "sidebar-scroll" }, tree.el);
+  // The sidebar's empty space: go to a space's page, or make a folder in it.
+  sidebarScroll.addEventListener("contextmenu", (e) => {
+    if ((e.target as Element).closest("[role=treeitem]")) return;
+    const spaces = shell.folders.spaces();
+    if (!spaces.length) return;
+    e.preventDefault();
+    contextMenu([
+      ...spaces.map((s): MenuItem => ({ label: `Go to ${s.title}`, run: () => router.go(s.page) })),
+      "separator",
+      ...spaces.map((s): MenuItem => ({ label: `New folder in ${s.title}…`, run: () => void shell.folders.newFolderIn(s.kind, "") })),
+    ], { x: e.clientX, y: e.clientY });
+  });
+  const sidebarEl = h("aside", { class: "app-sidebar", "aria-label": "Sidebar" }, h("div", { class: "sidebar-top" }, filter), sidebarScroll);
 
   const back = iconButton(ChevronLeft, "Back", () => router.back(), "Mod+Alt+ArrowLeft");
   const fwd = iconButton(ChevronRight, "Forward", () => router.forward(), "Mod+Alt+ArrowRight");
@@ -362,7 +376,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     const nodes: TreeNode[] = open
       ? sidebar.values().map((s) => {
           const items = s.nodes().map(match).filter((x): x is TreeNode => !!x);
-          return { id: `section:${s.id}`, label: s.title, drop: s.drop, expanded: q ? true : !f.includes(`section:${s.id}`), children: items.length ? items : [{ id: `empty:${s.id}`, label: q ? "Nothing matches" : s.emptyText, placeholder: true }] };
+          return { id: `section:${s.id}`, label: s.title, drop: s.drop, ...(s.menu ? { onContext: (at: { x: number; y: number }) => contextMenu(s.menu!(), at, s.title) } : {}), expanded: q ? true : !f.includes(`section:${s.id}`), children: items.length ? items : [{ id: `empty:${s.id}`, label: q ? "Nothing matches" : s.emptyText, placeholder: true }] };
         })
       : [];
     tree.render(nodes);

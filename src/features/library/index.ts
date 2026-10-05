@@ -529,6 +529,7 @@ export function library(shell: ShellApi): void {
     title: "Library",
     emptyText: "No library items yet.",
     drop: shell.folders.dropOnTop(KIND),
+    menu: () => shell.folders.topMenu(KIND),
     nodes: () => shell.folders.tree(KIND),
   }, 1);
 }

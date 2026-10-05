@@ -53,6 +53,8 @@ export interface SidebarSection {
   emptyText: string;
   /** Things can be dropped on the section's heading. */
   drop?: import("../kit/dnd").DropTarget;
+  /** The heading's menu (a right-click). */
+  menu?: () => import("../kit/menu").MenuItem[];
 }
 
 /** A kind kept in folders, as the feature that owns it presents it (Notes, Library). */
@@ -81,6 +83,12 @@ export interface Folders {
   dropOnTop(kind: string): import("../kit/dnd").DropTarget;
   /** Asks for a folder, then moves the records there. */
   moveTo(rs: RecordInfo[]): Promise<void>;
+  /** The menu of a space's top level (its sidebar heading): open its page, make a folder. */
+  topMenu(kind: string): import("../kit/menu").MenuItem[];
+  /** Asks for a name, then makes a folder in a space's folder ("" for its top). */
+  newFolderIn(kind: string, parent: string): Promise<void>;
+  /** The spaces, in the order they were added (their kind and title). */
+  spaces(): { kind: string; title: string; page: string }[];
 }
 
 /** shell.side-panel-sections */
@@ -111,6 +119,8 @@ export interface RecordAction {
   destructive?: boolean;
   /** With several selected, offered when it applies to some of them, and run on those. */
   partial?: boolean;
+  /** Offered only for one record at a time (renaming). */
+  single?: boolean;
 }
 
 /** shell.record-looks: how records of a kind look in lists of files (icon, kind name). */
