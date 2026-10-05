@@ -4,6 +4,7 @@
  */
 import { call, closeWindow, on, onCloseRequested, pickFolder } from "../backend";
 import { Undo } from "./undo";
+import { textUndo } from "./text-undo";
 import { jobsUi } from "./jobs";
 import type { EditorContribution } from "../editor/editor";
 import type { ReaderEngine } from "../reader/host";
@@ -60,6 +61,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const readerEngines = new Registry<ReaderEngine>("shell.reader-engines");
   const embeds = new Registry<EmbedRenderer>("shell.embeds");
   const undo = new Undo();
+  const text = textUndo();
   const closing = new Set<() => Promise<void>>();
   onCloseRequested(async () => {
     await Promise.allSettled([...closing].map((f) => f()));
@@ -216,6 +218,9 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     { id: "shell.chooseFolder", title: "Choose library folder…", run: () => void chooseFolder(), menu: { name: "file", group: 8 }, icon: FolderOpen },
     { id: "shell.revealFolder", title: "Show library folder in Finder", when: libraryOpen, run: () => void call("folder.reveal").catch(report), menu: { name: "file", group: 8 } },
     { id: "shell.revealLogs", title: "Reveal logs", run: () => void call("app.revealLogs").catch(report), menu: { name: "help", group: 1 } },
+    // Greyed out when there's nothing to undo in what has focus (text-undo.ts).
+    { id: "edit.undo", title: "Undo", keys: ["Mod+Z"], palette: false, when: () => text.canUndo(), run: () => text.undo(), menu: { name: "edit", group: -1 } },
+    { id: "edit.redo", title: "Redo", keys: ["Mod+Shift+Z"], palette: false, when: () => text.canRedo(), run: () => text.redo(), menu: { name: "edit", group: -1 } },
     { id: "shell.undo", title: "Undo the last rename or move", when: () => undo.last() !== null, run: () => void undo.undoLast(), menu: { name: "edit", group: 1 } },
     { id: "shell.theme.system", title: "Theme: follow the system", run: () => prefs.pref("ui.theme", "system").set("system"), menu: { name: "view", group: 2 } },
     { id: "shell.theme.light", title: "Theme: light", run: () => prefs.pref("ui.theme", "system").set("light"), menu: { name: "view", group: 2 } },
@@ -481,6 +486,8 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     router.canForward();
     folder();
     undo.last();
+    text.canUndo();
+    text.canRedo();
     refreshMenu(actions);
   });
 

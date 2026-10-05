@@ -118,7 +118,10 @@ describe("actions are reachable", () => {
     expect(titles[0]).toBe("Librarium");
     for (const t of ["Edit", "Window", "Help"]) expect(titles).toContain(t);
     const edit = spec.find((s) => s.title === "Edit")!.entries.flatMap((e) => (e.kind === "predefined" ? [e.item] : []));
-    expect(edit).toEqual(expect.arrayContaining(["Undo", "Redo", "Cut", "Copy", "Paste", "SelectAll"]));
+    expect(edit).toEqual(expect.arrayContaining(["Cut", "Copy", "Paste", "SelectAll"]));
+    // Undo and Redo are the app's own, first, with their keys, greyed out with nothing to undo.
+    const items = spec.find((s) => s.title === "Edit")!.entries.flatMap((e) => (e.kind === "item" ? [e] : []));
+    expect(items.slice(0, 2).map((e) => [e.text, e.accelerator, e.enabled])).toEqual([["Undo", "CmdOrCtrl+Z", false], ["Redo", "CmdOrCtrl+Shift+Z", false]]);
     const app = spec[0]!.entries;
     expect(app.some((e) => e.kind === "item" && e.text === "Settings…" && e.accelerator === "CmdOrCtrl+,")).toBe(true);
     expect(app.some((e) => e.kind === "predefined" && e.item === "Quit")).toBe(true);

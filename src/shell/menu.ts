@@ -25,11 +25,11 @@ export function menuSpec(actions: Actions): MenuSection[] {
     g.set(a.menu.group, list);
     list.push({ kind: "item", id: a.id, text: a.menu.title ?? a.title, accelerator: a.keys?.[0] ? accelerator(a.keys[0]) : undefined, enabled: actions.available(a), run: () => actions.run(a.id) });
   }
-  const custom = (name: MenuName): MenuEntry[] => {
+  const custom = (name: MenuName, only?: (group: number) => boolean): MenuEntry[] => {
     const g = groups.get(name);
     if (!g) return [];
     const out: MenuEntry[] = [];
-    for (const k of [...g.keys()].sort((a, b) => a - b)) {
+    for (const k of [...g.keys()].sort((a, b) => a - b).filter((k) => !only || only(k))) {
       if (out.length) out.push({ kind: "separator" });
       out.push(...g.get(k)!);
     }
@@ -41,8 +41,9 @@ export function menuSpec(actions: Actions): MenuSection[] {
     app: [{ kind: "predefined", item: "About", text: "About Librarium" }, sep, ...withSep(custom("app")), { kind: "predefined", item: "Services" }, sep, { kind: "predefined", item: "Hide" }, { kind: "predefined", item: "HideOthers" }, { kind: "predefined", item: "ShowAll" }, sep, { kind: "predefined", item: "Quit" }],
     // "Close window" is the app's own (⇧⌘W): ⌘W closes a tab.
     file: custom("file"),
-    // Without these, ⌘C, ⌘V and ⌘Z stop working in a Tauri app.
-    edit: [{ kind: "predefined", item: "Undo" }, { kind: "predefined", item: "Redo" }, sep, { kind: "predefined", item: "Cut" }, { kind: "predefined", item: "Copy" }, { kind: "predefined", item: "Paste" }, { kind: "predefined", item: "SelectAll" }, ...(custom("edit").length ? [sep, ...custom("edit")] : [])],
+    // Without these, ⌘C and ⌘V stop working in a Tauri app. Undo and Redo are the app's own
+    // (group -1), so they can be greyed out when there's nothing to undo.
+    edit: [...withSep(custom("edit", (g) => g < 0)), { kind: "predefined", item: "Cut" }, { kind: "predefined", item: "Copy" }, { kind: "predefined", item: "Paste" }, { kind: "predefined", item: "SelectAll" }, ...(custom("edit", (g) => g >= 0).length ? [sep, ...custom("edit", (g) => g >= 0)] : [])],
     format: custom("format"),
     view: [...withSep(custom("view")), { kind: "predefined", item: "Fullscreen" }],
     go: custom("go"),

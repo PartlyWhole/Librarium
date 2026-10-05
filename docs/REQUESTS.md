@@ -63,6 +63,29 @@ only from its toast's Undo or Edit ▸ Undo the last rename or move.
 
 ## Done
 
+### R-050 · Grey out Undo when there's nothing to undo
+> "if theres nothing to undo, please ghost/block command"
+
+- **Changed:**
+  - Edit ▸ Undo and Redo were macOS's built-in items, which the app couldn't grey out. They are
+    now the app's own and follow what has focus.
+  - **In a note:** on only when there is a step to undo or redo.
+  - **In a text field:** on while you're in it (a field doesn't say how much it can undo).
+  - **Anywhere else:** greyed out, and ⌘Z does nothing.
+  - Undo the last rename or move was already greyed out with nothing to undo, and still is.
+- **Use:** ⌘Z / ⇧⌘Z as before, or the Edit menu.
+- **Code:** `src/shell/text-undo.ts`, `src/shell/shell.ts`, `src/shell/menu.ts`.
+- **Decision:** 0054.
+- **Tested:**
+  - Interface tests: the Edit menu starts with Undo and Redo, with their keys, greyed out.
+    In a note they come on after typing, undo and redo the text, and grey out again. Away
+    from text they're off; in a field they're on.
+  - The menu test was updated on purpose (Undo and Redo are no longer built-in items).
+  - All 175 interface tests, 64 WebKit checks and the Rust tests pass; lint is clean.
+  - The greyed-out native menu and ⌘Z going through it can only be seen in the real app.
+- **Left:** the R-049 question (should ⌘Z undo renames and moves when you're not typing?) is
+  still under Waiting for you. If yes, it plugs into these same items.
+
 ### R-049 · Show what ⌘Z works on (temporary, a side panel tab)
 > "Can you show the history of what cmd-z works on? I want this only to be temporary, but maybe
 > a side panel tab"

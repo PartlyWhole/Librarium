@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EditorView } from "@codemirror/view";
 import { isolateHistory, undo } from "@codemirror/commands";
 import { mock, seed } from "./mock/backend";
+import { menuSpec } from "../src/shell/menu";
 import { createShell, type Shell } from "../src/shell/shell";
 import { notes } from "../src/features/notes";
 import { archive } from "../src/features/archive";
@@ -68,5 +69,45 @@ describe("undo history", () => {
     expect(undone).toBe("move");
     expect(items()[0]!.className).toBe("state-undone");
     expect(items().some((li) => li.querySelector("button"))).toBe(false);
+  });
+});
+
+describe("Edit ▸ Undo and Redo", () => {
+  const item = (shell: Shell, text: string) =>
+    menuSpec(shell.actions).find((s) => s.title === "Edit")!.entries.find((e) => e.kind === "item" && e.text === text) as { enabled: boolean; run(): void };
+
+  it("are greyed out with nothing to undo, and undo and redo the note's text", async () => {
+    const { shell, n } = await boot();
+    shell.openRecord(n.id);
+    await until(() => !!document.querySelector(".workspace .cm-editor"));
+    const view = EditorView.findFromDOM(document.querySelector<HTMLElement>(".workspace .cm-editor")!)!;
+    view.focus();
+    await wait(20);
+    expect(item(shell, "Undo").enabled).toBe(false);
+    expect(item(shell, "Redo").enabled).toBe(false);
+    view.dispatch({ changes: { from: 0, insert: "New " }, userEvent: "input.type" });
+    await wait(20);
+    expect(item(shell, "Undo").enabled).toBe(true);
+    item(shell, "Undo").run();
+    expect(view.state.doc.toString()).toBe("first line\nsecond line\n");
+    expect(item(shell, "Undo").enabled).toBe(false);
+    expect(item(shell, "Redo").enabled).toBe(true);
+    item(shell, "Redo").run();
+    expect(view.state.doc.toString()).toBe("New first line\nsecond line\n");
+  });
+
+  it("are greyed out when nothing that can be typed in has focus, and on in a text field", async () => {
+    const { shell } = await boot();
+    shell.router.go("archive");
+    await wait(40);
+    (document.activeElement as HTMLElement | null)?.blur();
+    await wait(20);
+    expect(item(shell, "Undo").enabled).toBe(false);
+    const field = document.createElement("input");
+    document.body.appendChild(field);
+    field.focus();
+    await wait(20);
+    expect(item(shell, "Undo").enabled).toBe(true);
+    field.remove();
   });
 });
