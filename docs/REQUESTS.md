@@ -56,6 +56,32 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-055 · Captures of several parts should read as one quotation
+> "Disjoint captures should have [...] continuous. See photo attached, it is a new line with
+> the vertical purple line cut off as well"
+
+- **Changed:** a capture of several passages now reads as one quotation, with one unbroken bar,
+  and "[…]" inline where a passage is left out ("…revelatur […] doubt; for Descartes…"),
+  as a quotation is written. Before, each part started a new block on a new line. This
+  applies everywhere a capture is shown:
+  - embedded in a note;
+  - on the capture page, where each part's Show button and any "moved" or "lost" status
+    sit right after its text;
+  - in the new-capture form in the side panel, where each part's × to remove it sits after
+    its text.
+  - A captured picture between passages still stands on its own.
+- **Use:** nothing new.
+- **Code:** `src/features/captures/index.ts` (`quoteParts`), `src/shell/shell.css`
+  (`.quote-gap`, inline tools).
+- **Tested:**
+  - Interface tests: the form shows one quotation with the parts joined by "[…]", and
+    removing a part still works. A new test checks that a two-part capture embedded in a note
+    is one quotation. The several-parts test was updated on purpose (it counted one block per
+    part).
+  - In the preview: the form and the capture page.
+  - All 184 interface tests, 64 WebKit checks and the Rust tests pass; lint is clean.
+- **Left:** nothing.
+
 ### R-054 · Delete folders, archiving what's inside after asking
 > "Allow deleting folders (when items are in the folders, confirm archiving items inside)"
 

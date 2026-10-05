@@ -487,7 +487,6 @@ body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6
 .draft-part { position: relative; padding-right: 22px; }
 .draft-part .capture-quote, .draft-part .capture-region { margin: 0; }
 .draft-part .remove { position: absolute; top: 0; right: 0; }
-.draft-gap { color: var(--muted); font-size: var(--small); padding-left: 17px; }
 .draft-hint { color: var(--muted); font-size: var(--tiny); margin: 0; }
 .capture-draft .words-input { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; font: inherit; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: var(--r1); background: var(--bg); color: var(--ink); }
 .capture-draft .ask-buttons { display: flex; justify-content: flex-end; gap: 8px; }
@@ -735,7 +734,6 @@ body.dragging-handle, body.dragging-handle * { user-select: none !important; -we
 .region-edit .rh.nw { top: 0; left: 0; cursor: nwse-resize; }
 .region-edit .rh.se { top: 100%; left: 100%; cursor: nwse-resize; }
 .region-edit .rh.sw { top: 100%; left: 0; cursor: nesw-resize; }
-.embed-gap { color: var(--muted); font-size: var(--small); margin: 2px 0 6px 14px; }
 .embed .embed-region { display: block; max-width: 100%; max-height: 50vh; margin: 0 0 8px; border-radius: var(--r1); }
 .drag-shield { position: fixed; inset: 0; z-index: 1000; cursor: grabbing; background: transparent; }
 /* Dragging a passage's end into the edge of a book: the arrow there shows the page will turn. */
@@ -774,3 +772,13 @@ body.dragging-handle, body.dragging-handle * { user-select: none !important; -we
 .capture-card .capture-tools { opacity: 0; transition: opacity 0.12s; }
 .capture-card:hover .capture-tools, .capture-card:focus-within .capture-tools { opacity: 1; }
 
+
+/* A capture's parts read as one quotation: "[…]" where a passage is left out. */
+.quote-gap { color: var(--muted); white-space: nowrap; }
+.inline-remove, .inline-tools { display: inline-flex; vertical-align: middle; gap: 2px; margin-left: 4px; }
+.inline-remove { width: 18px; height: 18px; padding: 0; opacity: 0.6; }
+.inline-remove:hover, .inline-remove:focus-visible { opacity: 1; }
+.inline-tools .icon-button { width: 22px; height: 22px; }
+.draft-picture { position: relative; display: flex; align-items: flex-start; gap: 4px; }
+.draft-part .inline-remove, .draft-picture .inline-remove { position: static; }
+.draft-part > * + * { margin-top: 8px; }

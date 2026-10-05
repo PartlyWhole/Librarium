@@ -37,6 +37,30 @@ function iconButton(node: Parameters<typeof icon>[0], label: string, run: () => 
 const ARCHIVED = "archive.at";
 const isArchived = (r: RecordInfo | undefined) => r?.fields[ARCHIVED] != null;
 
+/** A part of a capture as shown: its text (with anything to show after it), or a picture. */
+type ShownPart = { text: string; after?: Node | null } | { picture: HTMLElement };
+
+/**
+ * A capture's parts as they read: each run of text parts one quotation, the parts joined by an
+ * inline "[…]" (a passage left out), as a quotation is written; a picture between them stands
+ * on its own.
+ */
+function quoteParts(parts: ShownPart[], cls: string): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  let quote: HTMLElement | null = null;
+  for (const p of parts) {
+    if ("picture" in p) {
+      quote = null;
+      out.push(p.picture);
+      continue;
+    }
+    if (quote) quote.append(h("span", { class: "quote-gap", title: "A passage left out" }, " […] "));
+    else out.push((quote = h("blockquote", { class: cls })));
+    quote.append(h("span", { class: "quote-part" }, p.text), ...(p.after ? [p.after] : []));
+  }
+  return out;
+}
+
 /** A part of the capture being made. */
 interface DraftPart extends CapturePart {
   key: string;
@@ -436,13 +460,15 @@ export function captures(shell: ShellApi): void {
         if (body && !editBar.isConnected) body.appendChild(editBar);
       }
       function renderPanel(d: Draft) {
-        const items: HTMLElement[] = [];
-        d.parts.forEach((p, i) => {
-          if (i) items.push(h("div", { class: "draft-gap", "aria-hidden": "true" }, "[…]"));
-          const remove = h("button", { class: "icon-button remove", type: "button", "aria-label": "Remove this part", title: "Remove this part", onclick: () => setDraft(k, { ...d, parts: d.parts.filter((x) => x !== p) }) }, icon(X, 14));
-          const body = p.preview ? h("img", { class: "capture-region", src: p.preview, alt: "The region" }) : h("blockquote", { class: "capture-quote" }, p.quote);
-          items.push(h("div", { class: "draft-part" }, body, remove));
-        });
+        // One continuous quotation; with several parts, each can be removed (its × after it).
+        const removeOf = (p: DraftPart) => (d.parts.length > 1 || p.preview
+          ? h("button", { class: "icon-button remove inline-remove", type: "button", "aria-label": "Remove this part", title: "Remove this part", onclick: () => setDraft(k, { ...d, parts: d.parts.filter((x) => x !== p) }) }, icon(X, 12))
+          : null);
+        const items = [h("div", { class: "draft-part" },
+          quoteParts(d.parts.map((p): ShownPart => (p.preview
+            ? { picture: h("div", { class: "draft-picture" }, h("img", { class: "capture-region", src: p.preview, alt: "The region" }), removeOf(p)) }
+            : { text: p.quote, after: removeOf(p) })), "capture-quote"),
+          d.parts.length === 1 && !d.parts[0]!.preview ? h("button", { class: "icon-button remove", type: "button", "aria-label": "Remove this part", title: "Remove this part", onclick: () => setDraft(k, { ...d, parts: [] }) }, icon(X, 14)) : null)];
         const locs = [...new Set(d.parts.map((p) => p.locator).filter(Boolean))];
         const words = h("textarea", { class: "words-input", rows: 3, placeholder: "Your words (optional)", "aria-label": "Your words" }) as HTMLTextAreaElement;
         words.value = d.words;
@@ -551,16 +577,13 @@ export function captures(shell: ShellApi): void {
       // Several parts, or a picture: each part in order, pictures as pictures.
       if (partsN > 1 || !quote) {
         void call<Anchor>("captures.anchor", { id: r.id }).then((a) => {
-          const nodes: HTMLElement[] = [];
-          a.parts.forEach((p, i) => {
-            if (i) nodes.push(h("div", { class: "embed-gap", "aria-hidden": "true" }, "[…]"));
+          const nodes = quoteParts(a.parts.map((p, i): ShownPart => {
             const isRegion = !!p.region || p.selector.some((x) => [(x as { value?: string }).value, (x as { refinedBy?: { value?: string } }).refinedBy?.value].some((v) => v?.startsWith("xywh=")));
-            if (isRegion) {
-              const img = h("img", { class: "capture-region embed-region", alt: "A captured picture" });
-              void call<string>("captures.region", { id: r.id, n: i + 1 }).then((d) => (img.src = d), () => {});
-              nodes.push(img);
-            } else nodes.push(h("blockquote", { class: "embed-quote" }, flowQuote((p.selector.find((x) => x.type === "TextQuoteSelector") as { exact?: string } | undefined)?.exact ?? "")));
-          });
+            if (!isRegion) return { text: flowQuote((p.selector.find((x) => x.type === "TextQuoteSelector") as { exact?: string } | undefined)?.exact ?? "") };
+            const img = h("img", { class: "capture-region embed-region", alt: "A captured picture" });
+            void call<string>("captures.region", { id: r.id, n: i + 1 }).then((d) => (img.src = d), () => {});
+            return { picture: img };
+          }), "embed-quote");
           block.querySelectorAll(":scope > .embed-quote, :scope > .capture-region").forEach((x) => x.remove());
           block.prepend(...nodes);
         }, () => {});
@@ -700,19 +723,22 @@ export function captures(shell: ShellApi): void {
         const st = anchor ? await statuses(anchor) : [];
         const src = String(r.fields[F.source] ?? "");
         const partsEl = h("div", { class: "capture-parts" });
+        const shown: ShownPart[] = [];
         anchor?.parts.forEach((p, i) => {
           const s = st[i];
           const quote = p.selector.find((x) => x.type === "TextQuoteSelector") as { exact: string } | undefined;
           const show = () => shell.openRecord(src, where(anchor, p), { again: true });
-          const body = quote ? h("blockquote", { class: "capture-quote" }, flowQuote(quote.exact)) : h("img", { class: "capture-region", alt: "The captured region" });
-          if (!quote) void call<string>("captures.region", { id, n: i + 1 }).then((d) => ((body as HTMLImageElement).src = d), () => {});
+          const img = quote ? null : h("img", { class: "capture-region", alt: "The captured region" });
+          if (img) void call<string>("captures.region", { id, n: i + 1 }).then((d) => (img.src = d), () => {});
           const badge = s?.status === "moved" ? h("span", { class: "badge moved" }, "moved — check it") : s?.status === "lost" ? h("span", { class: "badge lost" }, "lost") : null;
           const confirm = s?.status === "moved" ? h("button", { class: "link-button", onclick: () => void confirmMoved(id, anchor, i, src).then(() => shell.router.go("capture", { id }, { replace: true })) }, "This is the place") : null;
           // Show is in the header; with several parts, each part can be shown on its own too.
           const many = (anchor?.parts.length ?? 0) > 1;
-          const tools = many || badge || confirm ? h("div", { class: "row tight capture-tools" }, many ? iconButton(LocateFixed, `Show part ${i + 1} in the source`, show) : null, badge, confirm) : null;
-          partsEl.appendChild(h("div", { class: "capture-part" }, body, tools));
+          // In the quotation, after the part's text (a picture's below it).
+          const tools = many || badge || confirm ? h("span", { class: `capture-tools${img ? " row tight" : " inline-tools"}` }, many ? iconButton(LocateFixed, `Show part ${i + 1} in the source`, show) : null, badge, confirm) : null;
+          shown.push(img ? { picture: h("div", { class: "capture-part" }, img, tools) } : { text: flowQuote(quote!.exact), after: tools });
         });
+        partsEl.append(...quoteParts(shown, "capture-quote"));
         const cite = h("p", { class: "muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(src, where(anchor), { again: true })) }, citation(shell, r)));
         const editorHost = h("div", { class: "editor-host" });
         // The title renames the capture (the quote itself stays exact).

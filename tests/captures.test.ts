@@ -108,9 +108,11 @@ describe("capturing", () => {
     sel = { text: "It avoids shock", page: 1, boxes: [{ page: 1, x: 10, y: 5, w: 20, h: 2 }] };
     t.capture();
     await wait(30);
-    const quotes = [...t.aside.querySelectorAll("blockquote")].map((q) => q.textContent);
-    expect(quotes).toEqual(["It avoids shock", "the art of making people act"]);
-    expect(t.aside.querySelector(".draft-gap")?.textContent).toBe("[…]");
+    // One quotation, the parts in order, joined by "[…]" inline (not a new line).
+    const parts = () => [...t.aside.querySelectorAll(".quote-part")].map((q) => q.textContent);
+    expect(t.aside.querySelectorAll("blockquote")).toHaveLength(1);
+    expect(parts()).toEqual(["It avoids shock", "the art of making people act"]);
+    expect(t.aside.querySelector("blockquote")!.textContent).toBe("It avoids shock […] the art of making people act");
     expect(t.aside.textContent).toContain("2 parts");
     // Both are highlighted in the document while the capture is being made.
     expect(f.marks.current.flatMap((m) => m.boxes.map((b) => b.page))).toEqual([1, 2]);
@@ -118,10 +120,10 @@ describe("capturing", () => {
     sel = { text: "Propaganda", page: 2, boxes: [{ page: 2, x: 0, y: 1, w: 9, h: 2 }] };
     t.capture();
     await wait(30);
-    expect(t.aside.querySelectorAll("blockquote")).toHaveLength(3);
+    expect(parts()).toHaveLength(3);
     (t.aside.querySelectorAll('[aria-label="Remove this part"]')[1] as HTMLButtonElement).click();
     await wait(10);
-    expect([...t.aside.querySelectorAll("blockquote")].map((q) => q.textContent)).toEqual(["It avoids shock", "the art of making people act"]);
+    expect(parts()).toEqual(["It avoids shock", "the art of making people act"]);
     button(t.aside, "Save capture").click();
     await wait(30);
     const cap = shell.records.list("capture")[0]!;
@@ -129,6 +131,23 @@ describe("capturing", () => {
     expect(cap.fields["captures.quote"]).toBe("It avoids shock […] the art of making people act");
     // Once saved, both parts stay highlighted, as a saved capture.
     expect(f.marks.current.map((m) => [m.saved, m.boxes[0]?.page])).toEqual([[true, 1], [true, 2]]);
+  });
+
+  it("embeds a capture of several parts as one quotation, the parts joined by […]", async () => {
+    const { shell, src } = await boot();
+    const cap = seed("capture", "Two parts", "", { "captures.source": src.id, "captures.quote": "It avoids shock […] the art of making people act", "captures.parts": 2 });
+    anchors.set(cap.id, { id: cap.id, source: src.id, snapshot: null, parts: [
+      { selector: [{ type: "TextQuoteSelector", exact: "It avoids shock", prefix: "", suffix: "" }] },
+      { selector: [{ type: "TextQuoteSelector", exact: "the art of making\npeople act", prefix: "", suffix: "" }] },
+    ] });
+    await shell.records.load();
+    const block = shell.embeds.get("capture")!.render(shell.records.get(cap.id)!, () => {});
+    document.body.appendChild(block);
+    await wait(30);
+    const quotes = block.querySelectorAll("blockquote");
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0]!.textContent).toBe("It avoids shock […] the art of making people act");
+    block.remove();
   });
 
   it("offers a button by the selection: Capture, then Add to capture", async () => {
