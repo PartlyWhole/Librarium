@@ -120,6 +120,13 @@ export function createEditor(o: EditorOptions): EditorView {
       // A link being edited (its `[[…]]` showing) opens with ⌘-click, as in Obsidian; a plain
       // click places the cursor in it. Handled on mousedown so the cursor doesn't move first.
       mousedown(e, view) {
+        // A shown link: keep the cursor where it is, so the link stays shown and the click
+        // that follows (below) lands on it and opens it.
+        const shown = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
+        if (e.button === 0 && shown && (shown.dataset.id || shown.dataset.label !== undefined)) {
+          e.preventDefault();
+          return true;
+        }
         if (e.button !== 0 || !e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return false;
         const src = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink-source");
         if (!src) return false;

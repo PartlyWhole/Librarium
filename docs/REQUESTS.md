@@ -80,23 +80,27 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 > "I want it to behave like Obsidian: if I hover over, it reacts to that; if i move my typing
 > cursor to it, it shows [[...]]; otherwise it renders as a link. Even if it shows [[...]], I
 > can still click on the link with cmd+click, so I can still edit it normally if I don't use
-> cmd"
+> cmd" · "If it's not showing source mode, then clicking on it without cmd should navigate
+> via link"
 
 - **Changed:** a link reads as a link unless the cursor is in it or right beside it (as just
   after typing it), when it shows `[[…]]` for editing. A shown link reacts to hover (light
   background, solid underline, pointer) and opens on a click. While `[[…]]` shows, a plain
   click edits it and ⌘-click opens it; holding ⌘ makes it react to hover as a link. A link
   with no note yet makes the note either way. (First fix, `0648fa8`, opened `[[…]]` on a plain
-  click; replaced at the user's request.)
+  click; replaced at the user's request.) Fixed too: a plain click on a shown link did
+  nothing in a real browser, because the mousedown moved the cursor beside the link, which
+  showed its source before the click arrived; the cursor now stays put.
 - **Use:** click a link to open it; move the cursor into it to edit; ⌘-click while editing to
   open. ⌘-click a shown link opens it in a new tab, as before.
 - **Code:** `src/editor/editor.ts` (`mousedown` for ⌘-click on `.cm-wikilink-source`,
   `follow`, the `mod-held` class), `src/shell/shell.css` (hover styles).
 - **Commits:** `0648fa8`, and the one recording this · **Decision:** 0037 amended.
-- **Tested:** Vitest (`tests/notes.test.ts`: plain click on `[[…]]` doesn't open, ⌘-click
+- **Tested:** Vitest (`tests/notes.test.ts`: a shown link's mousedown leaves it shown and the
+  click opens it, failing without the fix; plain click on `[[…]]` doesn't open, ⌘-click
   does; `tests/writing.test.ts`: ⌘-click on an unresolved `[[…]]` makes the note); full suite
   passing. Preview: typed and accepted a link; plain click placed the cursor; away from the
-  cursor it rendered and reacted to hover; ⌘-click on `[[…]]` opened the note. Not checked in
+  cursor it rendered, reacted to hover and opened on a plain click; ⌘-click on `[[…]]` opened the note. Not checked in
   the real app.
 - **Left:** hover previews of the linked note (Obsidian's ⌘-hover popup) are still not built.
 

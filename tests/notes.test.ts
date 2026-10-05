@@ -124,7 +124,14 @@ describe("links", () => {
     const weil = shell.records.list("note").find((r) => r.title === "Simone Weil")!;
     view.dispatch({ changes: { from: 0, insert: `[[Weil|${weil.id}]]\nx` }, selection: { anchor: 0 } });
     view.dispatch({ selection: { anchor: view.state.doc.length } });
-    (view.contentDOM.querySelector(".cm-wikilink") as HTMLElement).dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const link = view.contentDOM.querySelector(".cm-wikilink") as HTMLElement;
+    // A real click starts with a mousedown, which must not move the cursor to the link (that
+    // would show its source and the click would miss it).
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 });
+    link.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(link.isConnected).toBe(true);
+    link.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(shell.router.current().params.id).toBe(weil.id);
   });
 
