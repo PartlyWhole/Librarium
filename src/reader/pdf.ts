@@ -118,6 +118,15 @@ export const pdfEngine: ReaderEngine = {
         resolve();
       }),
     );
+    // Until PDF.js has loaded a page it is laid out at the first page's size; where the first
+    // page differs (a JSTOR cover page), a place scrolled to moves as the real sizes arrive.
+    // The pages up to a place are sized before going there.
+    const sizedTo = async (n: number) => {
+      for (let i = 1; i <= n; i++) {
+        const pv = viewer.getPageView(i - 1) as { pdfPage?: unknown; setPdfPage(p: unknown): void } | undefined;
+        if (pv && !pv.pdfPage) pv.setPdfPage(await doc.getPage(i));
+      }
+    };
     const resized = new ResizeObserver(() => refit());
     resized.observe(container);
     const data = new Uint8Array(await src.bytes());
@@ -348,6 +357,7 @@ export const pdfEngine: ReaderEngine = {
       },
       async showPlace(selectors) {
         await pagesReady;
+        await sizedTo(Math.min(doc.numPages, Math.max(boxesPlace(selectors)?.page ?? 0, pageOf(selectors) ?? 0)));
         // Where it was drawn: straight there, outlined (a text search can miss or find another).
         const drawn = boxesPlace(selectors);
         if (drawn?.page && drawn.page >= 1 && drawn.page <= doc.numPages) {

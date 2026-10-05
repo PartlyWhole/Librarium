@@ -499,6 +499,20 @@ async function run() {
   }
   scanned.view.destroy();
 
+  // Showing a place in a PDF whose first page is a different size (a JSTOR cover page): the
+  // place stays in view as the other pages' real sizes arrive.
+  step("pdf cover page show");
+  const cover = await open(pdfEngine, "cover.pdf", "pdf");
+  await cover.view.showPlace?.([{ type: "FragmentSelector", value: "page=20" }, { type: "librarium:boxes", boxes: [{ page: 20, x: 10, y: 50, w: 60, h: 2 }] } as never]);
+  await new Promise((r) => setTimeout(r, 1500));
+  {
+    const mark = stage.querySelector(".region-mark");
+    const box = stage.querySelector(".pdf-container")!.getBoundingClientRect();
+    const m = mark?.getBoundingClientRect();
+    results.pdfCoverShow = { page: mark?.closest(".page")?.getAttribute("data-page-number") ?? null, inView: !!m && m.top >= box.top && m.bottom <= box.bottom };
+  }
+  cover.view.destroy();
+
   // Editing a capture's parts: handles at a passage's ends, a frame on a region.
   step("edit pdf article");
   const article = await open(pdfEngine, "article.pdf", "pdf");

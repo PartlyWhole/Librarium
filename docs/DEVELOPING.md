@@ -206,6 +206,9 @@ combobox). Every action must be in a menu (shell test).
     resizes `.page`) makes find and selection drift. PDF.js's stylesheet loads after ours.
   - A scan's recognised text (invisible, render mode 3) often has no word positions at all:
     align it to the ink of the rendered page (`pdf-ink.ts`, 0050).
+  - PDF.js lays out pages it hasn't read yet at the first page's size; where that differs (a
+    JSTOR cover page), a scrolled-to place drifts as real sizes arrive. Size the pages up to a
+    place before going there (`sizedTo` in `pdf.ts`, R-046).
   - Judge "same line" in pixels, never in percent of a page: saved web pages are one page
     thousands of pixels tall.
   - WebKit's saved PDFs map some ligatures wrongly in PDF.js ("ff" reads as "S"), so find

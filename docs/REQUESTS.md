@@ -56,6 +56,31 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-046 · Show in the Girard article went to another page
+> "the text capture I made in Girard-DionysusversusCrucified-1984 doesn't localize well -- when I
+> click show, it goes to a different page"
+
+- **Diagnosis:**
+  - The capture itself was right: its stored place is on page 7, where you made it.
+  - The PDF begins with JSTOR's cover page, which is a different size from the article's
+    pages. Until PDF.js has read every page, it lays all of them out at the cover's size.
+  - Show scrolled to the right spot. Then, as the real page sizes arrived, everything above
+    page 7 changed height and pushed the view onto pages 8–9.
+- **Changed:** before going to a place, the PDF reader reads the true sizes of every page up to
+  it, so the view stays on the place. This applies to any PDF whose first page differs, which
+  most JSTOR downloads do.
+- **Use:** nothing new. Show (capture page, side panel, embeds) now lands on the passage.
+- **Code:** `src/reader/pdf.ts` (`sizedTo`, used by `showPlace`).
+- **Tested:**
+  - On your Girard PDF, using a temporary copy that was deleted afterwards: the passage is
+    outlined in the middle of the view on page 7. Before the fix, the outline sat 838 px
+    above the view.
+  - A new WebKit check uses a test PDF with a short cover page (`cover.pdf`). It fails without
+    the fix and passes with it. All 62 WebKit checks, 171 interface tests and the Rust tests
+    pass; lint is clean.
+  - Also fixed a type error in the test mock (a wrong error code).
+- **Left:** nothing.
+
 ### R-042 · Images in notes, kept as attachments in the Library
 > "I want image support for notes (images uploaded should be Library items -- perhaps to keep
 > things organized, there should be an attachments section of the library that hold things

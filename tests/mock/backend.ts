@@ -240,7 +240,7 @@ const api: Record<string, (p: any) => unknown> = {
   },
   "captures.update": (p) => {
     const r = need(p.id);
-    if (!p.parts.length) fail("invalid", "a capture needs at least one part");
+    if (!p.parts.length) fail("invalid-input", "a capture needs at least one part");
     const quote = p.parts.map((x: { quote: string }) => x.quote).filter(Boolean).join(" […] ");
     const auto = (q: string) => q.split(/\s+/).slice(0, 8).join(" ") || "A region";
     if (r.info.title === auto(String(r.info.fields["captures.quote"] ?? ""))) r.info.title = auto(quote);
