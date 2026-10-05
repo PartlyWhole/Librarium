@@ -51,6 +51,13 @@ fit a line:
 A WebKit check in a wide window keeps the on-screen margin, the text width and the column count
 the same at 130%. It fails without the fix.
 
+## Later: swipes and the turn animation (R-041)
+
+- Sideways swipes in page view are kept from scrolling the columns, which fought Readium's turn.
+- A new swipe is told from the last one's momentum by a sudden rise in speed.
+- Turns are animated (the page slides out, the next slides in), queued one at a time, and toned
+  down with Reduce motion.
+
 ## Consequences
 
 - WebKit checks cover immersive chrome, the arrows, the contents popover marking where you are,

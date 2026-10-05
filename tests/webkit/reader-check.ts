@@ -678,6 +678,47 @@ async function run() {
     book.view.destroy();
   }
 
+  // Trackpad swipes: one swipe (with its fading momentum) turns one page; a new swipe within
+  // the momentum turns again; the sideways scroll doesn't move the columns itself; it animates.
+  step("epub swipe");
+  {
+    const book = await open(epubEngine, "long.epub", "epub");
+    await new Promise((r) => setTimeout(r, 1200));
+    const left = () => Number((stage.querySelector(".epub-left")?.textContent ?? "").match(/\d+/)?.[0] ?? (/(Last)/.test(stage.querySelector(".epub-left")?.textContent ?? "") ? 0 : NaN));
+    const fdoc = () => ([...stage.querySelectorAll("iframe")].find((f) => (f as HTMLIFrameElement).style.visibility !== "hidden" && (f as HTMLIFrameElement).contentDocument?.querySelector("p")) as HTMLIFrameElement | undefined)?.contentDocument;
+    let sawAnimation = false;
+    const moving = () => {
+      const t = getComputedStyle(stage.querySelector(".epub-stage")!).transform;
+      if (t && t !== "none" && t !== "matrix(1, 0, 0, 1, 0, 0)") sawAnimation = true;
+    };
+    const swipeOnce = async (deltas: number[]) => {
+      let prevented = 0;
+      for (const d of deltas) {
+        const ev = new WheelEvent("wheel", { deltaX: d, deltaY: 0, bubbles: true, cancelable: true });
+        fdoc()?.body.dispatchEvent(ev);
+        if (ev.defaultPrevented) prevented++;
+        moving();
+        await new Promise((r) => setTimeout(r, 16));
+      }
+      return prevented;
+    };
+    const start = left();
+    const momentum = [4, 10, 18, 24, 18, 13, 9, 7, 5, 4, 3, 2, 2, 1, 1];
+    const prevented = await swipeOnce(momentum);
+    for (let i = 0; i < 12; i++) {
+      moving();
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    await new Promise((r) => setTimeout(r, 500));
+    const afterOne = left();
+    // Another swipe begins while the first one's momentum is still arriving.
+    await swipeOnce([2, 1, 1, 6, 16, 26, 20, 14, 9, 6, 4, 2, 1]);
+    await new Promise((r) => setTimeout(r, 900));
+    const afterTwo = left();
+    results.epubSwipe = { start, afterOne, afterTwo, prevented, events: momentum.length, sawAnimation };
+    book.view.destroy();
+  }
+
   step("epub picture");
   const pictured = await open(epubEngine, "styled.epub", "epub");
   await new Promise((r) => setTimeout(r, 900));

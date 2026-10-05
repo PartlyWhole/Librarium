@@ -39,8 +39,8 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     const left = h("span", { class: "epub-left" });
     const pct = h("span", { class: "epub-pct" });
     const foot = h("div", { class: "epub-foot", "aria-live": "polite" }, h("span"), left, pct);
-    const prevBtn = h("button", { class: "epub-arrow prev", type: "button", title: "Previous page (←)", "aria-label": "Previous page", onclick: () => nav.goLeft(false, done) }, "‹");
-    const nextBtn = h("button", { class: "epub-arrow next", type: "button", title: "Next page (→)", "aria-label": "Next page", onclick: () => nav.goRight(false, done) }, "›");
+    const prevBtn = h("button", { class: "epub-arrow prev", type: "button", title: "Previous page (←)", "aria-label": "Previous page", onclick: () => void flip("left") }, "‹");
+    const nextBtn = h("button", { class: "epub-arrow next", type: "button", title: "Next page (→)", "aria-label": "Next page", onclick: () => void flip("right") }, "›");
     const frame = h("div", { class: "epub-container", tabindex: "0", "aria-label": `${src.title}, book` }, head, stage, foot, prevBtn, nextBtn);
     host.appendChild(frame);
     const contentsBtn = h("button", { class: "icon-button", type: "button", title: "Contents", "aria-label": "Contents", "aria-expanded": "false", onclick: () => togglePopover("contents") }, icon(List));
@@ -150,7 +150,8 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         if (!doc.getSelection()?.toString().trim()) fire();
       });
       doc.addEventListener("keydown", onKey);
-      doc.addEventListener("wheel", onWheel, { passive: true });
+      // Not passive: a sideways swipe in pages mustn't scroll the columns (it fights the turn).
+      doc.addEventListener("wheel", onWheel, { passive: false });
       doc.addEventListener("mousedown", () => closePopover());
       doc.addEventListener("mousemove", (e) => {
         const f = frames().find((x) => x.doc === doc);
@@ -228,8 +229,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     // Moving.
     const done = () => {};
     function turn(dir: 1 | -1) {
-      if (dir > 0) nav.goForward(false, done);
-      else nav.goBackward(false, done);
+      void flip(dir > 0 === (nav.readingProgression !== "rtl") ? "right" : "left");
     }
     function goHref(href: string) {
       const link = new Link({ href: href.split("#")[0]!.split("/").map(encodeURIComponent).join("/") + (href.includes("#") ? `#${href.split("#")[1]}` : "") });
@@ -240,8 +240,8 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       const t = e.target as HTMLElement | null;
       if (t?.closest?.("select, input, textarea, button, [contenteditable=true]")) return;
       const go =
-        e.key === "ArrowRight" ? () => nav.goRight(false, done)
-        : e.key === "ArrowLeft" ? () => nav.goLeft(false, done)
+        e.key === "ArrowRight" ? () => void flip("right")
+        : e.key === "ArrowLeft" ? () => void flip("left")
         : e.key === "PageDown" || (e.key === " " && !e.shiftKey) ? () => turn(1)
         : e.key === "PageUp" || (e.key === " " && e.shiftKey) ? () => turn(-1)
         : null;
@@ -283,25 +283,78 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       stillTimer = setTimeout(() => frame.classList.remove("stirred"), 1800);
     }
     frame.addEventListener("mousemove", stirred);
-    // A trackpad swipe turns one page per gesture (in pages, not when scrolling).
+    // Turning a page, as in Apple Books: the page slides away and the next slides in. Turns asked
+    // for during one are kept (one at a time), so quick swipes and key presses aren't lost.
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    let flipping = false;
+    let queued: "left" | "right" | null = null;
+    const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    async function flip(side: "left" | "right"): Promise<void> {
+      if (flipping) {
+        queued = side;
+        return;
+      }
+      flipping = true;
+      const away = side === "right" ? -1 : 1;
+      try {
+        if (!settings.scroll) {
+          stage.style.transition = reduced ? "opacity 90ms ease-in" : "transform 130ms ease-in, opacity 130ms ease-in";
+          stage.style.transform = reduced ? "" : `translateX(${away * 36}px)`;
+          stage.style.opacity = "0.15";
+          await pause(reduced ? 90 : 130);
+        }
+        const before = current?.locations.position ?? current?.locations.totalProgression;
+        await new Promise<void>((res) => (side === "right" ? nav.goRight(false, () => res()) : nav.goLeft(false, () => res())));
+        if (!settings.scroll) {
+          const moved = (current?.locations.position ?? current?.locations.totalProgression) !== before;
+          stage.style.transition = "none";
+          stage.style.transform = reduced || !moved ? "" : `translateX(${-away * 36}px)`;
+          void stage.offsetWidth;
+          stage.style.transition = reduced ? "opacity 120ms ease-out" : "transform 220ms cubic-bezier(.2,.8,.2,1), opacity 220ms ease-out";
+          stage.style.transform = "";
+          stage.style.opacity = "";
+          await pause(reduced ? 120 : 220);
+        }
+      } finally {
+        stage.style.transition = "";
+        flipping = false;
+      }
+      const next = queued;
+      queued = null;
+      if (next) void flip(next);
+    }
+
+    // A trackpad swipe turns one page (in pages, not when scrolling). After the fingers lift, the
+    // trackpad keeps sending a fading stream (momentum): that doesn't turn again, but a new swipe
+    // (a sudden rise) does, even before the stream has ended.
     let swipe = 0;
     let swiped = false;
+    let lastAbs = 0;
     let swipeTimer: ReturnType<typeof setTimeout> | undefined;
     function onWheel(e: WheelEvent) {
-      if (settings.scroll || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (settings.scroll || !sideways) return;
+      e.preventDefault();
+      const abs = Math.abs(e.deltaX);
       clearTimeout(swipeTimer);
       swipeTimer = setTimeout(() => {
         swipe = 0;
         swiped = false;
-      }, 250);
+        lastAbs = 0;
+      }, 220);
+      if (swiped && abs > Math.max(6, lastAbs * 1.8)) {
+        // A new swipe within the old one's momentum.
+        swiped = false;
+        swipe = 0;
+      }
+      lastAbs = abs;
       if (swiped) return;
       swipe += e.deltaX;
-      if (Math.abs(swipe) < 40) return;
+      if (Math.abs(swipe) < 24) return;
       swiped = true;
-      if (swipe > 0) nav.goRight(false, done);
-      else nav.goLeft(false, done);
+      void flip(swipe > 0 ? "right" : "left");
     }
-    frame.addEventListener("wheel", onWheel, { passive: true });
+    frame.addEventListener("wheel", onWheel, { passive: false });
 
     // Popovers from the toolbar: the contents, and the Aa panel.
     let popover: { kind: "contents" | "settings"; el: HTMLElement; anchor: HTMLElement } | null = null;

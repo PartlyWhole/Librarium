@@ -54,11 +54,6 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 > "I want a page that contains, organizes and helps me look for captures. Page icon button
 > should be on ribbon"
 
-### R-041 · Trackpad page turns in books, with an animation
-> "I want horizontal scrolling (i'm using mousepad) to work well with flipping pages on epub
-> (like apple books); there should be a transition animation; it sometimes works but sometimes
-> unresponsive"
-
 ### R-042 · Images in notes, kept as attachments in the Library
 > "I want image support for notes (images uploaded should be Library items -- perhaps to keep
 > things organized, there should be an attachments section of the library that hold things
