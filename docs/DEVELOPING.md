@@ -204,6 +204,8 @@ combobox). Every action must be in a menu (shell test).
   - Strip soft hyphens.
   - PDF.js's text layer must be exactly the drawn page's size: a page border (or any CSS that
     resizes `.page`) makes find and selection drift. PDF.js's stylesheet loads after ours.
+  - A scan's recognised text (invisible, render mode 3) often has no word positions at all:
+    align it to the ink of the rendered page (`pdf-ink.ts`, 0050).
   - Judge "same line" in pixels, never in percent of a page: saved web pages are one page
     thousands of pixels tall.
   - WebKit's saved PDFs map some ligatures wrongly in PDF.js ("ff" reads as "S"), so find

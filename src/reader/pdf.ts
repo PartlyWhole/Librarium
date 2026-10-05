@@ -13,6 +13,7 @@ import { h } from "../kit/dom";
 import { boxesIn, boxesPlace, caretIn, rangeEditor, regionEditor, snapStart, snapEnd, type EditPart, snapToWords, drawMarks, dragRect, endOf, innerRect, outlineRegion, watchMarkClicks, pageAtOffset, pageOf, regionOf, type Box, type Mark, type ReaderEngine, type ReaderView } from "./host";
 import { ocrFind, ocrLayer, type OcrLine } from "./ocr";
 import { advancesOf, splitIntoWords, type Advance, type FontData } from "./pdf-words";
+import { alignToInk } from "./pdf-ink";
 
 const BASE = "/pdfjs/";
 pdfjs.GlobalWorkerOptions.workerSrc = `${BASE}pdf.worker.min.mjs`;
@@ -75,7 +76,22 @@ export const pdfEngine: ReaderEngine = {
     // Selectable text where the printed words are (pdf-words.ts); set up before each page
     // draws, and so before its text layer.
     eventBus.on("pagerender", (e: { source?: { pdfPage?: unknown } }) => placeWords(e.source?.pdfPage));
+    // Scanned pages (text invisible over a picture): the text is put on the words seen (pdf-ink.ts),
+    // after the page and its text are drawn, and again after a zoom.
+    const inkTimers = new Map<number, ReturnType<typeof setTimeout>>();
+    const onInk = (n: number) => {
+      clearTimeout(inkTimers.get(n));
+      inkTimers.set(n, setTimeout(() => {
+        const pv = viewer.getPageView(n - 1) as { div?: HTMLElement; pdfPage?: unknown } | undefined;
+        if (!pv?.div || !pv.pdfPage) return;
+        void invisibleText(pv.pdfPage).then((yes) => {
+          if (yes && pv.div!.querySelector(".textLayer span")) alignToInk(pv.div!);
+        });
+      }, 30));
+    };
+    eventBus.on("textlayerrendered", (e: { pageNumber: number }) => onInk(e.pageNumber));
     eventBus.on("pagerendered", (e: { pageNumber: number }) => {
+      onInk(e.pageNumber);
       if (marked && e.pageNumber === marked.page) drawMark(false);
       drawPageMarks(e.pageNumber);
       const lines = recognized.get(e.pageNumber);
@@ -132,7 +148,11 @@ export const pdfEngine: ReaderEngine = {
       for (const p of container.querySelectorAll<HTMLElement>(".page")) {
         if (range.intersectsNode(p)) boxes.push(...boxesIn(range, p, Number(p.dataset.pageNumber)));
       }
-      return { text: range.toString().trim(), page: pageEl ? Number(pageEl.dataset.pageNumber) : viewer.currentPageNumber, boxes, end: endOf(range) };
+      // The text layer's line ends are <br>s, which a range's text leaves out: they count.
+      const frag = range.cloneContents();
+      frag.querySelectorAll("br").forEach((b) => b.replaceWith("\n"));
+      const text = (frag.textContent ?? "").replace(/[ \t]+\n/g, "\n").trim();
+      return { text, page: pageEl ? Number(pageEl.dataset.pageNumber) : viewer.currentPageNumber, boxes, end: endOf(range) };
     };
     const view: ReaderView = {
       zoomIn: () => ((fit = false), (viewer.currentScale = Math.min(8, viewer.currentScale * 1.2))),
@@ -370,6 +390,19 @@ export const pdfEngine: ReaderEngine = {
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- PDF.js's page proxies are untyped here */
+const invisible = new WeakMap<object, Promise<boolean>>();
+/** Whether a page's text is drawn invisibly (render mode 3 or 7): recognised text over a scan. */
+function invisibleText(page: any): Promise<boolean> {
+  let p = invisible.get(page);
+  if (!p) {
+    p = (page.getOperatorList() as Promise<{ fnArray: number[]; argsArray: unknown[][] }>).then(
+      (ops) => ops.fnArray.some((f, i) => f === pdfjs.OPS.setTextRenderingMode && [3, 7].includes(Number(ops.argsArray[i]?.[0]))),
+      () => false,
+    );
+    invisible.set(page, p);
+  }
+  return p;
+}
 const placed = new WeakSet<object>();
 /**
  * Makes a page's text content come in words placed by their font's widths (pdf-words.ts).

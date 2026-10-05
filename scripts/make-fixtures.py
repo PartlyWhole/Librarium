@@ -54,6 +54,54 @@ def page_lines(n):
 
 pdf([page_lines(n) for n in range(1, 101)], OUT / "text-100.pdf")
 pdf([["The Technological Society", "", "Technique integrates everything.", "It avoids shock and sensational events."], ["Second page", "", "Attention is the rarest form of generosity."]], OUT / "short.pdf")
+def ocr_pdf(path, truth):
+    """Like a scan with recognised text (as JSTOR's): the "printed" words are dark blocks at
+    known places (justified lines); over them, each line's recognised text is one invisible
+    string (render mode 3) in a face whose widths don't match, about 8% shorter than the print,
+    with nothing to say where each word is. Where each printed word is goes to `truth`."""
+    import json
+    lines = [" ".join(WORDS[(k * 3 + j) % len(WORDS)] for j in range(7 + k % 3)) for k in range(12)]
+    ink = ["0 g"]
+    text = ["BT", "3 Tr", "/F1 9 Tf"]
+    placed = []
+    for k, line in enumerate(lines):
+        words = line.split()
+        y = 700 - k * 16
+        widths = [len(w) * 5.1 + (3 if w[0] in "gw" else 0) for w in words]  # a proportional face
+        gap = (440 - sum(widths)) / (len(words) - 1)  # justified to 440 pt
+        x = 80.0
+        for w, wd in zip(words, widths):
+            ink.append(f"{x:.3f} {y - 2} {wd:.3f} 8 re f")
+            placed.append({"word": w, "line": k, "x": round(x, 3), "w": round(wd, 3), "y": y})
+            x += wd + gap
+        # The recognised line runs about 8% short of the print (as JSTOR's do), in a face with
+        # the wrong proportions (monospaced).
+        tz = 0.92 * 440 / (len(line) * 0.6 * 9) * 100
+        text.append(f"{tz:.3f} Tz 1 0 0 1 80 {y} Tm ({line}) Tj")
+    text.append("ET")
+    data = "\n".join(ink + text).encode("latin-1")
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>",
+        b"<< /Length %d >>\nstream\n" % len(data) + data + b"\nendstream",
+    ]
+    out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offs = []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
+    for o in offs:
+        out += b"%010d 00000 n \n" % o
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
+    path.write_bytes(bytes(out))
+    truth.write_text(json.dumps(placed, indent=1))
+
+ocr_pdf(OUT / "ocr-words.pdf", OUT / "ocr-words.json")
+
 # A saved web article: one very tall page, as the page saver prints them.
 pdf([["An Article", ""] + [f"Line {k + 1} of the article: " + " ".join(WORDS[(k * 5 + j) % len(WORDS)] for j in range(8)) + "." for k in range(400)]], OUT / "article.pdf", height=6000)
 

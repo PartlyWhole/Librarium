@@ -57,6 +57,7 @@ const checks = [
   ["EPUB: in a wide window the page is centred", Math.abs(r.epubCentred?.offset ?? 99) <= 2],
   ["EPUB: a fixed-layout book opens on its first page", /^Page 1 of 2/.test(r.epubFixedAt) && r.epubFixedFrames >= 1],
   ["EPUB: images and stylesheets load from the book; its script files never run", r.epubImage === true && r.epubStylesheet === true && r.epubBookFileRan === false],
+  ["a scan's recognised text lies on the words seen (each word within 1.5 pt)", r.pdfScanInk?.words > 50 && r.pdfScanInk.close === r.pdfScanInk.words],
   ["editing a saved article (PDF): handles at the passage's ends", r.editPdfHandles === true && /^Line 3 of/.test(r.editPdfSelected ?? "")],
   ["editing a saved article: dragging the end handle down a line takes in that line", !!r.editPdfEnd && r.editPdfEnd.boxes >= 2 && r.editPdfEnd.text.length > (r.editPdfSelected ?? "").length && /Line 4/.test(r.editPdfEnd.text)],
   ["editing a saved article: dragging the start handle forward drops the first word, snapping to words", !!r.editPdfStart && !/^Line 3/.test(r.editPdfStart) && /^\S+/.test(r.editPdfStart) && r.editPdfStopped === true],

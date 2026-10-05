@@ -114,3 +114,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-04 | Captures can be renamed and deleted (to the archive, with Undo) from the page, menus and highlights; embeds sit inside list items and quotes. | [0047](docs/decisions/0047-editing-deleting-captures.md) |
 | 2026-10-04 | Showing a place (a capture's) moves the open document there without reopening it; PDFs go by where it was drawn. | [0048](docs/decisions/0048-showing-a-place-in-place.md) |
 | 2026-10-04 | A capture's parts are edited in place: handles at a passage's ends, a frame on a region; book pictures captured as images. | [0049](docs/decisions/0049-editing-capture-parts.md) |
+| 2026-10-04 | A scan's recognised text is aligned to the words seen (ink runs); quotations flow (lines joined, hyphens rejoined). | [0050](docs/decisions/0050-scanned-pdf-text-on-ink.md) |

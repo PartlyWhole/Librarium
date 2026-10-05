@@ -21,6 +21,7 @@ import type { Written } from "../../generated/Written";
 import { embedExtension } from "./embeds";
 import { Highlighter, Crop, Quote, FileDown, X, Trash2, Copy, LocateFixed, Pencil } from "lucide";
 import { contextMenu } from "../../kit/menu";
+import { flowQuote } from "../../kit/flow";
 import type { Box, EditedPart, EditPart, PartsEditor, ReaderSelection } from "../../reader/host";
 
 export const KIND = "capture";
@@ -163,7 +164,7 @@ export function captures(shell: ShellApi): void {
         const selector: Selector[] = at && st ? [...describe(st.text, at.start, at.end)] : [{ type: "TextQuoteSelector", exact: sel.text, prefix: "", suffix: "" }];
         if (sel.page) selector.push({ type: "FragmentSelector", value: `page=${sel.page}`, conformsTo: PDF_PAGE });
         if (sel.cfi) selector.push({ type: "FragmentSelector", value: sel.cfi, conformsTo: CFI });
-        const quote = at && st ? sliceCp(st.text, at.start, at.end) : sel.text;
+        const quote = flowQuote(at && st ? sliceCp(st.text, at.start, at.end) : sel.text);
         const first = sel.boxes?.[0];
         return {
           found: !!at,
@@ -305,7 +306,7 @@ export function captures(shell: ShellApi): void {
         if (!r || !a) return shell.status.show("This capture can’t be found.");
         const parts: DraftPart[] = [];
         for (const [i, p] of a.parts.entries()) {
-          const quote = (p.selector.find((x) => x.type === "TextQuoteSelector") as { exact?: string } | undefined)?.exact ?? "";
+          const quote = flowQuote((p.selector.find((x) => x.type === "TextQuoteSelector") as { exact?: string } | undefined)?.exact ?? "");
           const frag = (prefix: string) => p.selector.flatMap((x) => [(x as { value?: string }).value, (x as { refinedBy?: { value?: string } }).refinedBy?.value]).find((v) => v?.startsWith(prefix));
           const page = Number(frag("page=")?.slice(5)) || undefined;
           const xywh = frag("xywh=percent:")?.slice(13).split(",").map(Number);
@@ -527,7 +528,7 @@ export function captures(shell: ShellApi): void {
   shell.embeds.add("captures", KIND, {
     kind: KIND,
     render(r, open) {
-      const quote = String(r.fields[F.quote] ?? "");
+      const quote = flowQuote(String(r.fields[F.quote] ?? ""));
       const src = String(r.fields[F.source] ?? "");
       const cite = h("a", { href: "#", class: "embed-cite", onclick: (e: Event) => {
         e.preventDefault();
@@ -548,7 +549,7 @@ export function captures(shell: ShellApi): void {
               const img = h("img", { class: "capture-region embed-region", alt: "A captured picture" });
               void call<string>("captures.region", { id: r.id, n: i + 1 }).then((d) => (img.src = d), () => {});
               nodes.push(img);
-            } else nodes.push(h("blockquote", { class: "embed-quote" }, (p.selector.find((x) => x.type === "TextQuoteSelector") as { exact?: string } | undefined)?.exact ?? ""));
+            } else nodes.push(h("blockquote", { class: "embed-quote" }, flowQuote((p.selector.find((x) => x.type === "TextQuoteSelector") as { exact?: string } | undefined)?.exact ?? "")));
           });
           block.querySelectorAll(":scope > .embed-quote, :scope > .capture-region").forEach((x) => x.remove());
           block.prepend(...nodes);
@@ -557,7 +558,7 @@ export function captures(shell: ShellApi): void {
       return block;
     },
     markdown(r) {
-      const quote = String(r.fields[F.quote] ?? "[a captured region]");
+      const quote = flowQuote(String(r.fields[F.quote] ?? "")) || "[a captured region]";
       return `${quote.split("\n").map((l) => `> ${l}`).join("\n")}\n>\n> — ${citation(shell, r)}`;
     },
   });
@@ -586,7 +587,7 @@ export function captures(shell: ShellApi): void {
           const s = st[i];
           const quote = p.selector.find((x) => x.type === "TextQuoteSelector") as { exact: string } | undefined;
           const show = () => shell.openRecord(src, where(anchor, p), { again: true });
-          const body = quote ? h("blockquote", { class: "capture-quote" }, quote.exact) : h("img", { class: "capture-region", alt: "The captured region" });
+          const body = quote ? h("blockquote", { class: "capture-quote" }, flowQuote(quote.exact)) : h("img", { class: "capture-region", alt: "The captured region" });
           if (!quote) void call<string>("captures.region", { id, n: i + 1 }).then((d) => ((body as HTMLImageElement).src = d), () => {});
           const badge = s?.status === "moved" ? h("span", { class: "badge moved" }, "moved — check it") : s?.status === "lost" ? h("span", { class: "badge lost" }, "lost") : null;
           const confirm = s?.status === "moved" ? h("button", { class: "link-button", onclick: () => void confirmMoved(id, anchor, i, src).then(() => shell.router.go("capture", { id }, { replace: true })) }, "This is the place") : null;

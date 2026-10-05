@@ -475,6 +475,30 @@ async function run() {
   fixedBook.view.destroy();
 
   // Recognised text: findable and selectable, in an image and a scanned PDF.
+  // A scan with recognised text: the invisible text is put on the words seen.
+  step("pdf scan text on its ink");
+  const scanned = await open(pdfEngine, "ocr-words.pdf", "pdf");
+  await new Promise((r) => setTimeout(r, 1200));
+  {
+    const truth = (await (await fetch("/tests/fixtures/library/ocr-words.json")).json()) as { word: string; line: number; x: number; w: number }[];
+    const pageEl = stage.querySelector(".page") as HTMLElement;
+    const pr = pageEl.getBoundingClientRect();
+    const k = pr.width / 612;
+    const spans = [...pageEl.querySelectorAll(".textLayer span")].filter((x) => !x.children.length && (x.textContent ?? "").trim()) as HTMLElement[];
+    let close = 0;
+    let worst = 0;
+    truth.forEach((t, i) => {
+      const sp = spans[i];
+      if (!sp || sp.textContent!.trim() !== t.word) return;
+      const at = (sp.getBoundingClientRect().left - pr.left) / k;
+      const off = Math.abs(at - t.x);
+      worst = Math.max(worst, off);
+      if (off <= 1.5) close++;
+    });
+    results.pdfScanInk = { words: truth.length, spans: spans.length, close, worst: Math.round(worst * 10) / 10 };
+  }
+  scanned.view.destroy();
+
   // Editing a capture's parts: handles at a passage's ends, a frame on a region.
   step("edit pdf article");
   const article = await open(pdfEngine, "article.pdf", "pdf");
