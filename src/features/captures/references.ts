@@ -3,7 +3,7 @@
  *
  * A reference is one `![[…|id]]` (placed quotation) or `[[…|id]]` (link) in a note, a daily
  * note or another capture's words. Before a used capture is deleted, the user chooses for each
- * reference: keep it as text, remove it, or leave it (it then shows "In the archive" until the
+ * reference: keep it as text, remove it, or leave it (it then shows as its source until the
  * capture is restored). The rewriting is plain text work, kept here so it can be tested alone.
  */
 import { call } from "../../backend";

@@ -12,13 +12,13 @@ import { describe, locate, locateSelection, sliceCp, toW3C, type Selector } from
 import { createEditor } from "../../editor/editor";
 import { NoteSession } from "../../editor/session";
 import type { ShellApi } from "../../shell/api";
-import { ITEM_CHILDREN, READER_TOOLS, type ItemChildren, type ReaderTool } from "../../shell/slots";
+import { ARCHIVER, ITEM_CHILDREN, READER_TOOLS, type Archiver, type ItemChildren, type ReaderTool } from "../../shell/slots";
 import type { CapturePart } from "../../generated/CapturePart";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import type { RecordText } from "../../generated/RecordText";
 import type { StoredText } from "../../generated/StoredText";
 import type { Written } from "../../generated/Written";
-import { embedExtension } from "./embeds";
+import { embedExtension, embedShown } from "./embeds";
 import { deleteCapture as deleteUsed } from "./delete";
 import { findReferences, type Reference } from "./references";
 import { Highlighter, Crop, Quote, FileDown, X, Trash2, Copy, LocateFixed, Pencil } from "lucide";
@@ -142,12 +142,15 @@ export function captures(shell: ShellApi): void {
    * it is deleted for good from there. Done through the archive's own record action.
    */
   const archiveCapture = async (c: RecordInfo): Promise<boolean> => {
-    const archive = shell.recordActions.get("archive");
-    if (!archive || !archive.applies(c)) {
+    const archiver = shell.slot<Archiver>(ARCHIVER).values()[0];
+    if (!archiver || isArchived(c) || c.read_only) {
       shell.status.show("This capture can’t be deleted here.");
       return false;
     }
-    await archive.run([c]);
+    const a = await archiver.archive([c.id]);
+    if (!a.archived) return false;
+    const what = `“${c.title || "Capture"}”`;
+    shell.undo.done(`Deleted ${what}`, { label: `delete ${what}`, undo: a.undo, redo: a.redo });
     return true;
   };
   // A capture used in notes asks first what happens to each place (decision 0059).
@@ -585,8 +588,7 @@ export function captures(shell: ShellApi): void {
       } }, `— ${citation(shell, r)}`);
       const partsN = Number(r.fields["captures.parts"] ?? 1);
       const edit = h("button", { type: "button", class: "embed-edit icon-button", "aria-label": "Edit the capture", title: "Open the capture to edit it", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, icon(Pencil, 14));
-      const archived = isArchived(r) ? h("span", { class: "badge", title: "This capture is in the archive" }, "In the archive") : null;
-      const block = h("figure", { class: "embed", title: "Open the capture" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite, archived, edit));
+      const block = h("figure", { class: "embed", title: "Open the capture" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite, edit));
       // A click on the quotation opens the capture (⌘-click: in a new tab); the citation opens
       // the source, as before.
       block.addEventListener("click", (e) => {
@@ -615,7 +617,7 @@ export function captures(shell: ShellApi): void {
       return `${quote.split("\n").map((l) => `> ${l}`).join("\n")}\n>\n> — ${citation(shell, r)}`;
     },
   });
-  shell.editorExtensions.add("captures", "capture-embeds", { id: "capture-embeds", handlesEmbeds: true, extension: () => embedExtension(shell) });
+  shell.editorExtensions.add("captures", "capture-embeds", { id: "capture-embeds", handlesEmbeds: true, embedShown: (id) => embedShown(shell, id), extension: () => embedExtension(shell) });
 
   // ---- the capture page ---------------------------------------------------------------
   // ---- all captures: a page to look through them --------------------------------------

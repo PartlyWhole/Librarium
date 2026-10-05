@@ -28,7 +28,7 @@ looked wrong: an empty line above and below each, and misaligned in lists and qu
     embed) and in the Captures panel;
   - in the popover when a book's or PDF's saved highlight is clicked.
   Archived captures leave the tree, the panel and the source's highlights. Notes that embed
-  one show "In the archive" on its card.
+  one show its source instead (amended by 0059).
 - **Embeds** in writing are inline-blocks that fill the rest of their line (`.cm-embed`), with
   their own indent and white-space. They were blocks inside the line, which broke it into an
   empty line box before (the bullet or quote marker) and after, and inherited a list's hanging

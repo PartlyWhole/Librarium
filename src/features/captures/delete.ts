@@ -1,7 +1,7 @@
 /**
  * Deleting a capture that is used somewhere (decision 0059). A dialog lists each place, grouped
  * by note, with what is around it, and asks what happens there: keep it as text (the default:
- * nothing is lost), remove it, or leave it (it shows "In the archive" until restored). Each
+ * nothing is lost), remove it, or leave it (it shows as its source until restored). Each
  * choice says what the place will become. On Delete, each note is rewritten (merged with any
  * unsaved typing, as for any outside edit) and the capture goes to the archive; one Undo puts
  * all of it back.
@@ -27,7 +27,7 @@ const shorten = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1).trim
 /** What a place will become, in words. */
 function outcome(r: Reference, choice: Choice, asText: AsText): string {
   const alone = r.alone;
-  if (choice === "leave") return r.link.embed ? "Stays as it is, marked “In the archive” until you restore the capture." : "Stays a link to the capture in the archive.";
+  if (choice === "leave") return r.link.embed ? "Stays as written: shown as its source, ![[…]], until you restore the capture." : "Stays a link, to the capture in the archive.";
   if (choice === "remove") return alone ? "The line is taken out." : "Taken out of the sentence.";
   if (!r.link.embed) return `Becomes the plain words “${shorten(r.link.label, 60)}”.`;
   const q = asText.quote ? `“${shorten(asText.quote.replace(/\s+/g, " "), 70)}”` : "a note that a picture was here";

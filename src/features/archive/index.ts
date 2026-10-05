@@ -124,7 +124,9 @@ export function archive(shell: ShellApi): void {
   // Right-click (or the menu key) on a record, anywhere it is listed.
   const ids = (rs: RecordInfo[]) => rs.map((r) => r.id);
   const many = (one: string, several: (n: number) => string) => (n: number) => (n === 1 ? one : several(n));
-  shell.recordActions.add("archive", "archive", { label: many("Archive", (n) => `Archive ${n} items`), applies: (r) => !isArchived(r) && !r.read_only, run: (rs) => setArchived(ids(rs), true) });
+  // Not captures: a capture is deleted one at a time, by its own Delete, which asks about the
+  // notes using it (0059).
+  shell.recordActions.add("archive", "archive", { label: many("Archive", (n) => `Archive ${n} items`), applies: (r) => !isArchived(r) && !r.read_only && r.kind !== "capture", run: (rs) => setArchived(ids(rs), true) });
   shell.recordActions.add("archive", "restore", { label: many("Restore from archive", (n) => `Restore ${n} items`), applies: (r) => isArchived(r), run: (rs) => setArchived(ids(rs), false) });
   shell.recordActions.add("archive", "delete", { label: many("Delete permanently…", (n) => `Delete ${n} items permanently…`), destructive: true, applies: (r) => isArchived(r), run: (rs) => deletePermanently(ids(rs)) });
 

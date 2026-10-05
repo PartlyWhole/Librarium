@@ -6,7 +6,7 @@
  * Text that isn't markup (bare addresses, `[sic]`, footnote marks) is never hidden.
  */
 import { syntaxTree } from "@codemirror/language";
-import { RangeSet, RangeSetBuilder, type EditorState, type Range } from "@codemirror/state";
+import { RangeSet, RangeSetBuilder, StateEffect, type EditorState, type Range } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { parseLinks, type Link } from "./links";
@@ -103,6 +103,9 @@ export interface LivePreviewOptions {
   titleOf?: (id: string) => string | null;
   /** Embeds are drawn by an extension (Captures); without one they show as links. */
   embedsHandled?: boolean;
+  /** Whether an embed's record can be drawn (it exists and isn't archived); if not, it shows as
+   * its source, `![[label]]`, as while it is edited. */
+  embedShown?: (id: string) => boolean;
 }
 
 interface Built {
@@ -125,13 +128,16 @@ function build(view: EditorView, opts: LivePreviewOptions): Built {
     const wiki = parseLinks(state.sliceDoc(0, end), tree, Math.max(0, from - 2), to).filter((l) => l.to > from && l.from < to);
     const inWiki = (a: number, b: number) => wiki.some((l) => a >= l.from && b <= l.to);
     for (const l of wiki) {
-      if (l.embed && opts.embedsHandled) continue;
-      if (!touches(state, l.from, l.to)) {
+      // An embed the extension draws (off the line being edited); otherwise it shows as source.
+      const handled = l.embed && opts.embedsHandled;
+      if (handled && l.id && (opts.embedShown?.(l.id) ?? true) && !touchesLines(state, l.from, l.to)) continue;
+      if (!handled && !touches(state, l.from, l.to)) {
         ranges.push(Decoration.replace({ widget: new LinkWidget(l, l.id && opts.titleOf ? opts.titleOf(l.id) : null) }).range(l.from, l.to));
         continue;
       }
       // Being edited: `[[label]]`, the ID hidden and skipped as one unit.
-      ranges.push(Decoration.mark({ class: "cm-wikilink-source" }).range(l.from, l.to));
+      const unshown = handled && !touchesLines(state, l.from, l.to);
+      ranges.push(Decoration.mark({ class: `cm-wikilink-source${unshown ? " cm-embed-unshown" : ""}`, attributes: unshown ? { title: "Not shown: it is in the archive, or no longer in the library" } : undefined }).range(l.from, l.to));
       if (l.id) {
         const tail = state.sliceDoc(l.from, l.to).lastIndexOf(`|${l.id}`);
         if (tail >= 0) {
@@ -229,6 +235,10 @@ function finish(ranges: Range<Decoration>[]): DecorationSet {
   return b.finish();
 }
 
+/** Redraws previews when something outside the text changed (a record archived or restored). */
+export const refreshPreview = StateEffect.define<null>();
+export const refreshed = (u: ViewUpdate) => u.transactions.some((t) => t.effects.some((e) => e.is(refreshPreview)));
+
 export function livePreview(opts: LivePreviewOptions = {}) {
   const plugin = ViewPlugin.fromClass(
     class {
@@ -238,7 +248,7 @@ export function livePreview(opts: LivePreviewOptions = {}) {
         ({ decorations: this.decorations, atomic: this.atomic } = build(view, opts));
       }
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged || u.selectionSet || syntaxTree(u.startState) !== syntaxTree(u.state)) ({ decorations: this.decorations, atomic: this.atomic } = build(u.view, opts));
+        if (u.docChanged || u.viewportChanged || u.selectionSet || syntaxTree(u.startState) !== syntaxTree(u.state) || refreshed(u)) ({ decorations: this.decorations, atomic: this.atomic } = build(u.view, opts));
       }
     },
     {

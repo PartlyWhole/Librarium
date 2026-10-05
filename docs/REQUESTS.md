@@ -75,6 +75,37 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-063 · An archived capture shows as source, not as the capture
+> "Archiving a capture should not render the capture (if the user fails to remove the source
+> code/capture, then it just remains as source code…)"
+
+- **Changed:** a placed capture whose capture is archived (or no longer in the library) shows
+  as its source, `![[words]]` (the ID stays hidden), with a tooltip saying why. Restoring it
+  (Undo, or from the archive) draws it again at once, in open notes too. The same holds for
+  images placed in notes. The delete dialog's "Leave in place" says so.
+- **Use:** nothing to do.
+- **Code:** `embedShown` in `src/features/captures/embeds.ts`; `embedShown`,
+  `refreshPreview` and `.cm-embed-unshown` in `src/editor/livepreview.ts`; `EditorContribution`
+  in `src/editor/editor.ts`.
+- **Decision:** 0059 amended (and 0047).
+- **Tested:** Vitest (`tests/captures.test.ts`: archived shows the source with the ID hidden,
+  restored draws it again; this replaces the "In the archive" check on purpose). Preview: a
+  capture left in place in an indented quote, then Undo from the toast.
+- **Left:** nothing.
+
+### R-062 · No archiving several captures at once
+> "Do not allow archiving several captures at once until it is a feature that is requested."
+
+- **Changed:** the Archive action no longer applies to captures, so selecting several can't
+  archive them; a capture is deleted only by its own Delete, one at a time, which asks about
+  the notes using it.
+- **Use:** Delete on a capture (page, panel, Library menu, Captures page, popover).
+- **Code:** `src/features/archive/index.ts` (the archive action), `archiveCapture` in
+  `src/features/captures/index.ts` (through `shell.archiver`, with its own Undo).
+- **Decision:** 0059 (consequences).
+- **Tested:** Vitest (`tests/captures.test.ts`: no Archive for one or several captures).
+- **Left:** captures archived with a folder (0057) still skip the dialog.
+
 ### R-061 · Deleting a used capture: choose what happens to each place
 > "When deleting a capture, I want the user to have to edit/confirm how to handle each
 > reference being made to the capture. Make sure the UI/UX is good here"

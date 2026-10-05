@@ -44,6 +44,8 @@ export interface EditorContribution {
   id: string;
   /** Embeds drawn by this extension (the editor then leaves them alone). */
   handlesEmbeds?: boolean;
+  /** Whether it can draw this embed now; if not, the embed shows as its source. */
+  embedShown?: (id: string) => boolean;
   extension(ctx: EditorContext): Extension;
 }
 
@@ -102,7 +104,7 @@ export function createEditor(o: EditorOptions): EditorView {
     markdownSupport(),
     codeHighlighting,
     ...folding,
-    livePreview({ titleOf: o.titleOf, embedsHandled: contributions.some((c) => c.handlesEmbeds) }),
+    livePreview({ titleOf: o.titleOf, embedsHandled: contributions.some((c) => c.handlesEmbeds), embedShown: contributions.find((c) => c.handlesEmbeds)?.embedShown }),
     linkCompletion(o.targets),
     clipboard,
     keymap.of([...formatKeymap, ...clipboardKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, ...listKeymap, indentWithTab]),

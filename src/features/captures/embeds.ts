@@ -1,11 +1,14 @@
 /**
  * The editor extension for captures placed in writing: `![[label|id]]` shows as the quotation
- * with its citation, except on the line being edited.
+ * with its citation, except on the line being edited. A record that can't be shown (archived,
+ * or gone) is left to the live preview, which shows its source (0059).
  */
 import { RangeSetBuilder, type EditorState } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 import { parseLinks } from "../../editor/links";
+import { refreshPreview, refreshed } from "../../editor/livepreview";
+import { effect } from "../../kit/signal";
 import type { ShellApi } from "../../shell/api";
 
 class EmbedWidget extends WidgetType {
@@ -34,6 +37,12 @@ class EmbedWidget extends WidgetType {
   }
 }
 
+/** Whether an embed's record can be drawn: it exists, has a renderer and isn't archived. */
+export function embedShown(shell: ShellApi, id: string): boolean {
+  const r = shell.records.get(id);
+  return !!r && !!shell.embeds.get(r.kind) && r.fields["archive.at"] == null;
+}
+
 function build(view: EditorView, shell: ShellApi): DecorationSet {
   const st: EditorState = view.state;
   const active = new Set<number>();
@@ -45,6 +54,7 @@ function build(view: EditorView, shell: ShellApi): DecorationSet {
       if (!l.embed || !l.id || l.from < from - 2 || l.from >= to) continue;
       const line = st.doc.lineAt(l.from);
       if (active.has(line.number)) continue;
+      if (!embedShown(shell, l.id)) continue;
       const r = shell.records.get(l.id);
       const whole = line.text.trim() === text.slice(l.from, l.to).trim();
       b.add(l.from, l.to, Decoration.replace({ widget: new EmbedWidget(shell, l.id, l.label, r?.version ?? ""), block: false, inclusive: false, ...(whole ? {} : {}) }));
@@ -57,11 +67,22 @@ export function embedExtension(shell: ShellApi) {
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
+      stop: () => void;
       constructor(view: EditorView) {
         this.decorations = build(view, shell);
+        // Records archived, restored or changed: draw again (later, never while updating).
+        let first = true;
+        this.stop = effect(() => {
+          shell.records.list();
+          if (first) return void (first = false);
+          setTimeout(() => view.dom.isConnected && view.dispatch({ effects: refreshPreview.of(null) }));
+        });
       }
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged || u.selectionSet) this.decorations = build(u.view, shell);
+        if (u.docChanged || u.viewportChanged || u.selectionSet || refreshed(u)) this.decorations = build(u.view, shell);
+      }
+      destroy() {
+        this.stop();
       }
     },
     { decorations: (v) => v.decorations },

@@ -36,7 +36,8 @@ and to decide, for each place, what happens when it is deleted, with good UX.
     list position; in a sentence, “quote” (citation). A picture becomes "[A captured picture]".
   - **Remove**: the line goes when nothing else is on it (and one blank line, if it stood
     between two); in a sentence, it and one space go.
-  - **Leave in place**: unchanged; it shows "In the archive" until the capture is restored.
+  - **Leave in place**: unchanged; it shows as its source, `![[words]]` (ID hidden), until the
+    capture is restored (amended 2026-10-05, R-063: an archived capture is never drawn).
   Each choice says what the place will become. "For every place" sets all at once. The button
   says how many notes change. Read-only files are left as they are.
 - On Delete each note is read again; one whose references changed in between is left (with a
@@ -49,6 +50,11 @@ and to decide, for each place, what happens when it is deleted, with good UX.
 
 ## Consequences
 
-- Several captures deleted at once through the generic Archive action (multi-select) skip the
-  dialog, as do captures archived with a folder (0057); their places show "In the archive".
+- Captures are not archived several at once (R-062): the generic Archive action doesn't apply
+  to captures, so a multi-selection can't archive them; each goes through its own Delete. To
+  be revisited if the user asks for it.
+- Captures archived with a folder (0057) still skip the dialog; their places show as source.
+- An archived or missing record placed with `![[…]]` (a capture, or an image) shows as its
+  source, `![[words]]`, ID hidden (`embedShown`, the live preview's `cm-embed-unshown`), and is
+  drawn again as soon as it is restored (`refreshPreview`).
 - Deleting for good from the archive does not ask again.

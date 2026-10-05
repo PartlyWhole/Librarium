@@ -9,6 +9,7 @@ import { captures } from "../src/features/captures";
 import { archive } from "../src/features/archive";
 import { READER_TOOLS, type ReaderTool } from "../src/shell/slots";
 import type { EditedPart, EditPart, Mark, ReaderView } from "../src/reader/host";
+import type { RecordInfo } from "../src/generated/RecordInfo";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let last: Shell | null = null;
@@ -394,7 +395,13 @@ describe("editing and deleting captures", () => {
     await wait(60);
     const view = EditorView.findFromDOM(document.querySelector(".cm-editor") as HTMLElement)!;
     view.dispatch({ selection: { anchor: view.state.doc.length } });
-    expect(view.contentDOM.querySelector(".embed .badge")?.textContent).toBe("In the archive");
+    // Archived, it isn't drawn: its source shows, the ID hidden (0059).
+    expect(view.contentDOM.querySelector(".embed")).toBeNull();
+    expect(view.contentDOM.querySelector(".cm-embed-unshown")?.textContent).toBe("![[It avoids shock and…]]");
+    // Restored, it is drawn again.
+    await shell.undo.undoLast();
+    await wait(80);
+    expect(view.contentDOM.querySelector(".embed")).not.toBeNull();
   });
 });
 
@@ -800,7 +807,7 @@ describe("a capture used in notes (0059)", () => {
     };
     pick(rows[1]!, "remove");
     pick(rows[2]!, "leave");
-    expect(rows[2]!.querySelector(".ref-after")?.textContent).toContain("In the archive");
+    expect(rows[2]!.querySelector(".ref-after")?.textContent).toContain("shown as its source");
     expect(go.textContent).toBe("Delete and update 1 note");
     go.click();
     await wait(120);
@@ -827,5 +834,14 @@ describe("a capture used in notes (0059)", () => {
     expect(shell.records.get(cap.id)?.fields["archive.at"]).toBeFalsy();
     expect(mock.state.records.get(one.id)!.body).toBe(before);
     expect(shell.router.current()).toMatchObject({ page: "capture", params: { id: cap.id } });
+  });
+
+  it("can't be archived several at once (only by its own Delete, one at a time)", async () => {
+    const { shell, cap, src } = await used();
+    const other = seed("capture", "Another", "", { "captures.source": src.id, "captures.quote": "Another.", "captures.parts": 1 });
+    await shell.records.load();
+    const labels = (rs: RecordInfo[]) => shell.recordActionsFor(rs).map((a) => a.label);
+    expect(labels([shell.records.get(cap.id)!, shell.records.get(other.id)!]).some((l) => /Archive/.test(l))).toBe(false);
+    expect(labels([shell.records.get(cap.id)!]).some((l) => /Archive/.test(l))).toBe(false);
   });
 });
