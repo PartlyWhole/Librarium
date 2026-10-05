@@ -565,6 +565,113 @@ export function captures(shell: ShellApi): void {
   shell.editorExtensions.add("captures", "capture-embeds", { id: "capture-embeds", handlesEmbeds: true, extension: () => embedExtension(shell) });
 
   // ---- the capture page ---------------------------------------------------------------
+  // ---- all captures: a page to look through them --------------------------------------
+  const groupPref = shell.prefs.pref<"source" | "newest">("captures.group", "source");
+  const showPref = shell.prefs.pref<"all" | "passages" | "pictures">("captures.show", "all");
+  shell.pages.add("captures", "captures", {
+    id: "captures",
+    title: "Captures",
+    icon: Quote,
+    ribbon: 2.5,
+    keys: "Mod+Shift+K",
+    render(host, _params, ctx) {
+      ctx.setTitle("Captures");
+      const query = signal("");
+      const search = h("input", { class: "search-input captures-search", type: "search", placeholder: "Search captures", "aria-label": "Search captures", spellcheck: false }) as HTMLInputElement;
+      let t: ReturnType<typeof setTimeout> | undefined;
+      search.addEventListener("input", () => {
+        clearTimeout(t);
+        t = setTimeout(() => query.set(search.value), 120);
+      });
+      const seg = <T extends string>(label: string, pref: { (): T; set(v: T): void }, options: [T, string][]) =>
+        h("div", { class: "seg small-seg", role: "radiogroup", "aria-label": label }, options.map(([v, text]) => {
+          const b = h("button", { type: "button", role: "radio", "data-value": v, onclick: () => pref.set(v) }, text);
+          return b;
+        }));
+      const groupSeg = seg("Arrange", groupPref, [["source", "By source"], ["newest", "Newest first"]]);
+      const showSeg = seg("Show", showPref, [["all", "All"], ["passages", "Passages"], ["pictures", "Pictures"]]);
+      const count = h("span", { class: "muted small" });
+      const list = h("div", { class: "captures-page-list" });
+      replace(host, h("div", { class: "captures-page" },
+        h("div", { class: "captures-page-head" }, h("h1", { class: "page-title" }, "Captures"), count),
+        h("div", { class: "captures-page-tools" }, search, groupSeg, showSeg),
+        list));
+      const pictureOf = (c: RecordInfo) => !String(c.fields[F.quote] ?? "").trim();
+      const thumbs = new Map<string, string>();
+      const card = (c: RecordInfo, withSource: boolean): HTMLElement => {
+        const quote = flowQuote(String(c.fields[F.quote] ?? ""));
+        const srcId = String(c.fields[F.source] ?? "");
+        const src = shell.records.get(srcId);
+        const named = quote && !quote.startsWith(c.title.replace(/…$/, ""));
+        let body: HTMLElement;
+        if (pictureOf(c)) {
+          const img = h("img", { class: "capture-thumb", alt: c.title || "A captured picture" }) as HTMLImageElement;
+          const known = thumbs.get(c.id);
+          if (known) img.src = known;
+          else void call<string>("captures.region", { id: c.id, n: 1 }).then((d) => (thumbs.set(c.id, d), (img.src = d)), () => {});
+          body = img;
+        } else body = h("blockquote", { class: "capture-card-quote" }, quote);
+        const when = c.created ? new Date(c.created).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
+        const meta = [named ? c.title : null, withSource ? src?.title : null, (c.fields[F.locator] as string | undefined) ?? null, when].filter(Boolean).join(" · ");
+        const el = h("article", { class: "capture-card", tabindex: "0", "aria-label": c.title || "Capture" },
+          h("div", { class: "capture-card-body" }, body, h("div", { class: "capture-card-meta muted small" }, meta)),
+          h("div", { class: "row tight capture-tools" },
+            iconButton(LocateFixed, "Show in the source", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(srcId, where(a), { again: true }))),
+            iconButton(Pencil, "Edit selection", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(srcId, { ...where(a), edit: c.id }, { again: true }))),
+            iconButton(Copy, "Copy embed", () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note."))),
+            iconButton(Trash2, "Delete", () => void deleteCapture(c), true)));
+        el.addEventListener("click", (e) => {
+          if ((e.target as Element).closest("button")) return;
+          shell.openRecord(c.id);
+        });
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && e.target === el) shell.openRecord(c.id);
+        });
+        el.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          captureMenu(c, { x: e.clientX, y: e.clientY });
+        });
+        return el;
+      };
+      const stop = effect(() => {
+        const all = shell.records.list(KIND).filter((c) => !isArchived(c));
+        const q = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const group = groupPref();
+        const show = showPref();
+        for (const b of groupSeg.querySelectorAll<HTMLElement>("button")) b.setAttribute("aria-checked", String(b.dataset.value === group));
+        for (const b of showSeg.querySelectorAll<HTMLElement>("button")) b.setAttribute("aria-checked", String(b.dataset.value === show));
+        const hay = (c: RecordInfo) => [c.title, c.fields[F.quote], c.fields[F.locator], shell.records.get(String(c.fields[F.source] ?? ""))?.title].filter(Boolean).join(" ").toLowerCase();
+        const shown = all
+          .filter((c) => (show === "all" ? true : show === "pictures" ? pictureOf(c) : !pictureOf(c)))
+          .filter((c) => q.every((w) => hay(c).includes(w)))
+          .sort((a, b) => (b.created ?? "").localeCompare(a.created ?? ""));
+        count.textContent = shown.length === all.length ? `${all.length} ${all.length === 1 ? "capture" : "captures"}` : `${shown.length} of ${all.length}`;
+        if (!all.length) return replace(list, h("p", { class: "empty" }, "No captures yet. In a book, article or PDF, select a passage (or drag a region) and choose Capture."));
+        if (!shown.length) return replace(list, h("p", { class: "empty" }, "No captures match."));
+        if (group === "newest") return replace(list, h("div", { class: "capture-cards" }, shown.map((c) => card(c, true))));
+        // By source: the sources with the latest capture first; a source's captures in order.
+        const bySrc = new Map<string, RecordInfo[]>();
+        for (const c of shown) {
+          const k = String(c.fields[F.source] ?? "");
+          bySrc.set(k, [...(bySrc.get(k) ?? []), c]);
+        }
+        replace(list, [...bySrc.entries()].map(([srcId, cs]) => {
+          const src = shell.records.get(srcId);
+          return h("section", { class: "capture-group", "aria-label": src?.title ?? "A source" },
+            h("h2", { class: "capture-group-head" },
+              h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), src && shell.openRecord(srcId)) }, src?.title ?? "A source no longer in the library"),
+              h("span", { class: "muted small" }, ` ${cs.length}`)),
+            h("div", { class: "capture-cards" }, cs.sort((a, b) => (a.created ?? "").localeCompare(b.created ?? "")).map((c) => card(c, false))));
+        }));
+      });
+      search.focus();
+      return () => {
+        clearTimeout(t);
+        stop();
+      };
+    },
+  });
+
   shell.pages.add("captures", "capture", {
     id: "capture",
     title: "Capture",

@@ -620,3 +620,53 @@ describe("renaming a capture while editing it", () => {
     t.dispose();
   });
 });
+
+describe("the Captures page", () => {
+  it("is on the ribbon (⇧⌘K), groups captures by source, searches, filters pictures, and opens one", async () => {
+    const { shell, src } = await boot(true);
+    const other = seed("item", "Gravity and Grace", "", { "library.format": "epub" });
+    const a = seed("capture", "Technique integrates everything.", "", { "captures.source": src.id, "captures.quote": "Technique integrates everything.", "captures.locator": "p. 1", "captures.parts": 1 });
+    const b = seed("capture", "On attention", "", { "captures.source": other.id, "captures.quote": "Attention is the rarest and purest form of generosity.", "captures.parts": 1 });
+    const c = seed("capture", "A region of The Technological Society", "", { "captures.source": src.id, "captures.quote": "", "captures.parts": 1 });
+    await shell.records.load();
+    expect(document.querySelector('.ribbon [data-page="captures"], [data-page="captures"]')).not.toBeNull();
+    expect(shell.actions.get("go.captures")?.keys).toEqual(["Mod+Shift+K"]);
+    shell.router.go("captures");
+    await wait(80);
+    const groups = () => [...document.querySelectorAll(".capture-group")].map((g) => [g.querySelector(".capture-group-head .list-link")?.textContent, g.querySelectorAll(".capture-card").length]);
+    expect(groups()).toEqual(expect.arrayContaining([["The Technological Society", 2], ["Gravity and Grace", 1]]));
+    // A given name shows with its quote; a picture capture shows its picture.
+    const bCard = [...document.querySelectorAll(".capture-card")].find((x) => x.querySelector(".capture-card-quote")?.textContent?.startsWith("Attention"))!;
+    expect(bCard.querySelector(".capture-card-meta")?.textContent).toContain("On attention");
+    expect(document.querySelectorAll(".capture-card img.capture-thumb").length).toBe(1);
+    expect([...bCard.querySelectorAll("button")].map((x) => x.getAttribute("aria-label"))).toEqual(["Show in the source", "Edit selection", "Copy embed", "Delete"]);
+    // Search: by quote, name or source.
+    const search = document.querySelector(".captures-search") as HTMLInputElement;
+    search.value = "generosity";
+    search.dispatchEvent(new Event("input"));
+    await wait(200);
+    expect(document.querySelectorAll(".capture-card").length).toBe(1);
+    search.value = "technological";
+    search.dispatchEvent(new Event("input"));
+    await wait(200);
+    expect(document.querySelectorAll(".capture-card").length).toBe(2);
+    search.value = "";
+    search.dispatchEvent(new Event("input"));
+    await wait(200);
+    // Pictures only; newest first (kept as a preference).
+    (document.querySelector('[role=radio][data-value="pictures"]') as HTMLButtonElement).click();
+    await wait(30);
+    expect(document.querySelectorAll(".capture-card").length).toBe(1);
+    (document.querySelector('[role=radio][data-value="all"]') as HTMLButtonElement).click();
+    (document.querySelector('[role=radio][data-value="newest"]') as HTMLButtonElement).click();
+    await wait(30);
+    expect(document.querySelectorAll(".capture-group").length).toBe(0);
+    expect(document.querySelectorAll(".capture-card").length).toBe(3);
+    expect(shell.prefs.get("captures.group")).toBe("newest");
+    // A click opens the capture.
+    (document.querySelector(".capture-card .capture-card-body") as HTMLElement).click();
+    await wait(60);
+    expect(shell.router.current().page).toBe("capture");
+    expect([a.id, b.id, c.id]).toContain(shell.router.current().params.id);
+  });
+});

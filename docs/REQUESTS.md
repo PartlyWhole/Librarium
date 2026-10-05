@@ -50,10 +50,6 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## In progress
 
-### R-040 · A page for captures
-> "I want a page that contains, organizes and helps me look for captures. Page icon button
-> should be on ribbon"
-
 ### R-042 · Images in notes, kept as attachments in the Library
 > "I want image support for notes (images uploaded should be Library items -- perhaps to keep
 > things organized, there should be an attachments section of the library that hold things

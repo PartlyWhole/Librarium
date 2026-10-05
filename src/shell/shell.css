@@ -751,3 +751,22 @@ body.dragging-handle, body.dragging-handle * { user-select: none !important; -we
 .edit-part-img { flex: 1; max-width: 100%; max-height: 120px; object-fit: contain; object-position: left; border-radius: var(--r1); }
 .edit-title { width: 100%; box-sizing: border-box; font: inherit; font-weight: 600; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: var(--r1); background: var(--bg); color: var(--ink); }
 .edit-title:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--selection); }
+
+/* The Captures page. */
+.captures-page { max-width: 880px; }
+.captures-page-head { display: flex; align-items: baseline; gap: 12px; }
+.captures-page-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0 16px; }
+.captures-search { flex: 1; min-width: 200px; }
+.small-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r1); background: var(--bg-alt); }
+.small-seg button { font: inherit; font-size: var(--small); padding: 3px 10px; border: 0; border-radius: var(--r1); background: transparent; color: var(--ink); cursor: pointer; }
+.small-seg button[aria-checked="true"] { background: var(--bg); box-shadow: 0 1px 2px rgb(0 0 0 / 15%); font-weight: 600; }
+.capture-group { margin: 0 0 22px; }
+.capture-group-head { font-size: 15px; margin: 0 0 8px; }
+.capture-cards { display: grid; gap: 8px; }
+.capture-card { position: relative; display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r2, 8px); background: var(--bg); cursor: default; }
+.capture-card:hover, .capture-card:focus-visible { border-color: var(--border-strong); background: var(--hover); outline: none; }
+.capture-card-body { flex: 1; min-width: 0; }
+.capture-card-quote { margin: 0 0 6px; padding-left: 12px; border-left: 3px solid var(--accent); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.capture-thumb { display: block; max-width: 100%; max-height: 160px; border-radius: var(--r1); margin: 0 0 6px; }
+.capture-card .capture-tools { opacity: 0; transition: opacity 0.12s; }
+.capture-card:hover .capture-tools, .capture-card:focus-within .capture-tools { opacity: 1; }
