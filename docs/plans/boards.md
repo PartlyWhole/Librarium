@@ -58,7 +58,7 @@ dependency React 17–19). There is no non-React build.
 *Fact:* each top folder holds one kind, and the sidebar and Files pages show one kind per
 section (notes in `notes/`, items in `items/`).
 
-- **A (recommended): a new kind, `board`, kept in the Notes folders.** Boards sit beside
+- **A (recommended; chosen by the user on 2026-10-05): a new kind, `board`, kept in the Notes folders.** Boards sit beside
   notes in the same folders (`notes/Thinkers/…`), with their own icon. This needs a small
   kernel change: a folder space may hold several kinds (notes and boards) that share its
   folders and arrangement.

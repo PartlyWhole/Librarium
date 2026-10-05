@@ -49,11 +49,8 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
   - **A (recommended):** React only inside the boards feature, loaded only when a board opens.
   - **B:** Excalidraw in its own frame.
   - **C:** no Excalidraw; build a smaller whiteboard ourselves.
-- **D2. Where boards live.**
-  - **A (recommended):** a `board` kind in the Notes folders, beside notes. It needs a small
-    kernel change.
-  - **B:** its own "Boards" section.
-  - **C:** a note with a drawing.
+- **D2. Where boards live: decided (2026-10-05):** beside notes, as a `board` kind in the
+  Notes folders (A).
 - **D3. File format.**
   - **A (recommended):** `<id>-slug.md`, with a readable body the app writes (texts, links,
     captures), plus `<id>.excalidraw` (plain Excalidraw JSON) beside it.
