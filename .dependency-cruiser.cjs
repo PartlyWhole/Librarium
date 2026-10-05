@@ -27,6 +27,13 @@ module.exports = {
       to: { path: "^src/features/", pathNot: "^src/features/$1/" },
     },
     {
+      name: "react-only-in-boards",
+      comment: "The interface uses no UI framework (BRIEF §3); React and Excalidraw are allowed only inside the boards feature, which loads them on demand (decision 0061).",
+      severity: "error",
+      from: { pathNot: "^src/features/boards/" },
+      to: { path: "(^|/)node_modules/(react|react-dom|@excalidraw/[^/]+)/|^(react|react-dom|@excalidraw/excalidraw)($|/)" },
+    },
+    {
       name: "generated-is-leaf",
       comment: "Generated types import only generated types.",
       severity: "error",

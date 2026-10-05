@@ -44,11 +44,8 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Waiting for you
 
-### Boards (R-057): three decisions before building — details in `docs/plans/boards.md` §2
-- **D1. React for Excalidraw.** The brief says "no UI framework", and Excalidraw is React-only.
-  - **A (recommended):** React only inside the boards feature, loaded only when a board opens.
-  - **B:** Excalidraw in its own frame.
-  - **C:** no Excalidraw; build a smaller whiteboard ourselves.
+### Boards (R-057): one decision left before phase 1 — details in `docs/plans/boards.md` §2
+- **D1. React for Excalidraw: decided (2026-10-05):** React for boards only (A), decision 0061.
 - **D2. Where boards live: decided (2026-10-05):** beside notes, as a `board` kind in the
   Notes folders (A).
 - **D3. File format.**
@@ -68,8 +65,23 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 - **Plan:** `docs/plans/boards.md`: what it is, how saving, links, captures and keys work,
   seven phases with acceptance checks, risks, and what's left out.
-- **Next:** the three decisions under Waiting for you, then phase 0 (a spike that decides
-  go/no-go).
+- **Decided:** React for boards only (D1, decision 0061); boards beside notes (D2).
+- **Phase 0 (the test run) passed** in WebKit with the app's security policy:
+  - first open 219 ms in a production build;
+  - nothing goes to the network;
+  - a capture card of our own shows on the board;
+  - ⌘Z undoes one step;
+  - the dark theme applies;
+  - drawings save and reload;
+  - SVG pictures work;
+  - `[[` typed on the board can be seen.
+  - Results are in `docs/plans/boards.md` §8.
+- **Done with it:**
+  - React, ReactDOM and Excalidraw added, pinned, and allowed only in boards (a code rule,
+    tested).
+  - Fonts served locally, and Excalidraw's CDN fallback pointed at them.
+  - Nested packages patched (`npm audit`: 0).
+- **Next:** D3 (file format) under Waiting for you, then phase 1 (the kind and its storage).
 
 ---
 

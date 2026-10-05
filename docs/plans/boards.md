@@ -5,7 +5,8 @@ Request R-057:
 > etc. Basically a note but can draw/write on it like a whiteboard. This is going to be a big
 > feature because there are a lot of tools already with excalidraw. Please plan carefully"
 
-Status: **planned; three decisions wait for the user** (below). Nothing is built yet.
+Status: **D1 and D2 decided (React for boards only; beside notes). Phase 0 passed. D3 (file
+format) waits for the user.** See §8 for phase 0's results.
 
 In this plan, *fact* means checked (against the code, the brief or the Excalidraw package
 0.18.1, unpacked and read). *Proposal* means my recommendation. *Assumption* means not yet
@@ -39,7 +40,7 @@ picture.
 *Fact:* `@excalidraw/excalidraw` 0.18.1 (released 2026-10-01) is a React component (peer
 dependency React 17–19). There is no non-React build.
 
-- **A (recommended): Excalidraw with React, kept inside the boards feature.** React is
+- **A (recommended; chosen by the user on 2026-10-05, decision 0061): Excalidraw with React, kept inside the boards feature.** React is
   imported only by `src/features/boards/` (a dependency-cruiser rule enforces it). It loads
   only when a board is opened (as the EPUB reader does), so the rest of the app and its
   startup are unchanged. Cost: about 2.8 MB of JavaScript, 145 KB CSS and React (about
@@ -147,8 +148,12 @@ TS    src/features/boards/index.ts        kind look, opener, New board, folder s
   - ⌘Z / ⇧⌘Z: Edit ▸ Undo and Redo (0054) gain a third target, the board. *Fact:*
     Excalidraw has no undo call, so the menu sends it the key itself. *To check in the real
     app:* that the menu's ⌘Z reaches it once, not twice.
-- **Undo history:** Excalidraw's own, per board while it's open. Moving or archiving the board
-  goes through the app's undo (0055), as for any record.
+- **Undo history (fits 0060, undo per place):**
+  - A board is its own place (`record:<id>`). Drawing steps sit in its history as markers,
+    as typing does in a note, interleaved with the steps done on its page (rename, move).
+  - Undoing a drawing marker sends ⌘Z to Excalidraw.
+  - *To check in phase 2:* how to tell when Excalidraw records a step, and keeping its
+    history when the board is left and opened again (Excalidraw keeps it only while open).
 
 ### Links
 
@@ -230,3 +235,29 @@ Tests:
 - Links to a single element inside a board (`[[Board#element]]`): possible later.
 - Editing the board from Obsidian.
 - Handwriting recognition.
+
+## 8. Phase 0 results (2026-10-05)
+
+Run in WebKit with the app's security policy (`target/probe/board.ts`; production build via
+`target/probe/run-prod.mjs`).
+
+| Check | Result |
+|---|---|
+| Excalidraw renders with React, offline | yes |
+| First open, production build | 219 ms (then 109 ms); dev server warm 290–440 ms |
+| Network requests | none |
+| Policy violations | 0, after pointing Excalidraw's CDN font source at the local folder; 230 before (all blocked) |
+| A card of our own DOM in an embed element | shows, at full size (356 × 90) |
+| ⌘Z / ⇧⌘Z sent to Excalidraw | undoes exactly one step; redoes it |
+| Dark theme | applies |
+| Save and reload (`serializeAsJSON` / `restore`) | elements and links kept |
+| SVG picture (for embeds in notes) | works, with text |
+| `[[` typed in Excalidraw's text editor | seen by the app (the editor opens on double-click) |
+| Bundle | about 7.9 MB of JavaScript in all, mostly the text-to-diagram feature (only if used); fonts 13 MB (12 MB Chinese/Japanese, only if used) |
+
+Only the real app can show:
+- the native menu's ⌘Z reaching Excalidraw;
+- drag and drop from Finder and from the sidebar;
+- clicking a link on a shape.
+
+These go to phases 2–4.

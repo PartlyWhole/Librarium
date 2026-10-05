@@ -36,5 +36,8 @@ describe("interface direction", () => {
     expect(v).toContain("rings-do-not-import-features: src/shell/shell.ts -> src/features/notes/index.ts");
     expect(v).toContain("rings-do-not-import-features: src/editor/ed.ts -> src/features/notes/index.ts");
     expect(v).toContain("feature-not-to-feature: src/features/notes/index.ts -> src/features/daily/index.ts");
+    // React and Excalidraw only inside boards.
+    expect(v.some((s) => s.startsWith("react-only-in-boards: src/features/notes/index.ts"))).toBe(true);
+    expect(v.some((s) => s.startsWith("react-only-in-boards: src/features/boards/"))).toBe(false);
   });
 });

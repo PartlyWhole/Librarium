@@ -125,3 +125,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-05 | Indentation is indentation: indented lines are not code, so links and captures indent and still work; Tab inserts a tab. | [0058](docs/decisions/0058-indentation-is-not-code.md) |
 | 2026-10-05 | A capture opens on a click in a note and lists the notes using it; deleting a used one asks, per place, to keep it as text, remove it or leave it, with one Undo. | [0059](docs/decisions/0059-capture-references.md) |
 | 2026-10-05 | Undo per place: each note or capture keeps its own history (typing and its own actions, in order) while the app runs; the sidebar and Library pages share one; ⌘Z acts on what is shown. | [0060](docs/decisions/0060-undo-per-place.md) |
+| 2026-10-05 | React and Excalidraw are used only by boards, loaded on demand, pinned, with fonts served locally and no network. | [0061](docs/decisions/0061-react-for-boards-only.md) |
