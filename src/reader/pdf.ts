@@ -238,6 +238,8 @@ export const pdfEngine: ReaderEngine = {
               },
               onDrag: (r) => ((dragging = true), onChange({ key: p.key, done: false, text: selOf(r) })),
               onDone: (r) => ((dragging = false), onChange({ key: p.key, done: true, text: selOf(r) })),
+              // Dragged to the top or bottom, the document scrolls.
+              edges: { bounds: () => container.getBoundingClientRect(), margin: 28, delay: 0, repeat: 30, nudge: (_dx: number, dy: number) => void (container.scrollTop += dy * 20) },
             }));
           }
         };

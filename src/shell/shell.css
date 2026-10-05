@@ -735,3 +735,5 @@ body.dragging-handle, body.dragging-handle * { user-select: none !important; -we
 .embed-gap { color: var(--muted); font-size: var(--small); margin: 2px 0 6px 14px; }
 .embed .embed-region { display: block; max-width: 100%; max-height: 50vh; margin: 0 0 8px; border-radius: var(--r1); }
 .drag-shield { position: fixed; inset: 0; z-index: 1000; cursor: grabbing; background: transparent; }
+/* Dragging a passage's end into the edge of a book: the arrow there shows the page will turn. */
+.epub-container.armed-next .epub-arrow.next, .epub-container.armed-prev .epub-arrow.prev { opacity: 1; color: var(--accent-text); background: color-mix(in srgb, var(--accent) 16%, transparent); }

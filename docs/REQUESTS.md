@@ -56,6 +56,27 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-037 · Drag a passage's end across EPUB page turns
+> "support dragging across EPUB page turns"
+
+- **Changed:**
+  - While dragging a passage's handle, hold it at the book's left or right edge. The arrow there
+    lights up, the page turns after a moment (and keeps turning while you hold), and the passage
+    carries on onto the new page. Move into the page and let go where it should end.
+  - In scroll view, and in PDFs, saved articles and images, dragging to the top or bottom edge
+    scrolls instead.
+  - A passage can't span two chapters (each chapter is its own document), so turning stops at the
+    chapter's last (or first) page. Add a part in the next chapter for more.
+- **Code:** `src/reader/host.ts` (`rangeEditor` edges), `src/reader/epub/engine.ts`
+  (`dragEdges`), `src/reader/pdf.ts`, `src/reader/image.ts`, `src/shell/shell.css`.
+- **Decision:** a note added to 0049.
+- **Tested:** WebKit checks.
+  - In a book at 100% and 130%: held at the edge, the arrow lights up, the page turns, and the
+    passage carries on from "Paragraph 2." across onto the next page.
+  - In a saved article: dragged to the bottom edge, it scrolls and the passage carries on.
+- **Left:** how the hold-to-turn timing feels needs your trackpad (about half a second, then
+  about one page a second).
+
 ### R-036 · Edit a capture's selection; first-class image captures
 > "Add copy and delete icons to the capture page, but also, I want to be able to edit the
 > selection. In edit mode, I want to be able to drag the boundaries of what's selected, even if
@@ -103,8 +124,7 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
     - a book picture clicked and captured.
   - Screenshots of the handles in the real WebKit view.
   - Still needs your hands: how the handles feel with a trackpad.
-- **Left:** dragging a passage across an EPUB page turn isn't supported yet. Extend it on the
-  next page, or add a part there.
+- **Left:** dragging across EPUB page turns came next (R-037).
 
 ### R-035 · Show doesn't work well at another text size
 > "When font size is different, show doesn't work well"

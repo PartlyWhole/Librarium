@@ -352,6 +352,37 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     const onScheme = () => settings.matchApp && apply(settings);
     media?.addEventListener?.("change", onScheme);
 
+    /**
+     * Dragging a passage's end into the book's left or right edge turns the page (after a moment,
+     * then again while held there), within the chapter: a passage can't span two chapters, each
+     * its own document. In scroll view the edges are the top and bottom, and the page scrolls.
+     */
+    function dragEdges(f: { doc: Document }) {
+      const el = () => f.doc.scrollingElement ?? f.doc.documentElement;
+      return {
+        bounds: () => stage.getBoundingClientRect(),
+        margin: 36,
+        delay: settings.scroll ? 0 : 450,
+        repeat: settings.scroll ? 30 : 900,
+        armed: (dx: number) => {
+          frame.classList.toggle("armed-next", !settings.scroll && dx > 0);
+          frame.classList.toggle("armed-prev", !settings.scroll && dx < 0);
+        },
+        nudge: async (dx: number, dy: number) => {
+          const e = el();
+          if (settings.scroll) {
+            if (dy) e.scrollTop += dy * 24;
+            return;
+          }
+          if (!dx) return;
+          // Not past the chapter's first or last page.
+          if (dx > 0 && e.scrollLeft + e.clientWidth >= e.scrollWidth - 2) return;
+          if (dx < 0 && e.scrollLeft <= 0) return;
+          await new Promise<void>((res) => (dx > 0 ? nav.goRight(false, () => res()) : nav.goLeft(false, () => res())));
+          await new Promise((r) => setTimeout(r, 80));
+        },
+      };
+    }
     // A range in a page: its text, chapter and CFI (as captures store it), and where it ends.
     function selOf(f: { doc: Document; el: HTMLIFrameElement; index: number }, range: Range) {
       const cfi = CFI.joinIndir(book.spine[f.index]!.cfi, CFI.fromRange(range));
@@ -475,6 +506,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
               },
               onDrag: (r) => ((dragging = true), onChange({ key: p.key, done: false, text: selOf(f, r) })),
               onDone: (r) => ((dragging = false), onChange({ key: p.key, done: true, text: selOf(f, r) })),
+              edges: dragEdges(f),
             }));
           }
         };

@@ -112,7 +112,7 @@ export const imageEngine: ReaderEngine = {
             const range = rangeOf(p);
             const l = layer();
             if (!range || !l) continue;
-            editors.push(rangeEditor({ overlay: frame, range, screenRects: (r) => [...r.getClientRects()], caretAt: (x, y) => caretIn(document, l, x, y), onDrag: (r) => onChange({ key: p.key, done: false, text: sel(r) }), onDone: (r) => onChange({ key: p.key, done: true, text: sel(r) }) }));
+            editors.push(rangeEditor({ overlay: frame, range, screenRects: (r) => [...r.getClientRects()], caretAt: (x, y) => caretIn(document, l, x, y), onDrag: (r) => onChange({ key: p.key, done: false, text: sel(r) }), onDone: (r) => onChange({ key: p.key, done: true, text: sel(r) }), edges: { bounds: () => frame.getBoundingClientRect(), margin: 28, delay: 0, repeat: 30, nudge: (_dx: number, dy: number) => void (frame.scrollTop += dy * 20) } }));
           }
         };
         build();

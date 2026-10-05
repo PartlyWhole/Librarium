@@ -51,5 +51,10 @@ as good, and it all had to work in PDFs, saved web articles and EPUBs.
   `captures.update`. WebKit checks drag real handles in a saved article (one very tall PDF
   page), an EPUB at 100% and 130%, and an image's recognised text, resize regions, and capture
   a book picture.
-- A passage can't yet be dragged across an EPUB page turn. Extend it on the next page, or add a
-  part there.
+- Later (R-037), dragging an end into the document's edge moves it, and the end carries on
+  there:
+  - in a book's pages, the page turns after a moment, then again while held there, and the
+    arrow on that side lights up;
+  - in scroll view, PDFs and images, it scrolls.
+  A passage stays within one chapter (each chapter is its own document), so turning stops at the
+  chapter's first and last page.

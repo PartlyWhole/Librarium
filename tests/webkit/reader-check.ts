@@ -528,6 +528,38 @@ async function run() {
   const lastRegion = regionEdits.filter((e) => e.done).at(-1)?.region;
   results.editPdfRegion = lastRegion ? { grew: lastRegion.w > 20 && lastRegion.h > 1, png: (lastRegion.png ?? "").startsWith("data:image/png") && (lastRegion.png ?? "").length > 200 } : null;
   rEditor?.stop();
+  // Dragged to the bottom edge, the document scrolls and the passage carries on.
+  {
+    const pc = stage.querySelector(".pdf-container") as HTMLElement;
+    const first = [...stage.querySelectorAll(".textLayer span")].find((x) => /^Line\s$/.test(x.textContent ?? "") && x.getBoundingClientRect().top > pc.getBoundingClientRect().top + 40) as HTMLElement | undefined;
+    const scrollEdits: { done: boolean; text?: { text: string } }[] = [];
+    if (first?.firstChild) {
+      const r = document.createRange();
+      r.setStart(first.firstChild, 0);
+      r.setEnd(first.firstChild, 4);
+      getSelection()!.removeAllRanges();
+      getSelection()!.addRange(r);
+      const sel = article.view.selection?.();
+      getSelection()!.removeAllRanges();
+      const ed = article.view.editParts?.([{ key: "s", boxes: sel?.boxes ?? [], page: sel?.page }], (e) => scrollEdits.push(e as never));
+      await new Promise((r2) => setTimeout(r2, 100));
+      const endH = stage.querySelector(".range-handle.end") as HTMLElement | null;
+      const top0 = pc.scrollTop;
+      if (endH) {
+        const b = endH.getBoundingClientRect();
+        const cb = pc.getBoundingClientRect();
+        const pt = (type: string, x: number, y: number, target: EventTarget = window) => target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, button: 0, isPrimary: true }));
+        pt("pointerdown", b.left + 1, b.top + b.height / 2, endH);
+        pt("pointermove", b.left + 100, cb.bottom - 6);
+        await new Promise((r2) => setTimeout(r2, 600));
+        pt("pointerup", b.left + 100, cb.bottom - 6);
+        await new Promise((r2) => setTimeout(r2, 200));
+      }
+      const last = scrollEdits.filter((e) => e.done).at(-1)?.text?.text ?? "";
+      results.editPdfScroll = { scrolled: pc.scrollTop - top0, length: last.length, starts: last.slice(0, 5) };
+      ed?.stop();
+    }
+  }
   article.view.destroy();
 
   step("edit epub");
@@ -559,6 +591,51 @@ async function run() {
       if (endH && eb) await dragTo(endH, eb.left + 200, eb.top + eb.height * 1.6);
       const last = bookEdits.filter((e) => e.done).at(-1)?.text;
       results[`editEpub${size === 1 ? "" : "Zoomed"}`] = { before: words, after: last?.text ?? null, handles: !!eb && !!sb && sb.left < (eb?.left ?? 0) + 1000, cfiChanged: !!(last as { cfi?: string } | undefined)?.cfi && (last as { cfi?: string }).cfi !== sel?.cfi };
+      ed?.stop();
+    }
+    book.view.destroy();
+  }
+
+  // Dragging a passage's end into the edge turns the page, and the passage carries on there.
+  step("edit epub across pages");
+  for (const size of [1, 1.3]) {
+    const sizedStore = new Map<string, unknown>([["reader.epub", { fontSize: size }]]);
+    const book = await open(epubEngine, "long.epub", "epub", undefined, { get: (k) => sizedStore.get(k), set: (k, v) => sizedStore.set(k, v) });
+    await new Promise((r) => setTimeout(r, 1200));
+    const fr = [...stage.querySelectorAll("iframe")].find((f) => (f as HTMLIFrameElement).style.visibility !== "hidden" && (f as HTMLIFrameElement).contentDocument?.querySelector("p")) as HTMLIFrameElement | undefined;
+    const d = fr?.contentDocument;
+    const t = d?.querySelectorAll("p")[1]?.firstChild as Text | undefined;
+    const turnEdits: { done: boolean; text?: { text: string; cfi?: string } }[] = [];
+    const before = book.view.position();
+    if (t && d) {
+      const r = d.createRange();
+      r.setStart(t, 0);
+      r.setEnd(t, 12);
+      d.getSelection()!.removeAllRanges();
+      d.getSelection()!.addRange(r);
+      const sel = book.view.selection?.();
+      book.view.clearSelection?.();
+      const ed = book.view.editParts?.([{ key: "e", cfi: sel?.cfi ?? null }], (e) => turnEdits.push(e as never));
+      await new Promise((r2) => setTimeout(r2, 100));
+      const endH = stage.querySelector(".range-handle.end") as HTMLElement | null;
+      if (endH) {
+        const b = endH.getBoundingClientRect();
+        const sb = stage.querySelector(".epub-stage")!.getBoundingClientRect();
+        const x0 = b.left + b.width / 2;
+        const y0 = b.top + b.height / 2;
+        const pt = (type: string, x: number, y: number, target: EventTarget = window) => target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, button: 0, isPrimary: true }));
+        pt("pointerdown", x0, y0, endH);
+        pt("pointermove", (x0 + sb.right) / 2, y0);
+        pt("pointermove", sb.right - 8, y0);
+        results[`epubTurnArmed${size === 1 ? "" : "Zoomed"}`] = stage.querySelector(".epub-container")?.classList.contains("armed-next") ?? false;
+        await new Promise((r2) => setTimeout(r2, 1000));
+        pt("pointermove", sb.left + sb.width / 2, sb.top + sb.height / 2);
+        await new Promise((r2) => setTimeout(r2, 50));
+        pt("pointerup", sb.left + sb.width / 2, sb.top + sb.height / 2);
+        await new Promise((r2) => setTimeout(r2, 300));
+      }
+      const last = turnEdits.filter((e) => e.done).at(-1)?.text;
+      results[`epubDragTurn${size === 1 ? "" : "Zoomed"}`] = { before, after: book.view.position(), start: last?.text.slice(0, 12) ?? null, length: last?.text.length ?? 0, armedOff: !stage.querySelector(".epub-container.armed-next") };
       ed?.stop();
     }
     book.view.destroy();

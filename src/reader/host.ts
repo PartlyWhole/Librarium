@@ -504,6 +504,12 @@ export interface RangeEditorOptions {
   caretAt(x: number, y: number): { node: Node; offset: number } | null;
   onDrag(r: Range): void;
   onDone(r: Range): void;
+  /**
+   * Dragging into an edge moves the document: a page turn (after `delay`, then every `repeat`
+   * while held there) or a scroll. `nudge` gets the direction (-1, 0 or 1 on each axis) and
+   * resolves when the document has moved; the dragged end then follows the pointer again.
+   */
+  edges?: { bounds(): DOMRect; margin?: number; delay: number; repeat: number; nudge(dx: number, dy: number): Promise<unknown> | unknown; armed?(dx: number, dy: number): void };
 }
 
 /**
@@ -523,9 +529,36 @@ export function rangeEditor(o: RangeEditorOptions): { place(): void; destroy(): 
     o.overlay.appendChild(el);
     let grab = { dx: 0, dy: 0 };
     let unshield = () => {};
-    // The drag is followed on the window, wherever the pointer goes.
-    const move = (e: PointerEvent) => {
-      const c = underShield(() => o.caretAt(e.clientX + grab.dx, e.clientY + grab.dy));
+    let last = { x: 0, y: 0 };
+    // Held at an edge: the document moves (a page turns, or it scrolls), and the end follows.
+    let edgeTimer: ReturnType<typeof setTimeout> | undefined;
+    let edgeDir = { dx: 0, dy: 0 };
+    let moving = false;
+    const edgeOf = (x: number, y: number) => {
+      if (!o.edges) return { dx: 0, dy: 0 };
+      const b = o.edges.bounds();
+      const m = o.edges.margin ?? 32;
+      return { dx: x < b.left + m ? -1 : x > b.right - m ? 1 : 0, dy: y < b.top + m ? -1 : y > b.bottom - m ? 1 : 0 };
+    };
+    const stopEdge = () => {
+      clearTimeout(edgeTimer);
+      edgeTimer = undefined;
+      edgeDir = { dx: 0, dy: 0 };
+      o.edges?.armed?.(0, 0);
+    };
+    const edgeTick = async () => {
+      if (!o.edges || moving || (!edgeDir.dx && !edgeDir.dy)) return;
+      moving = true;
+      try {
+        await o.edges.nudge(edgeDir.dx, edgeDir.dy);
+      } finally {
+        moving = false;
+      }
+      follow(last.x, last.y);
+      if (edgeDir.dx || edgeDir.dy) edgeTimer = setTimeout(() => void edgeTick(), o.edges.repeat);
+    };
+    const follow = (x: number, y: number) => {
+      const c = underShield(() => o.caretAt(x + grab.dx, y + grab.dy));
       if (!c) return;
       const offset = snapCaret(c.node, c.offset, end);
       const probe = range.cloneRange();
@@ -542,7 +575,22 @@ export function rangeEditor(o: RangeEditorOptions): { place(): void; destroy(): 
       place();
       o.onDrag(range);
     };
+    // The drag is followed on the window, wherever the pointer goes.
+    const move = (e: PointerEvent) => {
+      last = { x: e.clientX, y: e.clientY };
+      const d = edgeOf(e.clientX, e.clientY);
+      if (d.dx !== edgeDir.dx || d.dy !== edgeDir.dy) {
+        stopEdge();
+        edgeDir = d;
+        if ((d.dx || d.dy) && o.edges) {
+          o.edges.armed?.(d.dx, d.dy);
+          edgeTimer = setTimeout(() => void edgeTick(), o.edges.delay);
+        }
+      }
+      follow(e.clientX, e.clientY);
+    };
     const finish = () => {
+      stopEdge();
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", finish, true);
       window.removeEventListener("pointercancel", finish, true);
