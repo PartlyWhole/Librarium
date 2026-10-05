@@ -56,6 +56,30 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-056 · The source cited twice; Edit as the pencil icon
+> "why is the source repeated twice when theres two disjoint captures? It should always be the
+> same source. And the "Edit" button should be the same edit icon"
+
+- **Diagnosis:** the source wasn't repeated per part. A citation is "Source, where", and in an
+  EPUB the "where" is the chapter's name from the book's contents. In *Fear and Trembling and
+  the Sickness Unto Death*, the chapter is named exactly like the book, so it read "Title,
+  Title".
+- **Changed:**
+  - A place that only repeats the book's title is left out, so the citation reads
+    "— Fear and Trembling and the Sickness Unto Death". This applies to embeds, the capture
+    page, exports and the new-capture form, and to captures already made.
+  - An embed's Edit is now the pencil icon used elsewhere for editing. It shows on hover and
+    is named "Edit the capture" for VoiceOver.
+- **Code:** `src/features/captures/index.ts` (`cite`, the embed's edit button),
+  `src/shell/shell.css` (`.embed-edit`).
+- **Tested:**
+  - A new interface test: a capture whose place matches the book's title is cited once, a
+    real chapter is kept ("Title, Chapter 2"), and Edit is an icon with its name.
+  - In the preview: an embed in a note, with the pencil on hover.
+  - All 185 interface tests, 64 WebKit checks and the Rust tests pass; lint is clean.
+- **Left:** a capture whose parts are on different pages still cites the first part's page
+  only.
+
 ### R-055 · Captures of several parts should read as one quotation
 > "Disjoint captures should have [...] continuous. See photo attached, it is a new line with
 > the vertical purple line cut off as well"

@@ -120,8 +120,17 @@ export async function statuses(anchor: Anchor): Promise<PartStatus[]> {
 
 export function citation(shell: ShellApi, r: RecordInfo): string {
   const src = shell.records.get(String(r.fields[F.source] ?? ""));
-  const loc = r.fields[F.locator] ? `, ${r.fields[F.locator]}` : "";
-  return `${src?.title ?? "an unknown source"}${loc}`;
+  return cite(src?.title ?? "an unknown source", [r.fields[F.locator] as string | undefined]);
+}
+
+/**
+ * "Source, where": the places joined, leaving out any that only repeat the source's title (a
+ * book whose chapter is named after the book).
+ */
+function cite(title: string, locators: (string | null | undefined)[]): string {
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const locs = [...new Set(locators.filter((l): l is string => !!l?.trim() && !same(l, title)))];
+  return locs.length ? `${title}, ${locs.join(", ")}` : title;
 }
 
 export function captures(shell: ShellApi): void {
@@ -469,7 +478,6 @@ export function captures(shell: ShellApi): void {
             ? { picture: h("div", { class: "draft-picture" }, h("img", { class: "capture-region", src: p.preview, alt: "The region" }), removeOf(p)) }
             : { text: p.quote, after: removeOf(p) })), "capture-quote"),
           d.parts.length === 1 && !d.parts[0]!.preview ? h("button", { class: "icon-button remove", type: "button", "aria-label": "Remove this part", title: "Remove this part", onclick: () => setDraft(k, { ...d, parts: [] }) }, icon(X, 14)) : null)];
-        const locs = [...new Set(d.parts.map((p) => p.locator).filter(Boolean))];
         const words = h("textarea", { class: "words-input", rows: 3, placeholder: "Your words (optional)", "aria-label": "Your words" }) as HTMLTextAreaElement;
         words.value = d.words;
         words.addEventListener("input", () => {
@@ -488,7 +496,7 @@ export function captures(shell: ShellApi): void {
           h("div", { class: "capture-draft-head" }, h("h2", null, d.parts.length > 1 ? `New capture · ${d.parts.length} parts` : "New capture")),
           ...items,
           h("p", { class: "draft-hint" }, view.pickRegion ? "Select more text, or drag a region (⇧⌘R), to add to it." : "Select more text to add to it."),
-          h("p", { class: "muted small" }, `From ${ctx.source.title}${locs.length ? `, ${locs.join(", ")}` : ""}`),
+          h("p", { class: "muted small" }, `From ${cite(ctx.source.title, d.parts.map((p) => p.locator))}`),
           words,
           h("div", { class: "ask-buttons" },
             h("button", { class: "button", type: "button", onclick: () => setDraft(k, null) }, "Discard"),
@@ -571,7 +579,7 @@ export function captures(shell: ShellApi): void {
         void call<Anchor>("captures.anchor", { id: r.id }).then((a) => open(src, where(a)), () => open(src));
       } }, `— ${citation(shell, r)}`);
       const partsN = Number(r.fields["captures.parts"] ?? 1);
-      const edit = h("button", { type: "button", class: "embed-edit", title: "Open the capture to edit it", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, "Edit");
+      const edit = h("button", { type: "button", class: "embed-edit icon-button", "aria-label": "Edit the capture", title: "Open the capture to edit it", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, icon(Pencil, 14));
       const archived = isArchived(r) ? h("span", { class: "badge", title: "This capture is in the archive" }, "In the archive") : null;
       const block = h("figure", { class: "embed" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite, archived, edit));
       // Several parts, or a picture: each part in order, pictures as pictures.

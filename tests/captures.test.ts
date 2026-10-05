@@ -150,6 +150,21 @@ describe("capturing", () => {
     block.remove();
   });
 
+  it("cites the source once when the chapter is named like the book, and edits with the pencil", async () => {
+    const { shell, src } = await boot();
+    const title = shell.records.get(src.id)!.title;
+    const cap = seed("capture", "Named", "", { "captures.source": src.id, "captures.quote": "It avoids shock", "captures.locator": title, "captures.parts": 1 });
+    const other = seed("capture", "Chaptered", "", { "captures.source": src.id, "captures.quote": "It avoids shock", "captures.locator": "Chapter 2", "captures.parts": 1 });
+    await shell.records.load();
+    const render = (id: string) => shell.embeds.get("capture")!.render(shell.records.get(id)!, () => {});
+    expect(render(cap.id).querySelector(".embed-cite")!.textContent).toBe(`— ${title}`);
+    expect(render(other.id).querySelector(".embed-cite")!.textContent).toBe(`— ${title}, Chapter 2`);
+    const edit = render(cap.id).querySelector<HTMLButtonElement>(".embed-edit")!;
+    expect(edit.getAttribute("aria-label")).toBe("Edit the capture");
+    expect(edit.querySelector("svg")).toBeTruthy();
+    expect(edit.textContent).toBe("");
+  });
+
   it("offers a button by the selection: Capture, then Add to capture", async () => {
     const { shell, src } = await boot();
     let sel: Sel | null = { text: "It avoids shock", page: 1, end: { x: 200, y: 100, bottom: 118 } };
