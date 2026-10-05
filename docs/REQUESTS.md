@@ -50,12 +50,113 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## In progress
 
+(nothing)
+
+---
+
+## Done
+
 ### R-042 · Images in notes, kept as attachments in the Library
 > "I want image support for notes (images uploaded should be Library items -- perhaps to keep
 > things organized, there should be an attachments section of the library that hold things
 > uploaded and attached directly to notes -- perhaps they can be promoted to a standalone
 > library item that other notes can reference; I'm not sure if this should apply to other kinds
 > of files like pdfs/epubs; maybe just stick with images for now)"
+
+- **Changed:**
+  - Paste an image into a note, or drop one on it: it's shown in the note and kept in the
+    Library's **Attachments** folder (made when first needed). It's still a full library item,
+    so other notes can show it too (drag it in, or `![[…]]`).
+  - **Move to the Library** (right-click the item) makes an attachment a standalone item: it
+    leaves Attachments for the Library's top level, notes keep showing it, and Undo puts it back.
+  - PDFs and EPUBs dropped on a note go to the Library's top level, as before (images only, as
+    you suggested).
+- **Code:** `src/features/library/index.ts`, `tests/mock/backend.ts`.
+- **Decision:** 0051.
+- **Tested:** an interface test: a pasted image goes into Attachments, is embedded, is
+  promoted, and Undo puts it back.
+- **Left:** whether PDFs and EPUBs should also become attachments; say if you want that.
+
+### R-040 · A page for captures
+> "I want a page that contains, organizes and helps me look for captures. Page icon button
+> should be on ribbon"
+
+- **Changed:** a **Captures** page, on the ribbon (the quote icon) and on ⇧⌘K.
+  - Search by quote, name, source or place.
+  - Arrange **By source** (each book or article heading its captures, which opens it) or
+    **Newest first**.
+  - Show **All**, **Passages** or **Pictures**.
+  - Each capture is a card with its quote (or picture), its name if you gave one, its place
+    and date. Click to open it; Show in the source, Edit selection, Copy embed and Delete appear
+    on hover; right-click for the menu.
+  - Your arrangement and filter are kept on this Mac.
+- **Code:** `src/features/captures/index.ts` (the page), `src/shell/shell.css`.
+- **Tested:** an interface test: ribbon and ⇧⌘K, grouping, search, the pictures filter,
+  newest first (kept), the card's buttons, opening one. Checked by eye in the preview.
+- **Left:** searching your words on captures (only quotes, names, sources and places are
+  searched now).
+
+### R-041 · Trackpad page turns in books, with an animation
+> "I want horizontal scrolling (i'm using mousepad) to work well with flipping pages on epub
+> (like apple books); there should be a transition animation; it sometimes works but sometimes
+> unresponsive"
+
+- **Diagnosis:**
+  1. A sideways swipe also scrolled the book's columns natively, fighting Readium's turn.
+  2. After a swipe the trackpad keeps sending a fading stream (momentum) for about a second.
+     The one-turn-per-swipe lock waited for it to end, so a quick second swipe was ignored.
+  3. A turn asked for while another was under way was dropped.
+- **Changed:**
+  - A swipe turns one page and the page slides, as in Apple Books (toned down with Reduce
+    motion). Its momentum doesn't turn more, but a new swipe does, even mid-momentum.
+  - Sideways swipes no longer scroll the columns themselves.
+  - Turns asked for during one are kept, one at a time.
+  - The arrows, ← → and Space turn with the same animation.
+- **Code:** `src/reader/epub/engine.ts` (`flip`, `onWheel`).
+- **Tested:** WebKit checks.
+  - One swipe (with momentum) turns exactly one page, animated.
+  - A second swipe started within the momentum turns again.
+  - Every sideways wheel event is kept from scrolling the columns.
+- **Left:** how the swipe threshold and the animation's speed feel on your trackpad: easy to
+  tune.
+
+### R-045 · PDF text captures: wrong place, highlights off, quotes broken into lines
+> "PDF text capture seems to have similar problems: localizing/showing doesn't work well,
+> selecting/highlighting the text doesn't seem to match the text that I see, the text referenced
+> and quoted shows new lines that doesn't look great and breaks the flow"
+
+- **Diagnosis:**
+  - Your article is a scan, with the text from recognition laid over it invisibly.
+  - Each line of that text is one string in an unrelated font, with nothing saying where each
+    word is, and a bit shorter than the printed line. So selections, highlights and the
+    positions stored with captures didn't match what you see, and "Show" missed.
+  - Quotes came straight from the page's text, line breaks and hyphens included.
+- **Changed:**
+  - On scanned pages, Librarium now reads the page image along each line, finds the printed
+    words (runs of ink), and puts each word of the hidden text on its printed word. Selecting,
+    highlighting, find and Show follow what you see.
+  - Quotes read as text: lines are joined, words hyphenated across a line are rejoined
+    ("suf-" + "fering" → "suffering"), dashes join, and paragraphs stay. Older captures are
+    shown this way too.
+- **Code:** `src/reader/pdf-ink.ts`, `src/reader/pdf.ts`, `src/kit/flow.ts`,
+  `src/features/captures/index.ts`.
+- **Decision:** 0050.
+- **Tested:**
+  - A WebKit check on a scan-like test PDF: all 96 words within 1.5 pt of the print (12 before).
+  - Your article in the real WebKit view: the passage highlighted exactly to each line's end.
+  - Unit tests for the quote flowing (your passage's line breaks).
+- **Left:** captures you made before keep their old boxes; use Edit selection, or capture again,
+  to fix one.
+
+### R-044 · Rename a capture while editing it
+> "I want editing the image allow me to (re)name the capture"
+
+- **Changed:** while a capture is edited, its name in the Captures list (side panel) is an
+  editable field. Save changes (or Return in the field) saves the new name with the parts.
+- **Code:** `src/features/captures/index.ts`.
+- **Tested:** an interface test: rename while editing, then save. Typing doesn't redraw the
+  list, so the field keeps the focus. One earlier test now reads the name from the field.
+- **Left:** nothing.
 
 ### R-043 · Editing an image capture shows the old region
 > "Editing an image capture doesn't update the capture region as I changed it. I have to save it
