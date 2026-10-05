@@ -2,7 +2,7 @@
  * The editor's link parser (§5.4), tested against the same fixture file as the kernel's.
  * Code spans and blocks come from the Lezer Markdown parser, not a regex.
  */
-import { parser as baseParser, GFM } from "@lezer/markdown";
+import { parser as baseParser, GFM, type MarkdownConfig } from "@lezer/markdown";
 import type { Tree } from "@lezer/common";
 
 export interface Link {
@@ -14,7 +14,9 @@ export interface Link {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const mdParser = baseParser.configure(GFM);
+/** Indentation is indentation, not code (decision 0058): only fenced blocks and spans are. */
+export const NoIndentedCode: MarkdownConfig = { remove: ["IndentedCode"] };
+const mdParser = baseParser.configure([GFM, NoIndentedCode]);
 const CODE = new Set(["InlineCode", "FencedCode", "CodeBlock", "HTMLBlock", "HTMLTag", "CommentBlock", "Comment"]);
 
 export function escapeLabel(label: string): string {

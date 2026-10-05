@@ -75,6 +75,32 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-059 · Indent captures and links
+> "Please support tab/indent support for captures and internal links. Sometimes tabbing
+> links/captures will turn the text into this kind of font and just doesn't render even if I
+> click away. And even if it renders, and I indent the source "code" for my capture, the
+> indent doesn't affect the capture displayed. I want to be able to indent my captures"
+> Chosen: "Option 1, indent is indent."
+
+- **Changed:** an indented line is no longer code (Markdown's old rule), so indented links
+  and captures keep working, in the editor and for backlinks. Indenting moves text, quotes
+  and captures right; wrapped lines stay under the first. Code is what's fenced with ```.
+- **Use:** Tab indents a line (a tab), ⇧Tab outdents, Enter keeps the indent. On list items
+  Tab still nests the item.
+- **Code:** `src/editor/indent.ts`, `NoIndentedCode` in `src/editor/links.ts`,
+  `src/editor/markdown.ts`, `indentUnit` in `src/editor/editor.ts`, `code_ranges` in
+  `crates/kernel/src/links.rs`, shared cases in `tests/fixtures/links.json`.
+- **Decision:** 0058; brief §5.4 amended.
+- **Tested:** Vitest (`tests/editor-indent.test.ts`: columns, Tab, margin and shown link,
+  raw tabs while editing, fenced code untouched); the shared fixture case "indented code is
+  not a link" is replaced on purpose by "indented lines are not code", plus an indented
+  quote with an embed and inline code on an indented line (Rust and TypeScript). Preview: a
+  capture at no indent, one tab and two tabs inside a quote; an indented wrapped paragraph
+  with a link; Tab, ⇧Tab, Enter. Not checked in the real app.
+- **Left:** in Obsidian or on GitHub indented lines still show as code (accepted). Clicking a
+  capture box doesn't move the cursor to its line, as before; use the arrow keys to edit
+  its source.
+
 ### R-058 · Links that behave as in Obsidian
 > "I am unable to click on the link I just made" (screenshot: `[[Questions]]`, cursor at its end)
 > "I want it to behave like Obsidian: if I hover over, it reacts to that; if i move my typing

@@ -21,20 +21,40 @@ pub struct Link {
 }
 
 /// Byte ranges of code (spans and blocks) in Markdown text.
+///
+/// Indentation is indentation, not code (decision 0058): only fenced blocks and spans are
+/// code. pulldown-cmark can't turn indented code off, so it reads the text with each line's
+/// leading spaces and tabs removed, and the ranges are mapped back.
 pub fn code_ranges(text: &str) -> Vec<Range<usize>> {
+    // The text without indentation, and for each of its lines: (start there, bytes removed
+    // before and at that line).
+    let mut flat = String::with_capacity(text.len());
+    let mut lines: Vec<(usize, usize)> = vec![];
+    let mut removed = 0;
+    for line in text.split_inclusive('\n') {
+        let rest = line.trim_start_matches([' ', '\t']);
+        removed += line.len() - rest.len();
+        lines.push((flat.len(), removed));
+        flat.push_str(rest);
+    }
+    // A position in `flat` back in `text`: a line's start maps to the start of its text.
+    let back = |p: usize| {
+        let i = lines.partition_point(|&(start, _)| start <= p).saturating_sub(1);
+        p + lines.get(i).map_or(0, |&(_, r)| r)
+    };
     let mut out = vec![];
     let mut block_start: Option<usize> = None;
     let opts = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
-    for (ev, r) in Parser::new_ext(text, opts).into_offset_iter() {
+    for (ev, r) in Parser::new_ext(&flat, opts).into_offset_iter() {
         match ev {
-            Event::Code(_) => out.push(r),
+            Event::Code(_) => out.push(back(r.start)..back(r.end)),
             Event::Start(Tag::CodeBlock(_)) => block_start = Some(r.start),
             Event::End(TagEnd::CodeBlock) => {
                 if let Some(s) = block_start.take() {
-                    out.push(s..r.end);
+                    out.push(back(s)..back(r.end));
                 }
             }
-            Event::Html(_) | Event::InlineHtml(_) => out.push(r),
+            Event::Html(_) | Event::InlineHtml(_) => out.push(back(r.start)..back(r.end)),
             _ => {}
         }
     }

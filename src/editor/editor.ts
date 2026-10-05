@@ -8,7 +8,7 @@ import { signal } from "../kit/signal";
 import { EditorView, keymap, drawSelection, placeholder as placeholderExt, rectangularSelection, crosshairCursor } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
-import { indentOnInput, bracketMatching } from "@codemirror/language";
+import { indentOnInput, indentUnit, bracketMatching } from "@codemirror/language";
 import { closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { markdownSupport } from "./markdown";
 import { livePreview } from "./livepreview";
@@ -16,6 +16,7 @@ import { linkCompletion, type LinkTarget } from "./complete";
 import { formatLink, parseLinks } from "./links";
 import { formatKeymap, wrapOnType } from "./format";
 import { hangingIndent, listKeymap } from "./lists";
+import { indentation } from "./indent";
 import { clipboard, clipboardKeymap } from "./clipboard";
 import { codeHighlighting } from "./code";
 import { folding } from "./folding";
@@ -106,6 +107,9 @@ export function createEditor(o: EditorOptions): EditorView {
     clipboard,
     keymap.of([...formatKeymap, ...clipboardKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, ...listKeymap, indentWithTab]),
     hangingIndent,
+    // Tab on a line that isn't a list item indents it with a tab (decision 0058).
+    indentUnit.of("\t"),
+    indentation,
     EditorView.contentAttributes.of({ "aria-label": o.label, "aria-multiline": "true", spellcheck: "true", autocorrect: "on" }),
     EditorState.readOnly.of(!!o.readOnly),
     EditorView.editable.of(!o.readOnly),

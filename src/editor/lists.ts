@@ -130,7 +130,7 @@ export function renumber(view: EditorView): void {
 
 /** The width of one character of the monospace font, in em (measured once; 0.6 without layout). */
 let monoEm = 0;
-function monoWidth(): number {
+export function monoWidth(): number {
   if (monoEm) return monoEm;
   monoEm = 0.6;
   if (typeof document === "undefined" || !document.body) return monoEm;

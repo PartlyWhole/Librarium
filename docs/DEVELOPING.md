@@ -151,6 +151,8 @@ Rules that keep it honest:
   - `livepreview.ts`: marks hidden per construct, link IDs atomic.
   - `format.ts`: formatting commands, the Format menu, wrapping, multiple cursors.
   - `lists.ts`: subtree indent, renumbering, hanging indent.
+  - `indent.ts`: leading whitespace indents a line (as a margin away from the cursor); not
+    code (0058). Both link parsers agree: no indented code blocks.
   - `clipboard.ts` and `html2md.ts`: HTML pasted as Markdown, copying without IDs.
   - `code.ts`: language highlighting, folding.
   - `stats.ts`: counts and the outline.

@@ -1,8 +1,12 @@
-/** Markdown for the editor: CommonMark + GFM (tables, tasks, strikethrough) + `==highlight==`. */
+/**
+ * Markdown for the editor: CommonMark + GFM (tables, tasks, strikethrough) + `==highlight==`,
+ * without indented code blocks (indentation is indentation; decision 0058).
+ */
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { tags, Tag } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
 import { codeLanguages } from "./code";
+import { NoIndentedCode } from "./links";
 
 export const highlightTag = Tag.define();
 
@@ -28,5 +32,5 @@ export const Highlight: MarkdownConfig = {
 const HighlightDelim = { resolve: "Highlight", mark: "HighlightMark" };
 
 export function markdownSupport() {
-  return markdown({ base: markdownLanguage, extensions: [Highlight], addKeymap: true, codeLanguages });
+  return markdown({ base: markdownLanguage, extensions: [Highlight, NoIndentedCode], addKeymap: true, codeLanguages });
 }

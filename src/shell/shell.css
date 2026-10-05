@@ -306,7 +306,7 @@ select { width: auto; }
 .cm-image-alt { color: var(--muted); font-style: italic; }
 .cm-image-alt::before { content: "▣ "; font-style: normal; color: var(--faint); }
 /* A list item's indentation and marker: monospace, so nested items line up (see lists.ts). */
-.cm-list-prefix { font-family: var(--font-mono); }
+.cm-list-prefix, .cm-indent { font-family: var(--font-mono); }
 .cm-bullet { display: inline-block; width: 1ch; text-align: center; text-indent: 0; font-family: var(--font-mono); color: var(--muted); }
 .cm-task { width: 1em; height: 1em; margin: 0 0.35em 0 0; vertical-align: -0.12em; accent-color: var(--accent-solid); text-indent: 0; }
 .cm-tooltip { background: var(--bg) !important; border: 1px solid var(--border) !important; border-radius: var(--r2); box-shadow: 0 2px 6px rgb(0 0 0 / 8%), 0 12px 32px rgb(0 0 0 / 14%); color: var(--ink); }

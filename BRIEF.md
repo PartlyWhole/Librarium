@@ -377,7 +377,8 @@ comrak and Dendron.
 - The ID follows the **last** unescaped `|` and must be a canonical UUID.
 - In labels, `\`, `[`, `]` and `|` are escaped with `\`, and newlines become spaces.
 - In table cells, the separator is also written `\|`.
-- Links inside code spans and code blocks are not links, so parse with a real Markdown parser,
+- Links inside code spans and fenced code blocks are not links (indented lines are not code:
+  decision 0058), so parse with a real Markdown parser,
   not a regex.
 
 **Behaviour:**
