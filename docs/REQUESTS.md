@@ -56,6 +56,17 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-039 · Show with the other buttons on the capture page
+> "In the capture page, move the show button on the same row as the other buttons (edit, copy, etc)"
+
+- **Changed:** "Show in the source" is now first in the capture page's header row, with Edit
+  selection, Copy embed, Export and Delete. A capture of several separate passages also keeps a
+  Show button on each passage, to go to that one.
+- **Code:** `src/features/captures/index.ts` (the capture page).
+- **Tested:** the capture page test checks the header's buttons and their order, and that a
+  one-part capture has no Show beside its quote.
+- **Left:** nothing.
+
 ### R-038 · The Captures panel jumps to Jobs; editing splits the reader; Show lands elsewhere
 > "When I click on a capture, it opens the capture in the main view, but right now the side
 > panel goes to "Jobs". It should show the other captures that belong to the same library item

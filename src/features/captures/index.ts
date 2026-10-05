@@ -584,7 +584,10 @@ export function captures(shell: ShellApi): void {
           if (!quote) void call<string>("captures.region", { id, n: i + 1 }).then((d) => ((body as HTMLImageElement).src = d), () => {});
           const badge = s?.status === "moved" ? h("span", { class: "badge moved" }, "moved — check it") : s?.status === "lost" ? h("span", { class: "badge lost" }, "lost") : null;
           const confirm = s?.status === "moved" ? h("button", { class: "link-button", onclick: () => void confirmMoved(id, anchor, i, src).then(() => shell.router.go("capture", { id }, { replace: true })) }, "This is the place") : null;
-          partsEl.appendChild(h("div", { class: "capture-part" }, body, h("div", { class: "row tight capture-tools" }, iconButton(LocateFixed, "Show in the source", show), badge, confirm)));
+          // Show is in the header; with several parts, each part can be shown on its own too.
+          const many = (anchor?.parts.length ?? 0) > 1;
+          const tools = many || badge || confirm ? h("div", { class: "row tight capture-tools" }, many ? iconButton(LocateFixed, `Show part ${i + 1} in the source`, show) : null, badge, confirm) : null;
+          partsEl.appendChild(h("div", { class: "capture-part" }, body, tools));
         });
         const cite = h("p", { class: "muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(src, where(anchor), { again: true })) }, citation(shell, r)));
         const editorHost = h("div", { class: "editor-host" });
@@ -645,6 +648,7 @@ export function captures(shell: ShellApi): void {
         });
         titleInput.addEventListener("blur", () => void rename());
         ctx.setHeaderActions([
+          h("button", { class: "icon-button", "aria-label": "Show in the source", title: "Show in the source", onclick: () => shell.openRecord(src, where(anchor), { again: true }) }, icon(LocateFixed)),
           h("button", { class: "icon-button", "aria-label": "Edit selection", title: "Edit what this capture holds, in its source (drag a passage’s ends, resize a region)", onclick: () => shell.openRecord(src, { ...where(anchor), edit: id }, { again: true }) }, icon(Pencil)),
           h("button", { class: "icon-button", "aria-label": "Copy embed", title: "Copy embed (paste it into a note)", onclick: () => void navigator.clipboard?.writeText(`![[${info.title}|${id}]]`).then(() => toast("Embed copied: paste it into a note.")) }, icon(Copy)),
           h("button", { class: "icon-button", "aria-label": "Export as W3C annotations", title: "Export as W3C annotations", onclick: () => void exportW3C(shell, r, t.body) }, icon(FileDown)),

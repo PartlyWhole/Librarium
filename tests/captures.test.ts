@@ -520,7 +520,10 @@ describe("editing what a capture holds", () => {
       shell.router.go("capture", { id: cap.id });
       await wait(80);
       const header = [...document.querySelectorAll(".icon-button")].map((b) => b.getAttribute("aria-label"));
-      for (const name of ["Edit selection", "Copy embed", "Export as W3C annotations", "Delete capture"]) expect(header).toContain(name);
+      for (const name of ["Show in the source", "Edit selection", "Copy embed", "Export as W3C annotations", "Delete capture"]) expect(header).toContain(name);
+      // Show is with the others in the header (one part: none beside the quote).
+      expect([...document.querySelectorAll(".ws-actions .icon-button")].map((b) => b.getAttribute("aria-label"))).toEqual(["Show in the source", "Edit selection", "Copy embed", "Export as W3C annotations", "Delete capture"]);
+      expect(document.querySelectorAll(".capture-part .capture-tools [aria-label^='Show']").length).toBe(0);
       (document.querySelector('[aria-label="Edit selection"]') as HTMLButtonElement).click();
       await wait(120);
       expect(shell.router.current()).toMatchObject({ page: "item", params: { id: src.id, edit: cap.id } });
