@@ -784,3 +784,37 @@ body.dragging-handle, body.dragging-handle * { user-select: none !important; -we
 .draft-picture { position: relative; display: flex; align-items: flex-start; gap: 4px; }
 .draft-part .inline-remove, .draft-picture .inline-remove { position: static; }
 .draft-part > * + * { margin-top: 8px; }
+
+/* A capture placed in writing opens on a click (0059). */
+.cm-embed.embed { cursor: pointer; transition: border-color 0.12s, background 0.12s; }
+.cm-embed.embed:hover { border-color: var(--border-strong); background: var(--hover); }
+.cm-embed.embed .embed-cite, .cm-embed.embed button { cursor: pointer; }
+/* The capture page: where it is used. */
+.used-in { margin-top: 24px; }
+.used-in-list li { display: flex; flex-direction: column; gap: 2px; }
+.used-in-place { text-decoration: none; padding-left: 12px; border-left: 2px solid var(--border); }
+.used-in-place:hover { color: var(--ink); border-left-color: var(--accent-text); }
+/* Deleting a used capture: a choice for each place (0059). */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.delete-refs .refs-all { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 10px; }
+.delete-refs .refs-list { max-height: min(56vh, 520px); overflow: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin: 0 -20px 10px; padding: 4px 20px; }
+.ref-source { padding: 8px 0; }
+.ref-source + .ref-source { border-top: 1px solid var(--border); }
+.ref-source-title { font-size: var(--ui); font-weight: 600; margin: 4px 0 6px; }
+.ref-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.ref-row { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r2); background: var(--bg-alt); }
+.ref-before { margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ref-here { line-height: 1.45; margin-bottom: 8px; }
+.ref-embed { border-left: 3px solid var(--accent-text); padding-left: 10px; font-style: italic; }
+.ref-link { background: var(--selection); color: inherit; border-radius: 2px; padding: 0 2px; }
+.ref-choice { display: inline-flex; gap: 2px; padding: 2px; margin: 0; border: 0; border-radius: var(--r1); background: var(--bg); }
+.ref-option { position: relative; }
+.ref-option input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.ref-option span { display: block; font-size: var(--small); padding: 3px 10px; border-radius: var(--r1); color: var(--ink); }
+.ref-option:hover span { background: var(--hover); }
+.ref-option input:checked + span { background: var(--selection); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent-text); font-weight: 600; }
+.ref-option input:focus-visible + span { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+.ref-option input:disabled + span { color: var(--faint); }
+.ref-after { margin: 6px 0 0; }
+/* A capture's words are usually short: what uses it shows close below. */
+.capture-words .cm-content { min-height: 4.5em; }

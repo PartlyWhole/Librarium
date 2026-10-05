@@ -733,3 +733,99 @@ describe("the Captures page", () => {
     expect([a.id, b.id, c.id]).toContain(shell.router.current().params.id);
   });
 });
+
+describe("a capture used in notes (0059)", () => {
+  const QUOTE = "It avoids shock and sensational events.";
+  async function used() {
+    const b = await boot(true);
+    const cap = seed("capture", "It avoids shock and…", "", { "captures.source": b.src.id, "captures.quote": QUOTE, "captures.locator": "p. 1", "captures.parts": 1 });
+    anchors.set(cap.id, { id: cap.id, source: b.src.id, snapshot: null, parts: [{ selector: [{ type: "TextQuoteSelector", exact: QUOTE, prefix: "", suffix: "" }] }] });
+    const one = seed("note", "Essay", `Ellul writes:\n\n![[It avoids shock and…|${cap.id}]]\n\nSee [[the line on shock|${cap.id}]] again.\n`);
+    const two = seed("note", "Notes on technique", `Quoted:\n\n\t> ![[It avoids shock and…|${cap.id}]]\n`);
+    await b.shell.records.load();
+    return { ...b, cap, one, two };
+  }
+
+  it("opens the capture from a click on its quotation in a note; the citation still opens the source", async () => {
+    const { shell, cap, one, src } = await used();
+    shell.router.go("note", { id: one.id });
+    await wait(60);
+    const view = EditorView.findFromDOM(document.querySelector(".cm-editor") as HTMLElement)!;
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    (view.contentDOM.querySelector(".embed blockquote") as HTMLElement).click();
+    await wait(30);
+    expect(shell.router.current()).toMatchObject({ page: "capture", params: { id: cap.id } });
+    shell.router.go("note", { id: one.id });
+    await wait(60);
+    const v2 = EditorView.findFromDOM(document.querySelector(".cm-editor") as HTMLElement)!;
+    v2.dispatch({ selection: { anchor: v2.state.doc.length } });
+    (v2.contentDOM.querySelector(".embed-cite") as HTMLElement).click();
+    await wait(30);
+    expect(shell.router.current()).toMatchObject({ page: "item", params: { id: src.id } });
+  });
+
+  it("lists on its page the notes that use it, each place leading there", async () => {
+    const { shell, cap, one } = await used();
+    shell.router.go("capture", { id: cap.id });
+    await wait(100);
+    const list = document.querySelector(".used-in-list")!;
+    expect([...list.querySelectorAll(":scope > li > .list-link")].map((a) => a.textContent)).toEqual(["Essay", "Notes on technique"]);
+    const places = [...list.querySelectorAll(".used-in-place")].map((a) => a.textContent);
+    expect(places).toEqual(["After “Ellul writes:”", "See the line on shock again.", "After “Quoted:”"]);
+    (list.querySelector(".used-in-place") as HTMLElement).click();
+    await wait(30);
+    expect(shell.router.current()).toEqual({ page: "note", params: { id: one.id, at: "14" } });
+  });
+
+  it("asks what happens to each place before deleting; rewrites the notes; one Undo puts all back", async () => {
+    const { shell, cap, one, two } = await used();
+    const before = [mock.state.records.get(one.id)!.body, mock.state.records.get(two.id)!.body];
+    shell.router.go("capture", { id: cap.id });
+    await wait(100);
+    (document.querySelector('[aria-label="Delete capture"]') as HTMLButtonElement).click();
+    await wait(60);
+    const dlg = document.querySelector(".delete-refs")!;
+    expect(dlg.querySelector(".ask-title")?.textContent).toBe("Delete “It avoids shock and…”?");
+    const rows = [...dlg.querySelectorAll(".ref-row")];
+    expect(rows).toHaveLength(3);
+    // Kept as text by default, each saying what it will become.
+    expect(rows[0]!.querySelector(".ref-after")?.textContent).toContain("Becomes a written quotation");
+    const go = [...dlg.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Delete"))!;
+    expect(go.textContent).toBe("Delete and update 2 notes");
+    // The link: remove it. The second note: leave it.
+    const pick = (row: Element, v: string) => {
+      const r = row.querySelector(`input[value="${v}"]`) as HTMLInputElement;
+      r.checked = true;
+      r.dispatchEvent(new Event("change"));
+    };
+    pick(rows[1]!, "remove");
+    pick(rows[2]!, "leave");
+    expect(rows[2]!.querySelector(".ref-after")?.textContent).toContain("In the archive");
+    expect(go.textContent).toBe("Delete and update 1 note");
+    go.click();
+    await wait(120);
+    expect(shell.records.get(cap.id)?.fields["archive.at"]).toBeTruthy();
+    expect(mock.state.records.get(one.id)!.body).toBe("Ellul writes:\n\n> It avoids shock and sensational events.\n>\n> — The Technological Society, p. 1\n\nSee again.\n");
+    expect(mock.state.records.get(two.id)!.body).toBe(before[1]);
+    expect(document.body.textContent).toContain("Deleted “It avoids shock and…” and updated 1 note");
+    await shell.undo.undoLast();
+    await wait(60);
+    expect(shell.records.get(cap.id)?.fields["archive.at"]).toBeFalsy();
+    expect(mock.state.records.get(one.id)!.body).toBe(before[0]);
+  });
+
+  it("changes nothing on Cancel", async () => {
+    const { shell, cap, one } = await used();
+    const before = mock.state.records.get(one.id)!.body;
+    shell.router.go("capture", { id: cap.id });
+    await wait(100);
+    (document.querySelector('[aria-label="Delete capture"]') as HTMLButtonElement).click();
+    await wait(60);
+    [...document.querySelectorAll(".delete-refs button")].find((b) => b.textContent === "Cancel")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await wait(60);
+    expect(document.querySelector(".delete-refs")).toBeNull();
+    expect(shell.records.get(cap.id)?.fields["archive.at"]).toBeFalsy();
+    expect(mock.state.records.get(one.id)!.body).toBe(before);
+    expect(shell.router.current()).toMatchObject({ page: "capture", params: { id: cap.id } });
+  });
+});

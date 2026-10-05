@@ -19,6 +19,8 @@ import type { RecordText } from "../../generated/RecordText";
 import type { StoredText } from "../../generated/StoredText";
 import type { Written } from "../../generated/Written";
 import { embedExtension } from "./embeds";
+import { deleteCapture as deleteUsed } from "./delete";
+import { findReferences, type Reference } from "./references";
 import { Highlighter, Crop, Quote, FileDown, X, Trash2, Copy, LocateFixed, Pencil } from "lucide";
 import { contextMenu } from "../../kit/menu";
 import { flowQuote } from "../../kit/flow";
@@ -139,7 +141,7 @@ export function captures(shell: ShellApi): void {
    * Deleting a capture moves it to the archive (with Undo), the first of the library's two steps;
    * it is deleted for good from there. Done through the archive's own record action.
    */
-  const deleteCapture = async (c: RecordInfo): Promise<boolean> => {
+  const archiveCapture = async (c: RecordInfo): Promise<boolean> => {
     const archive = shell.recordActions.get("archive");
     if (!archive || !archive.applies(c)) {
       shell.status.show("This capture can’t be deleted here.");
@@ -148,6 +150,9 @@ export function captures(shell: ShellApi): void {
     await archive.run([c]);
     return true;
   };
+  // A capture used in notes asks first what happens to each place (decision 0059).
+  const deleteCapture = (c: RecordInfo): Promise<boolean> =>
+    deleteUsed(shell, c, { quote: flowQuote(String(c.fields[F.quote] ?? "")), cite: citation(shell, c) }, () => archiveCapture(c));
   const captureMenu = (c: RecordInfo, at: { x: number; y: number }) =>
     contextMenu([
       { label: "Open", run: () => shell.openRecord(c.id) },
@@ -576,12 +581,19 @@ export function captures(shell: ShellApi): void {
       const src = String(r.fields[F.source] ?? "");
       const cite = h("a", { href: "#", class: "embed-cite", onclick: (e: Event) => {
         e.preventDefault();
-        void call<Anchor>("captures.anchor", { id: r.id }).then((a) => open(src, where(a)), () => open(src));
+        void call<Anchor>("captures.anchor", { id: r.id }).then((a) => open(src, where(a), { newTab: (e as MouseEvent).metaKey }), () => open(src));
       } }, `— ${citation(shell, r)}`);
       const partsN = Number(r.fields["captures.parts"] ?? 1);
       const edit = h("button", { type: "button", class: "embed-edit icon-button", "aria-label": "Edit the capture", title: "Open the capture to edit it", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, icon(Pencil, 14));
       const archived = isArchived(r) ? h("span", { class: "badge", title: "This capture is in the archive" }, "In the archive") : null;
-      const block = h("figure", { class: "embed" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite, archived, edit));
+      const block = h("figure", { class: "embed", title: "Open the capture" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite, archived, edit));
+      // A click on the quotation opens the capture (⌘-click: in a new tab); the citation opens
+      // the source, as before.
+      block.addEventListener("click", (e) => {
+        if ((e.target as Element).closest("a, button")) return;
+        e.preventDefault();
+        open(r.id, undefined, { newTab: e.metaKey });
+      });
       // Several parts, or a picture: each part in order, pictures as pictures.
       if (partsN > 1 || !quote) {
         void call<Anchor>("captures.anchor", { id: r.id }).then((a) => {
@@ -748,12 +760,30 @@ export function captures(shell: ShellApi): void {
         });
         partsEl.append(...quoteParts(shown, "capture-quote"));
         const cite = h("p", { class: "muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(src, where(anchor), { again: true })) }, citation(shell, r)));
-        const editorHost = h("div", { class: "editor-host" });
+        const editorHost = h("div", { class: "editor-host capture-words" });
         // The title renames the capture (the quote itself stays exact).
         let info = r;
         const titleInput = h("input", { class: "page-title title-input", value: r.title || "", "aria-label": "Title", spellcheck: true }) as HTMLInputElement;
         const archived = isArchived(r) ? h("p", { class: "notice" }, "This capture is in the archive.") : null;
-        replace(host, archived, titleInput, partsEl, cite, h("h2", { class: "list-heading" }, "Your words"), editorHost);
+        // Where it is used: each note, with the line around each place; a click goes there.
+        const usedIn = h("section", { class: "used-in", "aria-label": "Used in" });
+        replace(host, archived, titleInput, partsEl, cite, h("h2", { class: "list-heading" }, "Your words"), editorHost, usedIn);
+        const showUsedIn = (refs: Reference[]) => {
+          const sources = [...new Map(refs.map((x) => [x.source.id, x.source])).values()];
+          replace(usedIn,
+            h("h2", { class: "list-heading" }, "Used in", refs.length ? h("span", { class: "muted small" }, ` ${sources.length}`) : null),
+            refs.length
+              ? h("ul", { class: "backlinks used-in-list" }, sources.map((s) => h("li", null,
+                  h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(s.id, {}, { newTab: (e as MouseEvent).metaKey })) }, s.title || "Untitled"),
+                  refs.filter((x) => x.source.id === s.id).map((x) => {
+                    // To just before the place, so a placed quotation shows as itself.
+                    const at = [...x.body.slice(0, Math.max(0, x.body.lastIndexOf("\n", x.link.from - 1)))].length;
+                    return h("a", { href: "#", class: "used-in-place muted small", title: "Go to this place", onclick: (e: Event) => (e.preventDefault(), shell.openRecord(s.id, { at: String(at) }, { newTab: (e as MouseEvent).metaKey })) },
+                      x.link.embed ? (x.before ? `After “${x.before.length > 80 ? `${x.before.slice(0, 79)}…` : x.before}”` : "At the start") : x.line.length > 100 ? `${x.line.slice(0, 99)}…` : x.line);
+                  }))))
+              : h("p", { class: "muted small" }, "Not used in any note yet. Copy its embed and paste it into a note to place it there."));
+        };
+        void findReferences(id, shell.records).then((refs) => alive && showUsedIn(refs));
         const session = new NoteSession(id, r.version, t.body, {
           current: () => view.state.doc.toString(),
           merged: () => {},

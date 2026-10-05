@@ -75,6 +75,50 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-061 · Deleting a used capture: choose what happens to each place
+> "When deleting a capture, I want the user to have to edit/confirm how to handle each
+> reference being made to the capture. Make sure the UI/UX is good here"
+
+- **Changed:** deleting a capture that notes use opens a dialog listing each place, grouped by
+  note, with the line before it and the quotation (or the link's sentence). For each: Keep as
+  quoted text (the default, nothing is lost), Remove, or Leave in place; each says what the
+  place will become, and "For every place" sets them all. The button says how many notes
+  change. Delete rewrites those notes and archives the capture; one Undo puts all of it back.
+  A capture used nowhere is deleted as before.
+- **Use:** Delete a capture anywhere (page header, Captures panel or page, Library menu, a
+  highlight's popover). Choose per place, then "Delete and update N notes". Undo from the
+  toast, or the palette's "Undo the last move, rename or archiving".
+- **Code:** `src/features/captures/references.ts`, `src/features/captures/delete.ts`,
+  `deleteCapture` in `src/features/captures/index.ts`, styles in `src/shell/shell.css`.
+- **Decision:** 0059.
+- **Tested:** Vitest: `tests/capture-references.test.ts` (11 tests: finding, keeping as text
+  on its own line, indented, in a quote, in a list, in a sentence, a picture; removing; several
+  at once) and `tests/captures.test.ts` (the dialog's defaults and descriptions, mixed
+  choices, the button's count, the rewritten note, archiving, one Undo, Cancel). Preview: a
+  capture used in two notes (one in an indented quote) plus a link; Remove, Leave and Keep
+  the words; the notes after; Undo restoring both; Escape cancelling. Not checked in the
+  real app.
+- **Left:** archiving several captures at once (multi-select's Archive) or with a folder
+  skips the dialog; deleting for good from the archive doesn't ask again. ⌘Z after deleting
+  undoes the last open note's typing first (Librarium's Undo goes to the last editor used);
+  the toast's Undo and the palette reach the delete.
+
+### R-060 · Open a capture from a note; show where it is used
+> "Clicking on captures (not the source), I want to open up to the capture page. The capture
+> page should also show me what notes reference the capture."
+
+- **Changed:** a click on a capture placed in a note opens the capture (⌘-click: a new tab);
+  the card reacts to hover; the citation still opens the source. The capture page lists
+  "Used in": each note, and under it each place (the line before it, or the link's
+  sentence); a click goes there. The side panel's Links view also works on capture pages.
+- **Use:** click the quotation in a note; on the capture page, scroll to "Used in".
+- **Code:** the embed renderer in `src/features/captures/index.ts`, `embeds.ts`;
+  `findReferences` in `references.ts`; `.used-in` styles.
+- **Decision:** 0059.
+- **Tested:** Vitest (`tests/captures.test.ts`: a click opens the capture, the citation the
+  source; Used in lists notes and places, and a place opens the note there). Preview: both.
+  Not checked in the real app.
+
 ### R-059 · Indent captures and links
 > "Please support tab/indent support for captures and internal links. Sometimes tabbing
 > links/captures will turn the text into this kind of font and just doesn't render even if I

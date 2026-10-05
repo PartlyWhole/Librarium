@@ -230,7 +230,7 @@ export interface ReaderTool {
 export interface EmbedRenderer {
   kind: string;
   /** A block shown in place of the embed. */
-  render(r: RecordInfo, open: (id: string, params?: Record<string, string>) => void): HTMLElement;
+  render(r: RecordInfo, open: (id: string, params?: Record<string, string>, opts?: { newTab?: boolean }) => void): HTMLElement;
   /** Plain Markdown for "Export with quotations". */
   markdown(r: RecordInfo): string;
 }
