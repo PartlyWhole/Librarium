@@ -1,6 +1,6 @@
 # 0054. Edit ▸ Undo and Redo are the app's own, greyed out with nothing to undo
 
-- Status: accepted
+- Status: accepted (extended by 0055: away from text, ⌘Z reaches the app's actions)
 - Date: 2026-10-05
 - Request: R-050 in `docs/REQUESTS.md`
 

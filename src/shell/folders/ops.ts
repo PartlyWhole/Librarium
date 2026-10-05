@@ -83,6 +83,15 @@ export async function moveInto(shell: ShellApi, store: FolderStore, p: DragPaylo
         }
         await store.refresh();
       },
+      // Moved again to the same place (a folder may land under another name if one took its).
+      redo: async () => {
+        for (const f of movedFolders) f.to = (await call<FolderMoved>("folders.move", { kind: store.kind, from: f.from, to: join(dest, nameOf(f.from)) })).path;
+        if (moved.length) {
+          const r = await call<MovedRecords>("records.move", { ids: moved.map((w) => w.info.id), folder: dest || null });
+          for (const w of r.moved) shell.records.put(w.info, w.seq);
+        }
+        await store.refresh();
+      },
     });
   } catch (e) {
     toast(message(e));
@@ -97,10 +106,15 @@ export async function renameFolder(shell: ShellApi, store: FolderStore, path: st
   try {
     const r = await call<FolderMoved>("folders.move", { kind: store.kind, from: path, to });
     await store.refresh();
+    let now = r.path;
     shell.undo.done(`Renamed “${nameOf(path)}” to “${nameOf(r.path)}”.`, {
       label: "renaming the folder",
       undo: async () => {
-        await call("folders.move", { kind: store.kind, from: r.path, to: path });
+        await call("folders.move", { kind: store.kind, from: now, to: path });
+        await store.refresh();
+      },
+      redo: async () => {
+        now = (await call<FolderMoved>("folders.move", { kind: store.kind, from: path, to })).path;
         await store.refresh();
       },
     });
@@ -120,12 +134,16 @@ export async function renameRecord(shell: ShellApi, id: string, title: string): 
   try {
     const w = await call<Written>("records.relocate", { id, title: t });
     shell.records.put(w.info, w.seq);
+    let version = w.info.version;
+    const retitle = async (title: string) => {
+      const x = await call<Written>("records.relocate", { id, title, base_version: version });
+      version = x.info.version;
+      shell.records.put(x.info, x.seq);
+    };
     shell.undo.done(`Renamed to “${t}”.`, {
       label: "renaming",
-      undo: async () => {
-        const back = await call<Written>("records.relocate", { id, title: before, base_version: w.info.version });
-        shell.records.put(back.info, back.seq);
-      },
+      undo: () => retitle(before),
+      redo: () => retitle(t),
     });
   } catch (e) {
     toast(message(e));
@@ -153,6 +171,10 @@ export async function removeFolder(shell: ShellApi, store: FolderStore, path: st
       label: "removing the folder",
       undo: async () => {
         await call("folders.create", { kind: store.kind, path });
+        await store.refresh();
+      },
+      redo: async () => {
+        await call("folders.remove", { kind: store.kind, path });
         await store.refresh();
       },
     });

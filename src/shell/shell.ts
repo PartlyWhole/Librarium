@@ -61,7 +61,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const readerEngines = new Registry<ReaderEngine>("shell.reader-engines");
   const embeds = new Registry<EmbedRenderer>("shell.embeds");
   const undo = new Undo();
-  const text = textUndo();
+  const text = textUndo(undo);
   const closing = new Set<() => Promise<void>>();
   onCloseRequested(async () => {
     await Promise.allSettled([...closing].map((f) => f()));
@@ -221,7 +221,9 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     // Greyed out when there's nothing to undo in what has focus (text-undo.ts).
     { id: "edit.undo", title: "Undo", keys: ["Mod+Z"], palette: false, when: () => text.canUndo(), run: () => text.undo(), menu: { name: "edit", group: -1 } },
     { id: "edit.redo", title: "Redo", keys: ["Mod+Shift+Z"], palette: false, when: () => text.canRedo(), run: () => text.redo(), menu: { name: "edit", group: -1 } },
-    { id: "shell.undo", title: "Undo the last rename or move", when: () => undo.last() !== null, run: () => void undo.undoLast(), menu: { name: "edit", group: 1 } },
+    // The app's actions from anywhere (⌘Z only reaches them when the focus isn't in text).
+    { id: "shell.undo", title: "Undo the last move, rename or archiving", when: () => undo.last() !== null, run: () => void undo.undoLast(), menu: { name: "edit", group: 1 } },
+    { id: "shell.redo", title: "Redo the last move, rename or archiving", when: () => undo.next() !== null, run: () => void undo.redoLast(), menu: { name: "edit", group: 1 } },
     { id: "shell.theme.system", title: "Theme: follow the system", run: () => prefs.pref("ui.theme", "system").set("system"), menu: { name: "view", group: 2 } },
     { id: "shell.theme.light", title: "Theme: light", run: () => prefs.pref("ui.theme", "system").set("light"), menu: { name: "view", group: 2 } },
     { id: "shell.theme.dark", title: "Theme: dark", run: () => prefs.pref("ui.theme", "system").set("dark"), menu: { name: "view", group: 2 } },
@@ -486,6 +488,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     router.canForward();
     folder();
     undo.last();
+    undo.next();
     text.canUndo();
     text.canRedo();
     refreshMenu(actions);

@@ -151,6 +151,10 @@ export function createFolders(shell: ShellApi): Folders {
           await save(prevOrder);
           sort.set(prevSort);
         },
+        redo: async () => {
+          await save(next);
+          sort.set({ key: "manual", dir: 1 });
+        },
       });
     };
 

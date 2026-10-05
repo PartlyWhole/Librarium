@@ -1,61 +1,70 @@
 /**
- * Undo for app actions (rename, move, archive, restore): each records an inverse that expects
- * the version it produced, and refuses if the file has changed since. Toasts offer Undo.
- * Text undo is the editor's own history.
+ * Undo and redo for app actions (moving, renaming, arranging, archiving, restoring), several
+ * levels deep for the session. Each step records how to undo it and how to do it again; each
+ * expects the versions it produced, and refuses if the file has changed since (the step is then
+ * dropped). Toasts offer Undo. ⌘Z / ⇧⌘Z reach these when the focus isn't in text
+ * (text-undo.ts); text undo is the editor's own history.
  */
 import { toast } from "../kit/toast";
-import { signal } from "../kit/signal";
+import { computed, signal } from "../kit/signal";
 
 export interface Undoable {
   label: string;
   undo(): Promise<void>;
+  /** Does it again after an undo (without it, the step can't be redone). */
+  redo?(): Promise<void>;
 }
 
-/** An app action in this session's log (kept in memory only), newest last. */
-export interface UndoEntry {
-  message: string;
-  label: string;
-  at: number;
-  /** "latest": Undo would undo it; "replaced": a later action took its place (one level). */
-  state: "latest" | "replaced" | "undone" | "failed";
-  error?: string;
-}
+/** How many steps are kept. */
+const DEPTH = 50;
+
+const message = (e: unknown, otherwise = "That can’t be undone any more.") => (e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : otherwise);
 
 export class Undo {
-  readonly last = signal<Undoable | null>(null);
-  /** What was done this session, for the Undo history view. */
-  readonly log = signal<readonly UndoEntry[]>([]);
-  private entries = new Map<Undoable, UndoEntry>();
+  private readonly past = signal<readonly Undoable[]>([]);
+  private readonly future = signal<readonly Undoable[]>([]);
+  private busy = false;
+  /** The step Undo would undo. */
+  readonly last = computed(() => this.past().at(-1) ?? null);
+  /** The step Redo would do again. */
+  readonly next = computed(() => this.future().at(-1) ?? null);
 
   /** Records an action that was just done, and offers to undo it. */
   done(message: string, u: Undoable): void {
-    this.last.set(u);
-    const entry: UndoEntry = { message, label: u.label, at: Date.now(), state: "latest" };
-    this.entries.clear();
-    this.entries.set(u, entry);
-    this.log.set([...this.log.peek().map((e) => (e.state === "latest" ? { ...e, state: "replaced" as const } : e)), entry].slice(-100));
+    this.past.set([...this.past.peek(), u].slice(-DEPTH));
+    this.future.set([]);
     toast(message, { action: { label: "Undo", run: () => void this.undoLast() } });
   }
 
   async undoLast(): Promise<void> {
-    const u = this.last.peek();
-    if (!u) return;
-    this.last.set(null);
+    const u = this.past.peek().at(-1);
+    if (!u || this.busy) return;
+    this.busy = true;
+    this.past.set(this.past.peek().slice(0, -1));
     try {
       await u.undo();
-      this.settle(u, "undone");
-      toast(`Undone: ${u.label}`);
+      if (u.redo) this.future.set([...this.future.peek(), u]);
+      toast(`Undone: ${u.label}`, u.redo ? { action: { label: "Redo", run: () => void this.redoLast() } } : {});
     } catch (e) {
-      const message = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "That can’t be undone any more.";
-      this.settle(u, "failed", message);
-      toast(message);
+      toast(message(e));
+    } finally {
+      this.busy = false;
     }
   }
 
-  private settle(u: Undoable, state: UndoEntry["state"], error?: string): void {
-    const entry = this.entries.get(u);
-    if (!entry) return;
-    this.entries.delete(u);
-    this.log.set(this.log.peek().map((e) => (e === entry ? { ...e, state, ...(error ? { error } : {}) } : e)));
+  async redoLast(): Promise<void> {
+    const u = this.future.peek().at(-1);
+    if (!u?.redo || this.busy) return;
+    this.busy = true;
+    this.future.set(this.future.peek().slice(0, -1));
+    try {
+      await u.redo();
+      this.past.set([...this.past.peek(), u].slice(-DEPTH));
+      toast(`Redone: ${u.label}`, { action: { label: "Undo", run: () => void this.undoLast() } });
+    } catch (e) {
+      toast(message(e, "That can’t be done again any more."));
+    } finally {
+      this.busy = false;
+    }
   }
 }

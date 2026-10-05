@@ -93,6 +93,10 @@ export async function compare(shell: ShellApi, id: string, v: HistoryVersion): P
           const now = shell.records.get(id)?.version;
           if (now) await call("history.restore", { id, hash: before, base_version: now });
         },
+        redo: async () => {
+          const now = shell.records.get(id)?.version;
+          if (now) await call("history.restore", { id, hash: v.hash, base_version: now });
+        },
       });
     } catch (e) {
       toast(message(e));

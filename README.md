@@ -117,5 +117,6 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-04 | A scan's recognised text is aligned to the words seen (ink runs); quotations flow (lines joined, hyphens rejoined). | [0050](docs/decisions/0050-scanned-pdf-text-on-ink.md) |
 | 2026-10-04 | Images put into notes are kept in the Library's Attachments folder; Move to the Library promotes one. | [0051](docs/decisions/0051-attachments.md) |
 | 2026-10-05 | Show brings out a text capture's own lines (joined into one highlight per line), not a frame around it. | [0052](docs/decisions/0052-show-passage-not-frame.md) |
-| 2026-10-05 | A temporary Undo history view in the side panel: the note's text steps (⌘Z / ⇧⌘Z) and this session's app actions. | [0053](docs/decisions/0053-undo-history-view.md) |
+| 2026-10-05 | A temporary Undo history view in the side panel (since removed, 0055). | [0053](docs/decisions/0053-undo-history-view.md) |
 | 2026-10-05 | Edit ▸ Undo and Redo are the app's own, acting on what has focus and greyed out when there's nothing to undo. | [0054](docs/decisions/0054-edit-undo-greyed-out.md) |
+| 2026-10-05 | ⌘Z / ⇧⌘Z undo and redo moves, renames and archiving (50 steps a session) when the focus isn't in text. | [0055](docs/decisions/0055-undo-redo-app-actions.md) |

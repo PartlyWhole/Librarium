@@ -61,14 +61,19 @@ export function archive(shell: ShellApi): void {
     if (!done.length) return;
     const what = done.length === 1 ? `“${done[0]!.info.title || "Untitled"}”` : count(done.length, "item");
     const verb = archive ? "Archived" : "Restored";
+    // Each step expects the versions the one before produced.
+    const versions = new Map(done.map((w) => [w.info.id, w.info.version]));
+    const each = async (method: string) => {
+      for (const [id, version] of versions) {
+        const x = await call<Written>(method, { id, base_version: version });
+        versions.set(id, x.info.version);
+        shell.records.put(x.info, x.seq);
+      }
+    };
     shell.undo.done(`${verb} ${what}`, {
       label: `${archive ? "archive" : "restore"} ${what}`,
-      undo: async () => {
-        for (const w of done) {
-          const back = await call<Written>(undoIt, { id: w.info.id, base_version: w.info.version });
-          shell.records.put(back.info, back.seq);
-        }
-      },
+      undo: () => each(undoIt),
+      redo: () => each(doIt),
     });
   }
   const archiveRecord = (id: string) => setArchived([id], true);

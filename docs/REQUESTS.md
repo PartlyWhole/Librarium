@@ -44,14 +44,7 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Waiting for you
 
-### Should ⌘Z undo app actions when you're not typing? (from R-049)
-Today ⌘Z only undoes text: a note's, or a text field's. A rename, move or archive is undone
-only from its toast's Undo or Edit ▸ Undo the last rename or move.
-- **A (recommended):** ⌘Z undoes the latest app action when the focus isn't in a note or a text
-  field (for example after renaming in the Files page). Inside a note, ⌘Z stays the note's text.
-  This is what the brief's "two scopes, chosen by focus" suggests. Risk: pressing ⌘Z after
-  clicking out of a note undoes a rename instead of text.
-- **B:** leave it as it is. App actions are undone only from the toast or the menu.
+(nothing)
 
 ---
 
@@ -62,6 +55,46 @@ only from its toast's Undo or Edit ▸ Undo the last rename or move.
 ---
 
 ## Done
+
+### R-051 · Remove Undo history; undo and redo moves and archiving
+> "Remove undo history, but also allow undo/redo for moving folders/files around in notes and
+> library as well as archiving"
+
+- **Changed:**
+  - The Undo history view is gone from the side panel.
+  - Moves, renames and archiving can be undone and redone several steps back (up to 50 in a
+    session), newest first. A new action clears what could be redone. This covers:
+    - moving notes, items and folders (dragging, the menu, the Files page) and arranging by
+      hand;
+    - renaming folders, notes, captures and items;
+    - removing an empty folder;
+    - archiving and restoring;
+    - Move to the Library;
+    - restoring an earlier version.
+  - As before, a step refuses if the file changed since, and then it's dropped.
+  - This answers R-049's question with option A: ⌘Z / ⇧⌘Z undo and redo these whenever the
+    focus isn't in text. In a note, ⌘Z is still the note's text; in a text field, the field's.
+  - Toasts offer Undo after an action, and Redo after an undo.
+- **Use:**
+  - ⌘Z / ⇧⌘Z after a move or archiving, for example in the sidebar or the Files page.
+  - From inside a note, use Edit ▸ Undo (or Redo) the last move, rename or archiving.
+  - All of them are greyed out when there's nothing to do.
+- **Code:** `src/shell/undo.ts`, `src/shell/text-undo.ts`, `src/shell/shell.ts`; steps in
+  `src/shell/folders/ops.ts`, `src/shell/folders/index.ts`, `src/features/archive/index.ts`,
+  `src/features/library/index.ts`, `src/features/notes/page.ts`, `src/features/notes/history.ts`,
+  `src/features/captures/index.ts`. The view (`src/features/undo-history/`) was removed.
+- **Decision:** 0055 (0053 superseded).
+- **Tested:**
+  - Interface tests: two archivings undone and one redone, with a new action clearing redo; a
+    dragged move undone, redone and undone again. The Edit items undo and redo app actions
+    away from text, leave them alone inside a note, and grey out with nothing to do.
+  - In the preview: a note dragged into a folder, then ⌘Z moved it back and ⇧⌘Z moved it in
+    again.
+  - The Undo history tests were removed with the view; the Edit ▸ Undo tests moved to
+    `tests/undo.test.ts`. All 176 interface tests, 64 WebKit checks and the Rust tests pass;
+    lint is clean.
+  - The native menu path for ⌘Z can only be confirmed in the real app.
+- **Left:** permanent deletion still can't be undone (by design).
 
 ### R-050 · Grey out Undo when there's nothing to undo
 > "if theres nothing to undo, please ghost/block command"

@@ -51,6 +51,26 @@ describe("archive", () => {
     expect(document.querySelector(".archive-list")).toBeNull();
   });
 
+  it("undoes and redoes several archivings, newest first", async () => {
+    const { shell, a, b } = await boot();
+    await archiveOpen(shell, a.id);
+    await archiveOpen(shell, b.id);
+    expect(shell.records.list("note")).toHaveLength(0);
+    await shell.undo.undoLast();
+    await wait(30);
+    expect(shell.records.list("note").map((r) => r.id)).toEqual([b.id]);
+    await shell.undo.undoLast();
+    await wait(30);
+    expect(shell.records.list("note")).toHaveLength(2);
+    await shell.undo.redoLast();
+    await wait(30);
+    expect(shell.records.list("note").map((r) => r.id)).toEqual([b.id]);
+    // A new action ends the redos.
+    await archiveOpen(shell, b.id);
+    expect(shell.undo.next()).toBeNull();
+    expect(shell.records.list("note")).toHaveLength(0);
+  });
+
   it("offers Archive only for unarchived records, Restore only for archived ones", async () => {
     const { shell, a } = await boot();
     shell.openRecord(a.id);

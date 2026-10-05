@@ -129,9 +129,10 @@ Rules that keep it honest:
 - **Shell** (`src/shell/shell.ts`): layout (ribbon, sidebar tree, tabs, page, side panel,
   status bar), the action registry (one place for shortcuts, the palette, the native menu;
   collisions rejected), prefs (per device), records cache (kept current by change events),
-  undo for app actions (with a session log, `undo.log`, shown by the temporary Undo history
-  view, `src/features/undo-history/`, 0053), Edit ▸ Undo/Redo for what has focus, greyed out
-  with nothing to undo (`text-undo.ts`, 0054), jobs UI.
+  undo and redo for app actions (a stack per session; each step has `undo` and `redo` and
+  expects the versions it produced, 0055), Edit ▸ Undo/Redo for what has focus (note text,
+  a field, else app actions), greyed out with nothing to undo (`text-undo.ts`, 0054), jobs
+  UI. A new undoable action should give `redo` too.
 - **Tabs and navigation** (`router.ts`, `tabs.ts`, 0034): each tab has its own history and a
   living page (hidden when another tab shows); `router.go(page, params, {newTab, again})`;
   tabs are restored at start. A page can return `{ dispose, update }` to take new params for

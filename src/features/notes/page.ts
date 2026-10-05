@@ -129,18 +129,23 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
         shell.records.put(w.info, w.seq);
         session.rebase(w.info.version, session.savedBody);
         ctx.setTitle(title);
+        // Undo and redo each expect the version the step before produced.
+        let version = w.info.version;
+        const retitle = async (to: string) => {
+          const x = await call<Written>("records.relocate", { id, title: to, base_version: version });
+          version = x.info.version;
+          shell.records.put(x.info, x.seq);
+          if (shell.router.current.peek().params.id === id) {
+            info = x.info;
+            titleInput.value = to;
+            ctx.setTitle(to);
+            session.rebase(x.info.version, session.savedBody);
+          }
+        };
         shell.undo.done(`Renamed to “${title}”`, {
           label: `rename to “${title}”`,
-          undo: async () => {
-            const back = await call<Written>("records.relocate", { id, title: before, base_version: w.info.version });
-            shell.records.put(back.info, back.seq);
-            if (shell.router.current.peek().params.id === id) {
-              info = back.info;
-              titleInput.value = before;
-              ctx.setTitle(before);
-              session.rebase(back.info.version, session.savedBody);
-            }
-          },
+          undo: () => retitle(before),
+          redo: () => retitle(title),
         });
       } catch (e) {
         titleInput.value = info.title;

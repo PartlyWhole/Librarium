@@ -140,6 +140,10 @@ export function library(shell: ShellApi): void {
               for (const b of back.moved) shell.records.put(b.info, b.seq);
             }
           },
+          redo: async () => {
+            const again = await call<{ moved: Written[] }>("records.move", { ids: r.moved.map((w) => w.info.id), folder: null });
+            for (const b of again.moved) shell.records.put(b.info, b.seq);
+          },
         });
       } catch (e) {
         toast(String((e as { message?: string }).message ?? e));

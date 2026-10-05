@@ -147,6 +147,13 @@ describe("the Notes and Library pages", () => {
     await shell.undo.undoLast();
     await wait(30);
     expect(folderOf(shell.records.get(list.id)!)).toBe("");
+    // Redo moves it there again; Undo takes it back again.
+    await shell.undo.redoLast();
+    await wait(30);
+    expect(folderOf(shell.records.get(list.id)!)).toBe("Thinkers");
+    await shell.undo.undoLast();
+    await wait(30);
+    expect(folderOf(shell.records.get(list.id)!)).toBe("");
     // A folder into a folder; never into itself.
     expect(drag(row("Thinkers"), row("Thinkers"))).toBeNull();
     expect(drag(row("Thinkers"), row("Empty"))).toBe("drop-over");

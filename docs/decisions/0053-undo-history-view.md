@@ -1,6 +1,6 @@
 # 0053. A temporary Undo history view in the side panel
 
-- Status: accepted (temporary)
+- Status: superseded: removed at the user's request (R-051, decision 0055)
 - Date: 2026-10-05
 - Request: R-049 in `docs/REQUESTS.md`
 
