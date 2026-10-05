@@ -23,6 +23,9 @@ The user wants writing to be first class, as in Obsidian. A comparison (in
 - **Live preview, per construct** (`livepreview.ts`).
   - A construct's marks show (dimmed) only while a selection touches that construct.
   - A link being edited reads `[[label]]`: its `|id` is hidden and is an atomic range.
+  - A plain click on a link whose source shows only because the cursor sits at its edge
+    (as right after typing or completing it) opens it, like a shown link (amended
+    2026-10-05, R-058). A click inside a link being edited places the cursor.
   - **Never hidden:**
     - bare URLs and autolinks (styled as links);
     - `[…]` that isn't a link (no URL and no reference label);

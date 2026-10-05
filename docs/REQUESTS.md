@@ -75,6 +75,21 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-058 · A link just made could not be clicked
+> "I am unable to click on the link I just made" (screenshot: `[[Questions]]`, cursor at its end)
+
+- **Changed:** after typing or completing a link, the cursor sits right after `]]`, so the
+  editor showed the link's source and a plain click only moved the cursor (only ⌘-click
+  opened it). Now a plain click on that link opens it (or, with no target yet, makes the note
+  and links it). Clicking inside a link you are editing still places the cursor.
+- **Use:** click the link. To edit its words with the mouse, click inside it once the cursor
+  is already in it, or use the keyboard.
+- **Code:** `src/editor/editor.ts` (`mousedown` on `.cm-wikilink-source`, `follow`).
+- **Decision:** 0037 amended.
+- **Tested:** Vitest (`tests/notes.test.ts`: opens with the cursor at the end; doesn't open
+  while editing inside; the first fails without the fix); full suite 205 passing. Preview:
+  typed `[[Simone`, accepted, clicked: Simone Weil opened. Not checked in the real app.
+
 ### R-056 · The source cited twice; Edit as the pencil icon
 > "why is the source repeated twice when theres two disjoint captures? It should always be the
 > same source. And the "Edit" button should be the same edit icon"

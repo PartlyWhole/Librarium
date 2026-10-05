@@ -63,6 +63,17 @@ export interface EditorOptions {
 
 export function createEditor(o: EditorOptions): EditorView {
   const ctx: EditorContext = { open: o.open, titleOf: o.titleOf };
+  /** Opens a link's record; an unresolved one (no ID) makes its note (as in Obsidian),
+   * completes the link at `pos`, then opens it. */
+  const follow = (view: EditorView, id: string | null, label: string, pos: number, newTab: boolean) => {
+    if (id) return o.open(id, { newTab });
+    void o.create?.(label, { newTab }).then((made) => {
+      if (!made) return;
+      const l = parseLinks(view.state.doc.toString()).find((x) => !x.id && x.label === label && x.from <= pos && x.to >= pos);
+      if (l) view.dispatch({ changes: { from: l.from, to: l.to, insert: formatLink(label, made, l.embed) }, userEvent: "input.link" });
+      o.open(made, { newTab });
+    });
+  };
   const contributions = o.contributions ?? [];
   const extensions: Extension[] = [
     history(),
@@ -97,26 +108,33 @@ export function createEditor(o: EditorOptions): EditorView {
       if (u.focusChanged && !u.view.hasFocus) o.onBlur?.();
     }),
     EditorView.domEventHandlers({
+      // A link whose source shows only because the cursor sits at its edge (as right after
+      // typing or completing it) opens on a plain click, like a shown link. Clicking inside a
+      // link being edited places the cursor, as before.
+      mousedown(e, view) {
+        if (e.button !== 0 || e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return false;
+        const src = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink-source");
+        if (!src) return false;
+        const pos = view.posAtDOM(src);
+        const l = parseLinks(view.state.doc.toString()).find((x) => pos >= x.from && pos <= x.to);
+        if (!l || view.state.selection.ranges.some((r) => r.from < l.to && r.to > l.from)) return false;
+        if (!l.id && (!o.create || view.state.readOnly)) return false;
+        e.preventDefault();
+        follow(view, l.id, l.label, l.from, false);
+        return true;
+      },
       click(e, view) {
         // A link opens here; with ⌘, in a new tab (as in Obsidian).
         const newTab = e.metaKey;
         const t = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
         if (t?.dataset.id) {
           e.preventDefault();
-          o.open(t.dataset.id, { newTab });
+          follow(view, t.dataset.id, "", 0, newTab);
           return true;
         }
-        // An unresolved link: make its note (as in Obsidian), complete the link, open it.
         if (t?.dataset.label !== undefined && o.create && !view.state.readOnly) {
           e.preventDefault();
-          const pos = view.posAtDOM(t);
-          const label = t.dataset.label;
-          void o.create(label, { newTab }).then((id) => {
-            if (!id) return;
-            const l = parseLinks(view.state.doc.toString()).find((x) => !x.id && x.label === label && x.from <= pos && x.to >= pos);
-            if (l) view.dispatch({ changes: { from: l.from, to: l.to, insert: formatLink(label, id, l.embed) }, userEvent: "input.link" });
-            o.open(id, { newTab });
-          });
+          follow(view, null, t.dataset.label, view.posAtDOM(t), newTab);
           return true;
         }
         // ⌘-click on a link's source opens it too.

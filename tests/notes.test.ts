@@ -127,6 +127,26 @@ describe("links", () => {
     (view.contentDOM.querySelector(".cm-wikilink") as HTMLElement).dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(shell.router.current().params.id).toBe(weil.id);
   });
+
+  it("a plain click opens a link just typed, whose source shows with the cursor at its end", async () => {
+    const { shell, view } = await open("");
+    const weil = shell.records.list("note").find((r) => r.title === "Simone Weil")!;
+    const text = `See [[Weil|${weil.id}]]`;
+    view.dispatch({ changes: { from: 0, insert: text }, selection: { anchor: text.length } });
+    const src = view.contentDOM.querySelector(".cm-wikilink-source") as HTMLElement;
+    expect(src).not.toBeNull();
+    src.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    expect(shell.router.current().params.id).toBe(weil.id);
+  });
+
+  it("a click inside a link being edited places the cursor, and does not open it", async () => {
+    const { shell, view, id } = await open("");
+    const weil = shell.records.list("note").find((r) => r.title === "Simone Weil")!;
+    view.dispatch({ changes: { from: 0, insert: `See [[Weil|${weil.id}]]` }, selection: { anchor: 8 } });
+    const src = view.contentDOM.querySelector(".cm-wikilink-source") as HTMLElement;
+    src.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    expect(shell.router.current().params.id).toBe(id);
+  });
 });
 
 describe("renames and ⌘T", () => {
