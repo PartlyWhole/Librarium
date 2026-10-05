@@ -44,13 +44,35 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Waiting for you
 
-(nothing)
+### Boards (R-057): three decisions before building — details in `docs/plans/boards.md` §2
+- **D1. React for Excalidraw.** The brief says "no UI framework", and Excalidraw is React-only.
+  - **A (recommended):** React only inside the boards feature, loaded only when a board opens.
+  - **B:** Excalidraw in its own frame.
+  - **C:** no Excalidraw; build a smaller whiteboard ourselves.
+- **D2. Where boards live.**
+  - **A (recommended):** a `board` kind in the Notes folders, beside notes. It needs a small
+    kernel change.
+  - **B:** its own "Boards" section.
+  - **C:** a note with a drawing.
+- **D3. File format.**
+  - **A (recommended):** `<id>-slug.md`, with a readable body the app writes (texts, links,
+    captures), plus `<id>.excalidraw` (plain Excalidraw JSON) beside it.
+  - **B:** Obsidian Excalidraw's single compressed file.
+  - **C:** one Markdown file with the JSON inside it.
 
 ---
 
 ## In progress
 
-(nothing)
+### R-057 · Boards: a note you can draw on (Excalidraw), with captures and links
+> "Please plan an excalidraw page "feature" that supports putting in captures and [[]] links,
+> etc. Basically a note but can draw/write on it like a whiteboard. This is going to be a big
+> feature because there are a lot of tools already with excalidraw. Please plan carefully"
+
+- **Plan:** `docs/plans/boards.md`: what it is, how saving, links, captures and keys work,
+  seven phases with acceptance checks, risks, and what's left out.
+- **Next:** the three decisions under Waiting for you, then phase 0 (a spike that decides
+  go/no-go).
 
 ---
 
