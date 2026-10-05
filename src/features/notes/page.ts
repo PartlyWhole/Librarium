@@ -4,7 +4,8 @@ import { ask, modal } from "../../kit/dialog";
 import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
 import { toast } from "../../kit/toast";
-import { createEditor, replaceDoc } from "../../editor/editor";
+import { createEditor, historyJSON, replaceDoc, textHistory } from "../../editor/editor";
+import { recordScope } from "../../shell/undo";
 import type { ShellApi } from "../../shell/api";
 import type { PageContext } from "../../shell/slots";
 import type { Change } from "../../generated/Change";
@@ -59,9 +60,14 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
     });
     if (recovered) session.savedBody = t.body;
 
+    // This note's history: its typing (kept while the app runs) and what is done to it here.
+    const scope = recordScope(id);
+    const kept = shell.undo.takeText(scope, startBody);
     const view = createEditor({
       parent: editorHost,
       doc: startBody,
+      history: kept ?? undefined,
+      onHistoryStep: () => shell.undo.typed(scope),
       readOnly: !!readOnly,
       label: `${info.title || "Untitled"}, note text`,
       targets: () => shell.records.list().filter((r) => shell.openers.get(r.kind) && r.id !== id).map((r) => ({ id: r.id, title: r.title, detail: r.kind === "note" ? undefined : r.kind, embeddable: !!shell.embeds.get(r.kind) })),
@@ -93,7 +99,10 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
       clearTimeout(countTimer);
       if (!host.closest("[hidden]")) shell.status.context.set("");
     });
+    const detach = shell.undo.attachText(scope, textHistory(view), view);
     cleanup.push(() => {
+      shell.undo.keepText(scope, historyJSON(view), view.state.doc.toString());
+      detach();
       void session.close();
       view.destroy();
     });
@@ -146,7 +155,7 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
           label: `rename to “${title}”`,
           undo: () => retitle(before),
           redo: () => retitle(title),
-        });
+        }, { scope });
       } catch (e) {
         titleInput.value = info.title;
         toast(String((e as { message?: string }).message ?? e));
@@ -165,7 +174,7 @@ export function renderNote(shell: ShellApi, host: HTMLElement, params: Record<st
     titleInput.addEventListener("blur", () => void rename());
 
     ctx.setHeaderActions([
-      h("button", { class: "icon-button", "aria-label": "Move to folder", title: "Move to folder", onclick: () => { const r = shell.records.get(id); if (r) void shell.folders.moveTo([r]); } }, icon(FolderInput)),
+      h("button", { class: "icon-button", "aria-label": "Move to folder", title: "Move to folder", onclick: () => { const r = shell.records.get(id); if (r) void shell.undo.within(scope, () => shell.folders.moveTo([r])); } }, icon(FolderInput)),
     ]);
 
     // Outside edits: reload when nothing is unsaved; otherwise the next save merges.

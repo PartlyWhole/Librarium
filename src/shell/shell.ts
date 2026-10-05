@@ -61,7 +61,6 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const readerEngines = new Registry<ReaderEngine>("shell.reader-engines");
   const embeds = new Registry<EmbedRenderer>("shell.embeds");
   const undo = new Undo();
-  const text = textUndo(undo);
   const closing = new Set<() => Promise<void>>();
   onCloseRequested(async () => {
     await Promise.allSettled([...closing].map((f) => f()));
@@ -69,6 +68,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   });
   const slots = new Map<string, Registry<unknown>>();
   const router = new Router();
+  const text = textUndo(undo, () => router.current());
   const prefs = new Prefs();
   const hidingFields = new Registry<string>("shell.hiding-fields");
   const recordActions = new Registry<RecordAction>("shell.record-actions");
@@ -220,9 +220,11 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     { id: "shell.revealFolder", title: "Show library folder in Finder", when: libraryOpen, run: () => void call("folder.reveal").catch(report), menu: { name: "file", group: 8 } },
     { id: "shell.revealLogs", title: "Reveal logs", run: () => void call("app.revealLogs").catch(report), menu: { name: "help", group: 1 } },
     // Greyed out when there's nothing to undo in what has focus (text-undo.ts).
-    { id: "edit.undo", title: "Undo", keys: ["Mod+Z"], palette: false, when: () => text.canUndo(), run: () => text.undo(), menu: { name: "edit", group: -1 } },
-    { id: "edit.redo", title: "Redo", keys: ["Mod+Shift+Z"], palette: false, when: () => text.canRedo(), run: () => text.redo(), menu: { name: "edit", group: -1 } },
-    // The app's actions from anywhere (⌘Z only reaches them when the focus isn't in text).
+    // The place being looked at: its own history (text-undo.ts, 0060). Reserved: in a note too,
+    // so typing and the note's other steps undo in order.
+    { id: "edit.undo", get title() { const l = text.undoLabel(); return l ? `Undo ${l}` : "Undo"; }, keys: ["Mod+Z"], reserved: true, palette: false, when: () => text.canUndo(), run: () => text.undo(), menu: { name: "edit", group: -1 } },
+    { id: "edit.redo", get title() { const l = text.redoLabel(); return l ? `Redo ${l}` : "Redo"; }, keys: ["Mod+Shift+Z"], reserved: true, palette: false, when: () => text.canRedo(), run: () => text.redo(), menu: { name: "edit", group: -1 } },
+    // The latest app action from anywhere, whichever page it was done on.
     { id: "shell.undo", title: "Undo the last move, rename or archiving", when: () => undo.last() !== null, run: () => void undo.undoLast(), menu: { name: "edit", group: 1 } },
     { id: "shell.redo", title: "Redo the last move, rename or archiving", when: () => undo.next() !== null, run: () => void undo.redoLast(), menu: { name: "edit", group: 1 } },
     { id: "shell.theme.system", title: "Theme: follow the system", run: () => prefs.pref("ui.theme", "system").set("system"), menu: { name: "view", group: 2 } },
@@ -505,6 +507,8 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     undo.next();
     text.canUndo();
     text.canRedo();
+    text.undoLabel();
+    text.redoLabel();
     refreshMenu(actions);
   });
 

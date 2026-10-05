@@ -9,7 +9,8 @@ import { icon } from "../../kit/icon";
 import { signal, effect, untracked } from "../../kit/signal";
 import { toast } from "../../kit/toast";
 import { describe, locate, locateSelection, sliceCp, toW3C, type Selector } from "../../kit/anchor";
-import { createEditor } from "../../editor/editor";
+import { createEditor, historyJSON, textHistory } from "../../editor/editor";
+import { LIBRARY, recordScope } from "../../shell/undo";
 import { NoteSession } from "../../editor/session";
 import type { ShellApi } from "../../shell/api";
 import { ARCHIVER, ITEM_CHILDREN, READER_TOOLS, type Archiver, type ItemChildren, type ReaderTool } from "../../shell/slots";
@@ -141,7 +142,7 @@ export function captures(shell: ShellApi): void {
    * Deleting a capture moves it to the archive (with Undo), the first of the library's two steps;
    * it is deleted for good from there. Done through the archive's own record action.
    */
-  const archiveCapture = async (c: RecordInfo): Promise<boolean> => {
+  const archiveCapture = async (c: RecordInfo, scope: string): Promise<boolean> => {
     const archiver = shell.slot<Archiver>(ARCHIVER).values()[0];
     if (!archiver || isArchived(c) || c.read_only) {
       shell.status.show("This capture can’t be deleted here.");
@@ -150,12 +151,13 @@ export function captures(shell: ShellApi): void {
     const a = await archiver.archive([c.id]);
     if (!a.archived) return false;
     const what = `“${c.title || "Capture"}”`;
-    shell.undo.done(`Deleted ${what}`, { label: `delete ${what}`, undo: a.undo, redo: a.redo });
+    shell.undo.done(`Deleted ${what}`, { label: `delete ${what}`, undo: a.undo, redo: a.redo }, { scope });
     return true;
   };
-  // A capture used in notes asks first what happens to each place (decision 0059).
-  const deleteCapture = (c: RecordInfo): Promise<boolean> =>
-    deleteUsed(shell, c, { quote: flowQuote(String(c.fields[F.quote] ?? "")), cite: citation(shell, c) }, () => archiveCapture(c));
+  // A capture used in notes asks first what happens to each place (decision 0059). Its Undo
+  // belongs to the page it was deleted on (0060): the capture's, a source's, or the Library's.
+  const deleteCapture = (c: RecordInfo, scope = LIBRARY): Promise<boolean> =>
+    deleteUsed(shell, c, { quote: flowQuote(String(c.fields[F.quote] ?? "")), cite: citation(shell, c) }, () => archiveCapture(c, scope), scope);
   const captureMenu = (c: RecordInfo, at: { x: number; y: number }) =>
     contextMenu([
       { label: "Open", run: () => shell.openRecord(c.id) },
@@ -312,7 +314,7 @@ export function captures(shell: ShellApi): void {
           caps.length === 1 ? h("button", { type: "button", title: "Delete this capture (it goes to the archive)", onmousedown: (e: Event) => e.preventDefault(), onclick: () => {
             hideMarkPop();
             const r = shell.records.get(caps[0]!.id);
-            if (r) void deleteCapture(r);
+            if (r) void deleteCapture(r, recordScope(ctx.source.id));
           } }, icon(Trash2, 14), "Delete") : null);
         markPop.hidden = false;
         const w = markPop.offsetWidth || 140;
@@ -735,9 +737,19 @@ export function captures(shell: ShellApi): void {
       const id = params.id ?? "";
       let alive = true;
       let cleanup: (() => void)[] = [];
-      void (async () => {
+      // Drawn again in place when the capture is deleted or restored, or a moved part confirmed
+      // (the router doesn't render the same route twice).
+      let drawn = 0;
+      const redraw = () => {
+        cleanup.forEach((c) => c());
+        cleanup = [];
+        void draw();
+      };
+      const draw = async (): Promise<void> => {
+        const me = ++drawn;
+        const live = () => alive && me === drawn;
         const t = await call<RecordText>("records.read", { id }).catch(() => null);
-        if (!alive) return;
+        if (!live()) return;
         if (!t) return replace(host, h("p", { class: "empty" }, "This capture can’t be found any more."));
         const r = t.info;
         ctx.setTitle(r.title || "Capture");
@@ -753,7 +765,7 @@ export function captures(shell: ShellApi): void {
           const img = quote ? null : h("img", { class: "capture-region", alt: "The captured region" });
           if (img) void call<string>("captures.region", { id, n: i + 1 }).then((d) => (img.src = d), () => {});
           const badge = s?.status === "moved" ? h("span", { class: "badge moved" }, "moved — check it") : s?.status === "lost" ? h("span", { class: "badge lost" }, "lost") : null;
-          const confirm = s?.status === "moved" ? h("button", { class: "link-button", onclick: () => void confirmMoved(id, anchor, i, src).then(() => shell.router.go("capture", { id }, { replace: true })) }, "This is the place") : null;
+          const confirm = s?.status === "moved" ? h("button", { class: "link-button", onclick: () => void confirmMoved(id, anchor, i, src).then(() => live() && redraw()) }, "This is the place") : null;
           // Show is in the header; with several parts, each part can be shown on its own too.
           const many = (anchor?.parts.length ?? 0) > 1;
           // In the quotation, after the part's text (a picture's below it).
@@ -766,7 +778,13 @@ export function captures(shell: ShellApi): void {
         // The title renames the capture (the quote itself stays exact).
         let info = r;
         const titleInput = h("input", { class: "page-title title-input", value: r.title || "", "aria-label": "Title", spellcheck: true }) as HTMLInputElement;
-        const archived = isArchived(r) ? h("p", { class: "notice" }, "This capture is in the archive.") : null;
+        const archived = isArchived(r)
+          ? h("p", { class: "notice" }, "This capture is in the archive. ", h("button", { type: "button", class: "link-button", onclick: () => {
+              const restore = shell.recordActions.get("restore");
+              const cur = shell.records.get(id);
+              if (restore && cur && restore.applies(cur)) void restore.run([cur]);
+            } }, "Restore"))
+          : null;
         // Where it is used: each note, with the line around each place; a click goes there.
         const usedIn = h("section", { class: "used-in", "aria-label": "Used in" });
         replace(host, archived, titleInput, partsEl, cite, h("h2", { class: "list-heading" }, "Your words"), editorHost, usedIn);
@@ -785,7 +803,7 @@ export function captures(shell: ShellApi): void {
                   }))))
               : h("p", { class: "muted small" }, "Not used in any note yet. Copy its embed and paste it into a note to place it there."));
         };
-        void findReferences(id, shell.records).then((refs) => alive && showUsedIn(refs));
+        void findReferences(id, shell.records).then((refs) => live() && showUsedIn(refs));
         const session = new NoteSession(id, r.version, t.body, {
           current: () => view.state.doc.toString(),
           merged: () => {},
@@ -793,8 +811,22 @@ export function captures(shell: ShellApi): void {
           status: (m, p) => shell.status.show(m, p ? 0 : 4000),
           saved: (seq) => void shell.records.waitFor(seq),
         });
-        const view = createEditor({ parent: editorHost, doc: t.body, label: "Your words", targets: () => [], open: (x, opts) => shell.openRecord(x, {}, opts), titleOf: (x) => shell.records.get(x)?.title ?? null, onChange: () => session.changed(), onBlur: () => void session.flush(), placeholder: "Write why this matters…" });
-        cleanup.push(() => (void session.close(), view.destroy()), shell.beforeClose(() => session.close()));
+        // This capture's history: its words (kept while the app runs), renaming, deleting.
+        const scope = recordScope(id);
+        const kept = shell.undo.takeText(scope, t.body);
+        const view = createEditor({ parent: editorHost, doc: t.body, history: kept ?? undefined, onHistoryStep: () => shell.undo.typed(scope), label: "Your words", targets: () => [], open: (x, opts) => shell.openRecord(x, {}, opts), titleOf: (x) => shell.records.get(x)?.title ?? null, onChange: () => session.changed(), onBlur: () => void session.flush(), placeholder: "Write why this matters…" });
+        const detach = shell.undo.attachText(scope, textHistory(view), view);
+        cleanup.push(() => (shell.undo.keepText(scope, historyJSON(view), view.state.doc.toString()), detach(), void session.close(), view.destroy()), shell.beforeClose(() => session.close()));
+        // Deleted or restored (here, by Undo, or elsewhere): the page shows it.
+        // Compared with what the app knows of it, the same place the change is watched, so a
+        // redraw can't set off another.
+        let wasArchived = isArchived(shell.records.get(id) ?? r);
+        cleanup.push(effect(() => {
+          const now = isArchived(shell.records.get(id));
+          if (now === wasArchived) return;
+          wasArchived = now;
+          untracked(() => queueMicrotask(() => live() && redraw()));
+        }));
         const rename = async () => {
           const title = titleInput.value.replace(/\s+/g, " ").trim();
           if (!title || title === info.title) {
@@ -825,7 +857,7 @@ export function captures(shell: ShellApi): void {
               label: `rename to “${title}”`,
               undo: () => retitle(before),
               redo: () => retitle(title),
-            });
+            }, { scope });
           } catch (e) {
             titleInput.value = info.title;
             toast(String((e as { message?: string }).message ?? e));
@@ -849,12 +881,12 @@ export function captures(shell: ShellApi): void {
           h("button", { class: "icon-button", "aria-label": "Export as W3C annotations", title: "Export as W3C annotations", onclick: () => void exportW3C(shell, r, t.body) }, icon(FileDown)),
           isArchived(r) ? null : h("button", { class: "icon-button", "aria-label": "Delete capture", title: "Delete (it goes to the archive, where you can restore it or delete it for good)", onclick: async () => {
             await session.flush();
-            if (await deleteCapture(shell.records.get(id) ?? info)) {
-              if (shell.router.canBack()) shell.router.back();
-            }
+            // The page stays, saying it is in the archive; ⌘Z here brings it back.
+            await deleteCapture(shell.records.get(id) ?? info, scope);
           } }, icon(Trash2)),
         ].filter((x): x is HTMLButtonElement => !!x));
-      })();
+      };
+      void draw();
       return () => {
         alive = false;
         cleanup.forEach((c) => c());
@@ -900,7 +932,7 @@ export function captures(shell: ShellApi): void {
               iconButton(LocateFixed, "Show in the source", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, where(a), { again: true }))),
               iconButton(Pencil, "Edit selection", () => void call<Anchor>("captures.anchor", { id: c.id }).then((a) => shell.openRecord(src, { ...where(a), edit: c.id }, { again: true }))),
               iconButton(Copy, "Copy embed", () => void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note."))),
-              iconButton(Trash2, "Delete", () => void deleteCapture(c), true)));
+              iconButton(Trash2, "Delete", () => void deleteCapture(c, recordScope(route.params.id!)), true)));
           li.addEventListener("contextmenu", (e) => {
             e.preventDefault();
             captureMenu(c, { x: e.clientX, y: e.clientY });

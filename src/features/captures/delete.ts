@@ -118,7 +118,7 @@ async function put(shell: ShellApi, s: Step, version: string, from: string, to: 
  * Deletes a capture: straight to the archive when nothing uses it (`plain`), otherwise after
  * the user has chosen what happens to each place. Resolves true when it was deleted.
  */
-export async function deleteCapture(shell: ShellApi, c: RecordInfo, asText: AsText, plain: () => Promise<boolean>): Promise<boolean> {
+export async function deleteCapture(shell: ShellApi, c: RecordInfo, asText: AsText, plain: () => Promise<boolean>, scope: string): Promise<boolean> {
   const refs = await findReferences(c.id, shell.records);
   if (!refs.length) return plain();
   const archiver = shell.slot<Archiver>(ARCHIVER).values()[0];
@@ -163,6 +163,6 @@ export async function deleteCapture(shell: ShellApi, c: RecordInfo, asText: AsTe
       for (const s of steps) s.version = await put(shell, s, s.version, s.before, s.after);
       await a.redo();
     },
-  });
+  }, { scope });
   return true;
 }

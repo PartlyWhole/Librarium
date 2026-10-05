@@ -3,10 +3,10 @@
  * extension slot. Text undo is CodeMirror's history; when the editor has focus its keymap wins,
  * except for the app's reserved shortcuts (handled by the shell before CodeMirror sees them).
  */
-import { EditorState, type Extension } from "@codemirror/state";
+import { EditorState, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
 import { signal } from "../kit/signal";
 import { EditorView, keymap, drawSelection, placeholder as placeholderExt, rectangularSelection, crosshairCursor } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyField, indentWithTab, isolateHistory, redo, undo, undoDepth } from "@codemirror/commands";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { indentOnInput, indentUnit, bracketMatching } from "@codemirror/language";
 import { closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
@@ -71,6 +71,33 @@ export interface EditorOptions {
   create?: (label: string, opts: { newTab: boolean }) => Promise<string | null>;
   contributions?: EditorContribution[];
   placeholder?: string;
+  /** A typing history kept from before (`historyJSON`), for this same text. */
+  history?: unknown;
+  /** Called when typing makes a new undo step (not when undoing or redoing). */
+  onHistoryStep?: () => void;
+}
+
+// ⌘Z / ⇧⌘Z are the app's (text-undo.ts): it undoes typing through `textHistory` when the page's
+// history says so, so typing and the page's other steps undo in the order they were done.
+const isolateNext = StateEffect.define<null>();
+const isolating = StateField.define<boolean>({
+  create: () => false,
+  update: (v, tr) => (tr.effects.some((e) => e.is(isolateNext)) ? true : tr.docChanged ? false : v),
+});
+const isolate = EditorState.transactionExtender.of((tr) => (tr.docChanged && tr.startState.field(isolating, false) ? { annotations: isolateHistory.of("before") } : null));
+
+/** An editor's typing history, for the app's Undo. */
+export function textHistory(view: EditorView) {
+  return {
+    undo: () => undo(view),
+    redo: () => redo(view),
+    isolate: () => view.dispatch({ effects: isolateNext.of(null) }),
+  };
+}
+
+/** The editor's state with its typing history, to give back to `createEditor` later. */
+export function historyJSON(view: EditorView): unknown {
+  return view.state.toJSON({ history: historyField });
 }
 
 export function createEditor(o: EditorOptions): EditorView {
@@ -107,7 +134,7 @@ export function createEditor(o: EditorOptions): EditorView {
     livePreview({ titleOf: o.titleOf, embedsHandled: contributions.some((c) => c.handlesEmbeds), embedShown: contributions.find((c) => c.handlesEmbeds)?.embedShown }),
     linkCompletion(o.targets),
     clipboard,
-    keymap.of([...formatKeymap, ...clipboardKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, ...listKeymap, indentWithTab]),
+    keymap.of([...formatKeymap, ...clipboardKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...completionKeymap, ...listKeymap, indentWithTab]),
     hangingIndent,
     // Tab on a line that isn't a list item indents it with a tab (decision 0058).
     indentUnit.of("\t"),
@@ -115,8 +142,13 @@ export function createEditor(o: EditorOptions): EditorView {
     EditorView.contentAttributes.of({ "aria-label": o.label, "aria-multiline": "true", spellcheck: "true", autocorrect: "on" }),
     EditorState.readOnly.of(!!o.readOnly),
     EditorView.editable.of(!o.readOnly),
+    isolating,
+    isolate,
     EditorView.updateListener.of((u) => {
       if (u.docChanged) o.onChange?.(u.state.doc.toString());
+      if (o.onHistoryStep) for (const tr of u.transactions) {
+        if (tr.docChanged && !tr.isUserEvent("undo") && !tr.isUserEvent("redo") && undoDepth(tr.state) > undoDepth(tr.startState)) o.onHistoryStep();
+      }
       if (u.focusChanged && u.view.hasFocus) active = u.view;
       if (u.docChanged || u.focusChanged) editorChanged.set(editorChanged.peek() + 1);
       if (u.docChanged || u.selectionSet || u.focusChanged) o.onUpdate?.(u.view);
@@ -181,7 +213,16 @@ export function createEditor(o: EditorOptions): EditorView {
     paintProbe(),
   ];
   if (o.placeholder) extensions.push(placeholderExt(o.placeholder));
-  const view = new EditorView({ parent: o.parent, state: EditorState.create({ doc: o.doc, extensions }) });
+  let state: EditorState | null = null;
+  if (o.history) {
+    try {
+      state = EditorState.fromJSON(o.history, { extensions }, { history: historyField });
+      if (state.doc.toString() !== o.doc) state = null;
+    } catch {
+      state = null;
+    }
+  }
+  const view = new EditorView({ parent: o.parent, state: state ?? EditorState.create({ doc: o.doc, extensions }) });
   // Records to embed (images pasted or dropped, once stored): `![[title|id]]`, each on its own
   // line, where they were dropped (x, y) or at the cursor.
   view.dom.addEventListener("librarium:insert-embeds", (ev) => {
@@ -224,5 +265,7 @@ export function replaceDoc(view: EditorView, text: string): void {
   while (a < cur.length && a < text.length && cur[a] === text[a]) a++;
   let b = 0;
   while (b < cur.length - a && b < text.length - a && cur[cur.length - 1 - b] === text[text.length - 1 - b]) b++;
-  view.dispatch({ changes: { from: a, to: cur.length - b, insert: text.slice(a, text.length - b) } });
+  // Not a typing step: undo belongs to whatever changed the file (an outside edit, a restored
+  // version, a capture's places rewritten), and typing before it still undoes (0060).
+  view.dispatch({ changes: { from: a, to: cur.length - b, insert: text.slice(a, text.length - b) }, annotations: Transaction.addToHistory.of(false) });
 }

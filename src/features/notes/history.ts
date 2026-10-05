@@ -3,6 +3,7 @@
  * by day; a version opens a comparison with the text now, from which it can be restored (the
  * text before is kept as a version, so a restore can be undone).
  */
+import { recordScope } from "../../shell/undo";
 import { call } from "../../backend";
 import { h, replace } from "../../kit/dom";
 import { modal } from "../../kit/dialog";
@@ -97,7 +98,7 @@ export async function compare(shell: ShellApi, id: string, v: HistoryVersion): P
           const now = shell.records.get(id)?.version;
           if (now) await call("history.restore", { id, hash: v.hash, base_version: now });
         },
-      });
+      }, { scope: recordScope(id) });
     } catch (e) {
       toast(message(e));
     }

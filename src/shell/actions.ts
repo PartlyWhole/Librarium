@@ -38,7 +38,10 @@ export class Actions {
       if (other) throw new ShortcutCollision(`shortcut ${k} of "${a.id}" is already used by "${other}"`);
     }
     try {
-      this.registry.add(contributor, a.id, { ...a, keys }, order);
+      // A copy that keeps getters (a title that names what Undo will do).
+      const copy = Object.defineProperties({}, Object.getOwnPropertyDescriptors(a)) as Action;
+      copy.keys = keys;
+      this.registry.add(contributor, a.id, copy, order);
     } catch (e) {
       if (e instanceof DuplicateError) throw e;
       throw e;

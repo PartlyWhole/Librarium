@@ -75,6 +75,44 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-064 · ⌘Z for the page you are on, each page keeping its history
+> "I want cmd-z to handle whatever page the user is on. If it's on a note, it's whatever edits
+> are being made to a note. If it's on a captures page, it's whatever is happening to a
+> capture. If things (library items/notes) are being deleted or moved around in library/notes
+> page then cmd-z should undo. When I move away from the page, it seems like the history is
+> forgotten. I want each page to keep its own history, at least when the app is still
+> running. … please think about best practices"
+> Chosen (after a proposal): one history per note, stay on a capture's page after deleting it,
+> one shared Library & notes history, kept while the app runs.
+
+- **Changed:** ⌘Z / ⇧⌘Z act on the page shown. A note's typing, renaming it from its title,
+  moving it from its header and restoring a version undo in the order done, and its history
+  is still there after going elsewhere and coming back (unless the file changed outside
+  meanwhile; then only the typing is forgotten). A capture's page: its words, renaming and
+  deleting; deleting stays on the page ("in the archive", with Restore) and ⌘Z there restores
+  it. The sidebar (focused, or last clicked, e.g. after one of its menus) and the Library,
+  Files, Captures and Archive pages share one history for moving, renaming, archiving and
+  folders. A search box or title being edited undoes its own text. Edit ▸ Undo names the step
+  ("Undo Typing", "Undo rename to “…”"). Outside changes to an open note (an outside edit, a
+  restored version, a capture's places rewritten) are no longer undone as typing; the step
+  that made them undoes them.
+- **Use:** ⌘Z / ⇧⌘Z, or Edit ▸ Undo / Redo. "Undo the last move, rename or archiving" in the
+  Edit menu still reaches the latest app action wherever it was done.
+- **Code:** `src/shell/undo.ts`, `src/shell/text-undo.ts`, `textHistory` / `historyJSON` /
+  `onHistoryStep` / `replaceDoc` in `src/editor/editor.ts`, the note page
+  (`src/features/notes/page.ts`, `history.ts`), the capture page and deleting
+  (`src/features/captures/index.ts`, `delete.ts`), getters kept in `src/shell/actions.ts`.
+- **Decision:** 0060 (amends 0055 and brief §6).
+- **Tested:** Vitest: `tests/undo-scopes.test.ts` (typing and renaming in order, redo; kept
+  after leaving and coming back; forgotten after an outside change; Library history away from
+  a note and not inside one; the sidebar after one of its menus; a capture deleted and
+  restored on its page) and `tests/undo.test.ts` (menu items now found by ID, as their words
+  name the step; changed on purpose). Full suite 235 passing. Preview: typing undone after
+  going to another note and back; archiving from the sidebar's menu undone with ⌘Z. Not
+  checked in the real app (the native menu's names and ⌘Z through it).
+- **Left:** editing a capture's selection isn't undoable yet; two tabs on one note share its
+  history. Fixed in passing: "This is the place" on a moved capture part now redraws the page.
+
 ### R-063 · An archived capture shows as source, not as the capture
 > "Archiving a capture should not render the capture (if the user fails to remove the source
 > code/capture, then it just remains as source code…)"

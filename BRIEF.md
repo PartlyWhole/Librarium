@@ -500,8 +500,11 @@ event triggers a check by size, modification and change times (nanoseconds) and 
 - IDs are rewritten only when the folder has been quiet and no git operation is in progress.
 - Never merge silently.
 
-**Undo** has two scopes, chosen by focus:
-- Text undo is CodeMirror's history for the open note.
+**Undo** is kept per place, for the session (decision 0060): each record's page (a note's
+typing and what is done to it there, in order) and one Library & notes history (the sidebar
+and pages without a record). ⌘Z acts on the place being looked at; a focused text field
+undoes its own text.
+- Text undo is CodeMirror's history for the note, kept when leaving it while the app runs.
 - App actions (rename, move, archive, restore) each record an inverse with the version they
   expect, and refuse if the file has changed since. Their toasts offer Undo.
 - Permanent deletion can't be undone.

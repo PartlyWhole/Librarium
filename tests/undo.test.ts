@@ -28,8 +28,9 @@ async function until(check: () => boolean) {
 }
 
 describe("Edit ▸ Undo and Redo", () => {
-  const item = (shell: Shell, text: string) =>
-    menuSpec(shell.actions).find((s) => s.title === "Edit")!.entries.find((e) => e.kind === "item" && e.text === text) as { enabled: boolean; run(): void };
+  // Found by ID: their words name what they'd do ("Undo Typing", 0060).
+  const item = (shell: Shell, which: "Undo" | "Redo") =>
+    menuSpec(shell.actions).find((s) => s.title === "Edit")!.entries.find((e) => e.kind === "item" && e.id === (which === "Undo" ? "edit.undo" : "edit.redo")) as { enabled: boolean; run(): void; text: string };
 
   it("are greyed out with nothing to undo, and undo and redo the note's text", async () => {
     const { shell, n } = await boot();
@@ -43,11 +44,14 @@ describe("Edit ▸ Undo and Redo", () => {
     view.dispatch({ changes: { from: 0, insert: "New " }, userEvent: "input.type" });
     await wait(20);
     expect(item(shell, "Undo").enabled).toBe(true);
+    expect(item(shell, "Undo").text).toBe("Undo Typing");
     item(shell, "Undo").run();
+    await wait(20);
     expect(view.state.doc.toString()).toBe("first line\nsecond line\n");
     expect(item(shell, "Undo").enabled).toBe(false);
     expect(item(shell, "Redo").enabled).toBe(true);
     item(shell, "Redo").run();
+    await wait(20);
     expect(view.state.doc.toString()).toBe("New first line\nsecond line\n");
   });
 
@@ -65,6 +69,7 @@ describe("Edit ▸ Undo and Redo", () => {
     shell.undo.done("Moved two.", step("two"));
     await wait(20);
     expect(item(shell, "Undo").enabled).toBe(true);
+    expect(item(shell, "Undo").text).toBe("Undo two");
     item(shell, "Undo").run();
     await wait(20);
     item(shell, "Undo").run();

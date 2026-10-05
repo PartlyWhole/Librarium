@@ -129,10 +129,12 @@ Rules that keep it honest:
 - **Shell** (`src/shell/shell.ts`): layout (ribbon, sidebar tree, tabs, page, side panel,
   status bar), the action registry (one place for shortcuts, the palette, the native menu;
   collisions rejected), prefs (per device), records cache (kept current by change events),
-  undo and redo for app actions (a stack per session; each step has `undo` and `redo` and
-  expects the versions it produced, 0055), Edit ▸ Undo/Redo for what has focus (note text,
-  a field, else app actions), greyed out with nothing to undo (`text-undo.ts`, 0054), jobs
-  UI. A new undoable action should give `redo` too.
+  undo and redo per place (`undo.ts`, 0060: `record:<id>` for a record's page, `library`
+  for the rest; typing is a marker over CodeMirror's history, kept when leaving a note; each
+  app step has `undo` and `redo` and expects the versions it produced, 0055), Edit ▸
+  Undo/Redo for the place being looked at, naming the step (`text-undo.ts`), jobs UI. A new
+  undoable action gives `redo` too, and says its place (`done(…, { scope })` or
+  `undo.within`) unless it belongs to the Library & notes.
 - **Tabs and navigation** (`router.ts`, `tabs.ts`, 0034): each tab has its own history and a
   living page (hidden when another tab shows); `router.go(page, params, {newTab, again})`;
   tabs are restored at start. A page can return `{ dispose, update }` to take new params for

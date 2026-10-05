@@ -1,6 +1,6 @@
 # 0055. ⌘Z and ⇧⌘Z undo and redo moves, renames and archiving, several deep
 
-- Status: accepted (extends 0017 and 0054)
+- Status: accepted (extends 0017 and 0054); amended by [0060](0060-undo-per-place.md) (a history per place)
 - Date: 2026-10-05
 - Request: R-051 in `docs/REQUESTS.md` (it also answers R-049's question)
 
