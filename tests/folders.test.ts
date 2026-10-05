@@ -371,6 +371,49 @@ describe("the sidebar's menus", () => {
     expect(mock.state.folders.has("note:Drafts")).toBe(true);
   });
 
+  it("deletes a folder: an empty one at once; one with things in it archives them, after asking, with Undo", async () => {
+    const { shell, ellul, weil } = await boot();
+    rightClick(treeRow("Empty"));
+    choose("Delete folder");
+    await wait(40);
+    expect(mock.state.folders.has("note:Empty")).toBe(false);
+    // Thinkers holds two notes (one in French) and an empty folder.
+    rightClick(treeRow("Thinkers"));
+    choose("New folder inside…");
+    await answer("Later");
+    expect(mock.state.folders.has("note:Thinkers/Later")).toBe(true);
+    rightClick(treeRow("Thinkers"));
+    choose("Delete folder…");
+    await wait(20);
+    const dialog = document.querySelector("dialog[open]")!;
+    expect(dialog.textContent).toContain("The 2 items inside go to the Archive");
+    [...dialog.querySelectorAll("button")].find((b) => b.textContent === "Archive 2 items and delete")!.click();
+    await wait(80);
+    expect(shell.records.get(ellul.id)!.fields["archive.at"]).toBeTruthy();
+    expect(shell.records.get(weil.id)!.fields["archive.at"]).toBeTruthy();
+    expect(mock.state.folders.has("note:Thinkers/Later")).toBe(false);
+    const shown = () => !!document.querySelector('.tree [data-id="folder:note:Thinkers"]');
+    expect(shown()).toBe(false);
+    await shell.undo.undoLast();
+    await wait(60);
+    expect(shell.records.get(ellul.id)!.fields["archive.at"]).toBeUndefined();
+    expect(mock.state.folders.has("note:Thinkers/Later")).toBe(true);
+    expect(shown()).toBe(true);
+    await shell.undo.redoLast();
+    await wait(60);
+    expect(shell.records.get(weil.id)!.fields["archive.at"]).toBeTruthy();
+  });
+
+  it("asks before deleting, and Cancel leaves the folder as it is", async () => {
+    const { shell, ellul } = await boot();
+    rightClick(treeRow("Thinkers"));
+    choose("Delete folder…");
+    await wait(20);
+    [...document.querySelector("dialog[open]")!.querySelectorAll("button")].find((b) => b.textContent === "Cancel")!.click();
+    await wait(40);
+    expect(shell.records.get(ellul.id)!.fields["archive.at"]).toBeUndefined();
+  });
+
   it("the sidebar's empty space goes to Notes or the Library, or makes a folder in either", async () => {
     const { shell } = await boot();
     rightClick(document.querySelector(".sidebar-scroll")!);

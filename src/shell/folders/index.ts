@@ -17,7 +17,7 @@ import type { RecordInfo } from "../../generated/RecordInfo";
 import type { FoldersList } from "../../generated/FoldersList";
 import { FileText, Folder, FolderOpen } from "lucide";
 import { Contents, badFolderName, folderOf, join, keyOf, nameOf, parentOf, placed, sortEntries, within, type FolderEntry, type Sort } from "./model";
-import { canMoveInto, canPlaceIn, moveInto, newFolder, pickFolder, removeFolder, renameFolder, renameRecord, type FolderStore } from "./ops";
+import { canMoveInto, canPlaceIn, deleteFolder, moveInto, newFolder, pickFolder, renameFolder, renameRecord, type FolderStore } from "./ops";
 import { arriveWith, makeFolderHere, renderFiles, type FilesCtx } from "./view";
 
 const folderKey = (name: string) => `folder:${name}`;
@@ -194,7 +194,9 @@ export function createFolders(shell: ShellApi): Folders {
       ];
       const inside = insideActions(c.recordsUnder(path));
       if (inside.length) items.push("separator", ...inside);
-      if (!c.entries(path).length) items.push("separator", { label: "Remove folder", destructive: true, run: () => void removeFolder(shell, store, path) });
+      // Empty, it's removed; with things in it, they're archived first (after asking).
+      const sub = c.folders.filter((f) => f.startsWith(`${path}/`));
+      items.push("separator", { label: c.entries(path).length ? "Delete folder…" : "Delete folder", destructive: true, run: () => void deleteFolder(shell, store, path, c.recordsUnder(path), sub) });
       return items;
     };
     const manyMenu = (rs: RecordInfo[], fs: string[]): MenuItem[] => {

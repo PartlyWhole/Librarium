@@ -121,3 +121,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-05 | Edit ▸ Undo and Redo are the app's own, acting on what has focus and greyed out when there's nothing to undo. | [0054](docs/decisions/0054-edit-undo-greyed-out.md) |
 | 2026-10-05 | ⌘Z / ⇧⌘Z undo and redo moves, renames and archiving (50 steps a session) when the focus isn't in text. | [0055](docs/decisions/0055-undo-redo-app-actions.md) |
 | 2026-10-05 | The capture being made is shown in the side panel's Captures view; the reader keeps the whole page. | [0056](docs/decisions/0056-capture-draft-in-side-panel.md) |
+| 2026-10-05 | Deleting a folder with things in it archives them (after asking), with one Undo; nothing is removed from disk. | [0057](docs/decisions/0057-deleting-folders.md) |

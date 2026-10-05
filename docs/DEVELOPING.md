@@ -141,7 +141,9 @@ Rules that keep it honest:
   folder spaces and get a Finder-like page (list/icons, sort, filter, selection, renaming,
   context menus, a selection bar) and a sidebar tree. The sidebar's headings have a menu (open the
   page, new folder: `topMenu`), its empty space offers Go to and New folder for each space,
-  and records get Rename… (a dialog; the Files page renames in place instead). Dragging uses pointer events
+  and records get Rename… (a dialog; the Files page renames in place instead). Delete
+  folder archives what's inside after asking (`deleteFolder` in `ops.ts`, through the
+  `shell.archiver` slot the archive feature fills, 0057). Dragging uses pointer events
   (`kit/dnd.ts`) because Tauri claims the platform's drags for file drops.
 - **Links to the web** (`links.ts`, 0036): a dialog asks before opening in the browser; a
   Tauri navigation guard keeps the window in the app.

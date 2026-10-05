@@ -4,7 +4,10 @@ import { count } from "../../kit/format";
 import { toast } from "../../kit/toast";
 import { comboboxDialog } from "../../kit/combobox";
 import type { DragPayload } from "../../kit/dnd";
-import type { ShellApi } from "../slots";
+import { ARCHIVER, type Archiver, type ShellApi } from "../slots";
+import { ask } from "../../kit/dialog";
+import { h } from "../../kit/dom";
+import type { RecordInfo } from "../../generated/RecordInfo";
 import type { FolderMoved } from "../../generated/FolderMoved";
 import type { MovedRecords } from "../../generated/MovedRecords";
 import type { Written } from "../../generated/Written";
@@ -183,6 +186,56 @@ export async function removeFolder(shell: ShellApi, store: FolderStore, path: st
     toast(message(e));
     return false;
   }
+}
+
+/**
+ * Deletes a folder. An empty one is removed. One with things in it is confirmed, then its
+ * records go to the Archive and its empty folders are removed. The folder itself stays on
+ * disk with the archived records (they keep their place), so it vanishes from lists and comes
+ * back if one is restored. One Undo puts it all back.
+ */
+export async function deleteFolder(shell: ShellApi, store: FolderStore, path: string, records: RecordInfo[], subfolders: string[]): Promise<boolean> {
+  if (!records.length) return removeFolder(shell, store, path);
+  const archiver = shell.slot<Archiver>(ARCHIVER).values()[0];
+  if (!archiver) return void toast("Move or remove what’s inside first."), false;
+  const locked = records.filter((r) => r.read_only);
+  if (locked.length) return void toast(`“${locked[0]!.title || "An item"}” can’t be archived, so the folder was left as it is.`), false;
+  const n = records.length;
+  const ok = await ask(`Delete “${nameOf(path)}”?`,
+    h("p", null, `The ${count(n, "item")} inside ${n === 1 ? "goes" : "go"} to the Archive, where you can restore ${n === 1 ? "it (it comes" : "them (they come"} back in this folder) or delete ${n === 1 ? "it" : "them"} for good.`),
+    [{ label: "Cancel", value: false }, { label: `Archive ${count(n, "item")} and delete`, value: true, primary: true }]);
+  if (!ok) return false;
+  // Empty folders inside go now (deepest first; one with archived things in it is refused).
+  const removed: string[] = [];
+  const clear = async () => {
+    removed.length = 0;
+    for (const f of [...subfolders].sort((a, b) => b.split("/").length - a.split("/").length)) {
+      try {
+        await call("folders.remove", { kind: store.kind, path: f });
+        removed.push(f);
+      } catch {
+        /* not empty */
+      }
+    }
+  };
+  await clear();
+  const step = await archiver.archive(records.map((r) => r.id));
+  await store.refresh();
+  if (!step.archived) return false;
+  shell.undo.done(`Deleted “${nameOf(path)}”: ${count(step.archived, "item")} archived.`, {
+    label: `deleting the folder “${nameOf(path)}”`,
+    undo: async () => {
+      await step.undo();
+      for (const f of [...removed].reverse()) await call("folders.create", { kind: store.kind, path: f });
+      await store.refresh();
+    },
+    redo: async () => {
+      await clear();
+      await step.redo();
+      await store.refresh();
+    },
+  });
+  return true;
 }
 
 /** Asks which folder to move things into (an existing one, or a new one typed in). */

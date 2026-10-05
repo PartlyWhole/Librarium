@@ -109,6 +109,15 @@ export interface SettingsSection {
   render(host: HTMLElement): (() => void) | void;
 }
 
+/**
+ * shell.archiver: archiving lent to the shell (by the archive feature), for deleting a folder
+ * with things in it. Archives the records and says how to undo and redo that.
+ */
+export interface Archiver {
+  archive(ids: string[]): Promise<{ archived: number; undo(): Promise<void>; redo(): Promise<void> }>;
+}
+export const ARCHIVER = "shell.archiver";
+
 /** shell.record-actions: an entry in a record's context menu (for one record or several). */
 export interface RecordAction {
   /** The menu label, given how many records it acts on. */

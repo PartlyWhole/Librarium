@@ -56,6 +56,36 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-054 · Delete folders, archiving what's inside after asking
+> "Allow deleting folders (when items are in the folders, confirm archiving items inside)"
+
+- **Changed:**
+  - A folder's right-click menu (in the sidebar and on the Notes and Library pages) has
+    **Delete folder**.
+  - An empty folder is deleted at once.
+  - A folder with things in it asks first: "The N items inside go to the Archive, where you can
+    restore them (they come back in this folder) or delete them for good." Choosing
+    **Archive N items and delete** archives everything in it and its subfolders, removes the
+    empty folders inside, and the folder disappears.
+  - ⌘Z (or the toast's Undo) brings it all back; ⇧⌘Z deletes it again.
+- **Use:** right-click a folder ▸ Delete folder… ▸ Archive N items and delete.
+- **Good to know:**
+  - Nothing is removed from disk: archived items keep their place, so the folder stays in
+    Finder with them, and the app hides it.
+  - Restoring any of them brings the folder back.
+  - After you delete them permanently from the Archive, the empty folder shows again and can
+    be deleted at once.
+- **Code:** `src/shell/folders/ops.ts` (`deleteFolder`), `src/shell/folders/index.ts`,
+  `src/features/archive/index.ts` (lends archiving through `shell.archiver`),
+  `src/shell/slots.ts`.
+- **Decision:** 0057.
+- **Tested:**
+  - Interface tests: an empty folder deleted at once; a folder with two notes and an empty
+    subfolder asks, archives both, removes the subfolder and disappears; Undo restores
+    everything, Redo deletes again; Cancel changes nothing.
+  - All 183 interface tests, 64 WebKit checks and the Rust tests pass; lint is clean.
+- **Left:** nothing.
+
 ### R-053 · Capturing split the screen; details belong in the right side bar
 > "Also, I still have this split screen when capturing. Epub should remain full main view,
 > while capture details should be on right side bar"

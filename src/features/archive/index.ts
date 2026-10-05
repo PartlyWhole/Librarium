@@ -16,6 +16,7 @@ import { count } from "../../kit/format";
 import { call } from "../../backend";
 import type { DeletedNote } from "../../generated/DeletedNote";
 import type { ShellApi } from "../../shell/api";
+import { ARCHIVER, type Archiver } from "../../shell/slots";
 import type { RecordInfo } from "../../generated/RecordInfo";
 import type { Written } from "../../generated/Written";
 import { Archive, ArchiveRestore, Trash2 } from "lucide";
@@ -46,7 +47,7 @@ export function archive(shell: ShellApi): void {
    * Archives (or restores) records, offering one Undo for all of them; each undo expects the
    * version the change produced, and refuses for a record that changed since.
    */
-  async function setArchived(ids: string[], archive: boolean): Promise<void> {
+  async function change(ids: string[], archive: boolean) {
     const [doIt, undoIt] = archive ? ["archive.archive", "archive.restore"] : ["archive.restore", "archive.archive"];
     const done: Written[] = [];
     for (const id of ids) {
@@ -58,9 +59,6 @@ export function archive(shell: ShellApi): void {
         toast(message(e));
       }
     }
-    if (!done.length) return;
-    const what = done.length === 1 ? `“${done[0]!.info.title || "Untitled"}”` : count(done.length, "item");
-    const verb = archive ? "Archived" : "Restored";
     // Each step expects the versions the one before produced.
     const versions = new Map(done.map((w) => [w.info.id, w.info.version]));
     const each = async (method: string) => {
@@ -70,12 +68,22 @@ export function archive(shell: ShellApi): void {
         shell.records.put(x.info, x.seq);
       }
     };
-    shell.undo.done(`${verb} ${what}`, {
-      label: `${archive ? "archive" : "restore"} ${what}`,
-      undo: () => each(undoIt),
-      redo: () => each(doIt),
-    });
+    return { done, undo: () => each(undoIt), redo: () => each(doIt) };
   }
+  async function setArchived(ids: string[], archive: boolean): Promise<void> {
+    const { done, undo, redo } = await change(ids, archive);
+    if (!done.length) return;
+    const what = done.length === 1 ? `“${done[0]!.info.title || "Untitled"}”` : count(done.length, "item");
+    const verb = archive ? "Archived" : "Restored";
+    shell.undo.done(`${verb} ${what}`, { label: `${archive ? "archive" : "restore"} ${what}`, undo, redo });
+  }
+  // Deleting a folder with things in it archives them (the shell's folders ask for this).
+  shell.slot<Archiver>(ARCHIVER).add("archive", "archive", {
+    archive: async (ids) => {
+      const { done, undo, redo } = await change(ids, true);
+      return { archived: done.length, undo, redo };
+    },
+  });
   const archiveRecord = (id: string) => setArchived([id], true);
   const restoreRecord = (id: string) => setArchived([id], false);
 
