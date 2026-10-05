@@ -3,9 +3,10 @@
  * extension slot. Text undo is CodeMirror's history; when the editor has focus its keymap wins,
  * except for the app's reserved shortcuts (handled by the shell before CodeMirror sees them).
  */
-import { EditorState, type Extension } from "@codemirror/state";
+import { ChangeSet, EditorState, type Extension } from "@codemirror/state";
+import { signal } from "../kit/signal";
 import { EditorView, keymap, drawSelection, placeholder as placeholderExt, rectangularSelection, crosshairCursor } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyField, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { indentOnInput, bracketMatching } from "@codemirror/language";
 import { closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
@@ -20,6 +21,8 @@ import { codeHighlighting } from "./code";
 import { folding } from "./folding";
 
 let active: EditorView | null = null;
+/** Bumped when any editor's text or focus changes (the Undo history view follows it). */
+export const editorChanged = signal(0);
 
 /** The editor last focused, if it is still on the page (the Format menu acts on it). */
 export function activeEditor(): EditorView | null {
@@ -89,6 +92,7 @@ export function createEditor(o: EditorOptions): EditorView {
     EditorView.updateListener.of((u) => {
       if (u.docChanged) o.onChange?.(u.state.doc.toString());
       if (u.focusChanged && u.view.hasFocus) active = u.view;
+      if (u.docChanged || u.focusChanged) editorChanged.set(editorChanged.peek() + 1);
       if (u.docChanged || u.selectionSet || u.focusChanged) o.onUpdate?.(u.view);
       if (u.focusChanged && !u.view.hasFocus) o.onBlur?.();
     }),
@@ -194,4 +198,61 @@ export function replaceDoc(view: EditorView, text: string): void {
   let b = 0;
   while (b < cur.length - a && b < text.length - a && cur[cur.length - 1 - b] === text[text.length - 1 - b]) b++;
   view.dispatch({ changes: { from: a, to: cur.length - b, insert: text.slice(a, text.length - b) } });
+}
+
+/** The editor shown on a page: the one last focused there, else its first. */
+export function editorOn(root: ParentNode): EditorView | null {
+  const a = activeEditor();
+  if (a && root.contains(a.dom)) return a;
+  const el = root.querySelector<HTMLElement>(".cm-editor");
+  return el ? EditorView.findFromDOM(el) : null;
+}
+
+/** One step of an editor's text history, in the writer's terms. */
+export interface TextStep {
+  typed: string;
+  deleted: string;
+}
+
+/**
+ * The steps ⌘Z would undo (newest first) and ⇧⌘Z would redo (next first), read from
+ * CodeMirror's own history, so they are exactly what those keys do. Each undo step's changes
+ * apply to the text as it is after the steps before it are undone.
+ */
+export function textHistory(view: EditorView, max = 50): { undo: TextStep[]; redo: TextStep[]; more: { undo: number; redo: number } } {
+  const json = view.state.toJSON({ history: historyField }) as { history?: { done: { changes?: unknown }[]; undone: { changes?: unknown }[] } };
+  const walk = (events: { changes?: unknown }[], undoing: boolean) => {
+    const out: TextStep[] = [];
+    let doc = view.state.doc;
+    let skipped = 0;
+    for (let i = events.length - 1; i >= 0; i--) {
+      const raw = events[i]!.changes;
+      if (!raw) continue; // A selection-only step.
+      let cs: ChangeSet;
+      try {
+        cs = ChangeSet.fromJSON(raw);
+      } catch {
+        break;
+      }
+      if (cs.length !== doc.length) break;
+      if (out.length >= max) {
+        skipped++;
+        doc = cs.apply(doc);
+        continue;
+      }
+      const now: string[] = [];
+      const then: string[] = [];
+      cs.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+        if (toA > fromA) now.push(doc.sliceString(fromA, toA));
+        if (inserted.length) then.push(inserted.toString());
+      });
+      // Undoing removes what was typed and puts back what was deleted; redoing the reverse.
+      out.push(undoing ? { typed: now.join(" … "), deleted: then.join(" … ") } : { typed: then.join(" … "), deleted: now.join(" … ") });
+      doc = cs.apply(doc);
+    }
+    return { out, skipped };
+  };
+  const u = walk(json.history?.done ?? [], true);
+  const r = walk(json.history?.undone ?? [], false);
+  return { undo: u.out, redo: r.out, more: { undo: u.skipped, redo: r.skipped } };
 }

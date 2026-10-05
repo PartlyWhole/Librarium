@@ -129,7 +129,8 @@ Rules that keep it honest:
 - **Shell** (`src/shell/shell.ts`): layout (ribbon, sidebar tree, tabs, page, side panel,
   status bar), the action registry (one place for shortcuts, the palette, the native menu;
   collisions rejected), prefs (per device), records cache (kept current by change events),
-  undo for app actions, jobs UI.
+  undo for app actions (with a session log, `undo.log`, shown by the temporary Undo history
+  view, `src/features/undo-history/`, 0053), jobs UI.
 - **Tabs and navigation** (`router.ts`, `tabs.ts`, 0034): each tab has its own history and a
   living page (hidden when another tab shows); `router.go(page, params, {newTab, again})`;
   tabs are restored at start. A page can return `{ dispose, update }` to take new params for

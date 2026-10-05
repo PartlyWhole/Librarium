@@ -44,7 +44,14 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Waiting for you
 
-(nothing)
+### Should ⌘Z undo app actions when you're not typing? (from R-049)
+Today ⌘Z only undoes text: a note's, or a text field's. A rename, move or archive is undone
+only from its toast's Undo or Edit ▸ Undo the last rename or move.
+- **A (recommended):** ⌘Z undoes the latest app action when the focus isn't in a note or a text
+  field (for example after renaming in the Files page). Inside a note, ⌘Z stays the note's text.
+  This is what the brief's "two scopes, chosen by focus" suggests. Risk: pressing ⌘Z after
+  clicking out of a note undoes a rename instead of text.
+- **B:** leave it as it is. App actions are undone only from the toast or the menu.
 
 ---
 
@@ -55,6 +62,33 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 ---
 
 ## Done
+
+### R-049 · Show what ⌘Z works on (temporary, a side panel tab)
+> "Can you show the history of what cmd-z works on? I want this only to be temporary, but maybe
+> a side panel tab"
+
+- **Changed:** a new **Undo history** view in the side panel, on every page. It has two parts:
+  - **This note's text:** on a note, the steps ⌘Z would undo, newest first ("Typed “…”",
+    "Deleted “…”", "Replaced “…” with “…”"), with the next one marked. Below them is what ⇧⌘Z
+    would redo. The list comes from the editor's own undo history, so it matches the keys
+    exactly, and it updates as you type and undo.
+  - **Renames, moves, archiving:** what you did this session, with the time and whether it can
+    still be undone. Only the latest can be, and it has an Undo button.
+- **Use:** open the side panel (the button at the right of the header) and choose the ↶ tab.
+- **Temporary:** nothing is saved, so the log ends when the app quits. The view is
+  self-contained, so it can be removed later in one step: delete
+  `src/features/undo-history/` and its line in `src/main.ts`.
+- **Code:** `src/features/undo-history/index.ts`; `src/shell/undo.ts` (`log`);
+  `src/editor/editor.ts` (`textHistory`, `editorOn`, `editorChanged`); `src/shell/shell.css`.
+- **Decision:** 0053.
+- **Tested:**
+  - Interface tests: text steps before and after an undo, including redo, and app actions
+    (latest, replaced, undone).
+  - In the preview: typing, deleting and ⌘Z in a note were listed as expected.
+  - All 173 interface tests, 64 WebKit checks and the Rust tests pass; lint is clean.
+- **Found along the way:** ⌘Z outside a note (or a text field) does nothing. The brief says
+  undo scopes are "chosen by focus", but app actions are only undone from the toast or the Edit
+  menu. See the question under Waiting for you.
 
 ### R-048 · Swiping in an EPUB sometimes turned several pages
 > "Sometimes scrolling pages on epub will turn multiple pages. Please add some kind of pause"
