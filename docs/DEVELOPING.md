@@ -243,7 +243,9 @@ combobox). Every action must be in a menu (shell test).
   - Readium drops a click that moved more than a pixel, and a click let go just off a small
     link is the paragraph's. The EPUB reader follows links itself (0068). Script-made clicks
     hide this, because Readium accepts them regardless; check with real clicks from the
-    runner (`nativeClick` in `scripts/webkit-run.swift`).
+    runner (`nativeClick` in `scripts/webkit-run.swift`). Note references open in a popover
+    (0069): the note is read from a shown frame or from the book (`readAsXML`), and an empty
+    anchor stands for its paragraph.
   - Non-linear spine items belong in the reading order: links lead to them (notes files).
   - PDF.js's text layer must be exactly the drawn page's size: a page border (or any CSS that
     resizes `.page`) makes find and selection drift. PDF.js's stylesheet loads after ours.

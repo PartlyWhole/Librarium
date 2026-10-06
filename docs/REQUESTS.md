@@ -44,24 +44,7 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Waiting for you
 
-### EPUB views (R-066): how should the layouts be chosen?
-- **A (recommended, as Apple Books and Kindle do):** one **Layout** control at the top of the
-  Aa panel: `Two pages | One page | Scrolling`, always visible.
-  - Two pages says when there isn't room ("Not enough room; showing one page").
-  - The same three choices go in the View menu, with shortcuts, and in the palette.
-  - Switching keeps your exact place.
-  - Scrolling gets the same centred column and margins as pages.
-  - The font list shrinks to one "Font" row, so the panel fits without scrolling.
-- **B: fewer choices.** Pages pick one or two by themselves (as now), plus a single
-  Pages/Scrolling switch. Simpler, but you can't force two pages or one.
-- **C: a layout button in the reader's toolbar** that cycles through the three, plus A's fixes.
-  Quick to reach, but cycling makes you pass through a layout you don't want.
-
-### EPUB footnotes (R-065, follow-up): where should a note show?
-- **A (recommended, as Apple Books does):** in a popover over the page when you click its
-  number, with a link to "Go to note". You keep your page.
-- **B: as now.** Go to the note, and come back with the book's own back-link (↵) or a "Back"
-  button the reader adds after a jump.
+(Nothing waiting.)
 
 ---
 
@@ -87,7 +70,12 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
      pages moved about a page on (paragraph 67).
   6. **Only through the Aa panel,** behind the toolbar that appears on hover: no menu item, no
      shortcut, no palette command.
-- **Next:** the design question under Waiting for you; then the fix.
+- **Decision (2026-10-06, after looking at Apple Books):** "Like Books, plus visible".
+  - The Aa panel's top row: text size, then **Layout: Single page | Two pages | Scroll**.
+  - The View menu has Single Page, Two Pages and Scrolling, with shortcuts.
+  - Two pages falls back to one when the window is narrow, and says so.
+  - Switching keeps your place; scrolling gets margins; the font list shrinks to one row.
+- **Next:** build it.
 
 ---
 
@@ -113,23 +101,30 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
     a few pixels of it. A drag that selects text still selects; it doesn't jump.
   - Notes files marked non-linear are part of the book.
   - Links to the web still ask before opening.
-- **Use:** click a footnote number to go to the note; its back-link (↵, when the book has one)
-  returns you.
+  - **A footnote opens in a popover** beside its number (you chose this, as Apple Books does),
+    with **Go to note** and **Close**. Notes at the end of a chapter, in a separate notes file,
+    and marked with an empty anchor all work.
+  - Links that aren't notes (and very long notes) still go to their place.
+- **Use:** click a footnote number to read the note over the page. **Go to note** goes there
+  (its back-link, ↵, returns you); Escape or a click elsewhere closes it.
 - **Code:** `src/reader/epub/engine.ts` (`follow`, the frame's link handling),
   `src/reader/epub/streamer.ts` (reading order), `scripts/webkit-run.swift` (`nativeClick`:
   real clicks for checks).
-- **Decision:** 0068.
-- **Tested:** 5 WebKit checks with real moving clicks on a test book shaped like yours:
-  - a note several pages on in the same chapter, and back;
-  - a note in a separate notes file, and back;
-  - a note in a non-linear file with a space in its name;
+- **Decisions:** 0068 (links), 0069 (popovers).
+- **Tested:** 7 WebKit checks with real moving clicks on a test book shaped like yours:
+  - a note at the end of the chapter, in a popover, the page staying put;
+  - Go to note, and back;
+  - a note in a separate notes file, closed with Escape;
+  - a note marked with an empty anchor, in a non-linear file with a space in its name;
+  - a link that isn't a note going to its place, and back;
   - a drag from a note number selecting text rather than jumping.
 
   All but the drag failed before the fix. The streamer test now expects non-linear items in
-  the book (a deliberate change). All 242 interface tests, 80 WebKit checks and the Rust tests
-  pass; lint is clean. Your two books were checked from temporary copies, deleted afterwards.
-- **Left:** a note opens where it is, so you leave your page. A popover, as in Apple Books, is
-  the question under Waiting for you (R-066).
+  the book (a deliberate change). All 242 interface tests, 82 WebKit checks and the Rust tests
+  pass (one Rust library test timed out once and passed on reruns; unrelated); lint is clean.
+  Your two books were checked from temporary copies, deleted afterwards.
+- **Left:** nothing. Books whose note links are words ("see note 3") go to the note rather
+  than open a popover.
 
 ### R-057 · Boards: a note you can draw on (Excalidraw), with captures and links
 > "Please plan an excalidraw page "feature" that supports putting in captures and [[]] links,

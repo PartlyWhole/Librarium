@@ -794,21 +794,38 @@ async function run() {
       dragStays = notesBook.view.position() === before0 && shownId("return-footnote-1");
       fr0.contentDocument!.getSelection()?.removeAllRanges();
     }
-    const sameFile = (await clickLink("return-footnote-1")) && shownId("footnote-1");
-    const back = sameFile && (await clickLink("footnote-1") ? true : false);
-    // The link back is inside the note: find it there.
+    // A note's number shows the note in a popover (as Apple Books does): the page stays.
+    const popover = () => document.querySelector(".epub-note");
+    const before1 = notesBook.view.position();
+    await clickLink("return-footnote-1");
+    const pop1 = { text: popover()?.querySelector(".epub-note-body")?.textContent ?? null, stays: notesBook.view.position() === before1 && !shownId("footnote-1") };
+    // "Go to note" goes there; the note's own link back returns.
+    [...(popover()?.querySelectorAll("button") ?? [])].find((b) => b.textContent === "Go to note")?.click();
+    await pause(1500);
+    const goneTo1 = shownId("footnote-1") && !popover();
     const backLink = [...stage.querySelectorAll("iframe")].map((f) => (f as HTMLIFrameElement).contentDocument?.querySelector('#footnote-1 a[href="#return-footnote-1"]') as HTMLElement | null).find(Boolean);
     if (backLink) {
       backLink.id = "lib-back-1";
       await clickLink("lib-back-1");
     }
     const backShown = shownId("return-footnote-1");
-    const otherFile = (await clickLink("ref2")) && shownId("n2");
+    // A note in a separate file, and one marked as Either/Or marks them (an empty anchor, then
+    // its number linking back), in a non-linear file with a space in its name.
+    await clickLink("ref2");
+    const pop2 = popover()?.querySelector(".epub-note-body")?.textContent ?? null;
+    popover()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await pause(200);
+    const closed = !popover();
+    await clickLink("ref3");
+    const pop3 = popover()?.querySelector(".epub-note-body")?.textContent ?? null;
+    popover()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await pause(200);
+    // A link that isn't a note's number goes to its place.
+    const otherFile = (await clickLink("see-notes")) && shownId("n2") && !popover();
     const fromNotes = [...stage.querySelectorAll("iframe")].map((f) => (f as HTMLIFrameElement).contentDocument?.querySelector('#n2 a') as HTMLElement | null).find(Boolean);
     if (fromNotes) fromNotes.id = "lib-back-2";
     const backFromNotes = fromNotes ? (await clickLink("lib-back-2")) && shownId("ref2") : false;
-    const spaced = (await clickLink("ref3")) && shownId("n3");
-    results.epubFootnotes = { dragStays, native: !!(window as unknown as { webkit?: { messageHandlers?: { nativeClick?: unknown } } }).webkit?.messageHandlers?.nativeClick, start, sameFile, back, backShown, otherFile, backFromNotes, spaced, position: notesBook.view.position() };
+    results.epubFootnotes = { dragStays, native: !!(window as unknown as { webkit?: { messageHandlers?: { nativeClick?: unknown } } }).webkit?.messageHandlers?.nativeClick, start, pop1, goneTo1, backShown, pop2, closed, pop3, otherFile, backFromNotes, position: notesBook.view.position() };
     notesBook.view.destroy();
   }
 

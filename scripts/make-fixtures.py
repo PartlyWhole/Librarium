@@ -197,13 +197,14 @@ def footnotes_epub(path):
         return "".join(f"<p>{tag} paragraph {i}. " + " ".join(WORDS[(i * 7 + j) % len(WORDS)] for j in range(50)) + ".</p>" for i in range(1, n + 1))
     ch1 = ('<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Chapter One</title></head><body><h1>Chapter One</h1>'
            # The number inside the link, as many books have it (a click lands on the <sup>).
-           '<p>The first claim<a class="footnote" epub:type="noteref" href="#footnote-1" id="return-footnote-1"><sup class="footnote">[1]</sup></a>, the second<a href="notes.xhtml#n2" id="ref2"><sup>2</sup></a>, and the third<a href="Notes%20B.xhtml#n3" id="ref3">3</a>.</p>'
+           '<p>The first claim<a class="footnote" epub:type="noteref" href="#footnote-1" id="return-footnote-1"><sup class="footnote">[1]</sup></a>, the second<a href="notes.xhtml#n2" id="ref2"><sup>2</sup></a>, and the third<a href="Notes%20B.xhtml#n3" id="ref3">3</a>. See <a href="notes.xhtml#n2" id="see-notes">the notes on this chapter</a>.</p>'
            + paras(60, "Body") +
            '<div class="footnotes"><aside epub:type="footnote" id="footnote-1"><p>1. A note at the end of the chapter. <a href="#return-footnote-1">Back</a></p></aside></div></body></html>')
     notes = ('<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Notes</title></head><body><h1>Notes</h1>'
              + paras(40, "Notes") + '<p id="n2">2. The note in the notes file. <a href="ch1.xhtml#ref2">Back</a></p></body></html>')
+    # As Either/Or marks its notes: an empty anchor, then the number linking back.
     notes_b = ('<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>More notes</title></head><body><h1>More notes</h1>'
-               + paras(30, "More") + '<p id="n3">3. The note in a file with a space in its name.</p></body></html>')
+               + paras(30, "More") + '<p class="footnote"><a id="n3"/><a href="ch1.xhtml#ref3">3</a>. The note in a file with a space in its name.</p></body></html>')
     with zipfile.ZipFile(path, "w") as z:
         z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", compress_type=zipfile.ZIP_STORED)
         z.writestr("META-INF/container.xml", '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')

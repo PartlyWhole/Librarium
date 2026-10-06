@@ -254,27 +254,140 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     function turn(dir: 1 | -1) {
       void flip(dir > 0 === (nav.readingProgression !== "rtl") ? "right" : "left");
     }
-    /** Follows a link in the book: to the web (asked first), or to a place in the book. */
-    function follow(a: HTMLAnchorElement, doc: Document) {
+    /** Where a link in the book goes: the web, or a file of the book (and a place in it). */
+    function resolveLink(a: HTMLAnchorElement, doc: Document): { web: string } | { path: string; frag: string } | null {
       const raw = (a.getAttribute("href") ?? "").trim();
-      if (!raw || /^javascript:/i.test(raw)) return;
-      if (/^(https?:|mailto:|tel:)/i.test(raw)) {
-        document.dispatchEvent(new CustomEvent("open-link", { detail: { url: raw, text: a.textContent ?? "" } }));
-        return;
-      }
+      if (!raw || /^javascript:/i.test(raw)) return null;
+      if (/^(https?:|mailto:|tel:)/i.test(raw)) return { web: raw };
       // Relative to the file the link is in (its frame's spine item).
       const f = frames().find((x) => x.doc === doc);
       const here = f && f.index >= 0 ? book.spine[f.index]!.href : decodeURIComponent((current?.href ?? "").split("#")[0]!);
-      let u: URL;
       try {
-        u = new URL(raw, `https://book.invalid/${here.split("/").map(encodeURIComponent).join("/")}`);
+        const u = new URL(raw, `https://book.invalid/${here.split("/").map(encodeURIComponent).join("/")}`);
+        if (u.hostname !== "book.invalid") return null;
+        return { path: decodeURIComponent(u.pathname.slice(1)), frag: decodeURIComponent(u.hash.slice(1)) };
       } catch {
+        return null;
+      }
+    }
+    /**
+     * Follows a link in the book: to the web (asked first); a note's number shows the note in a
+     * popover, as Apple Books does (R-065); anything else goes to its place in the book.
+     */
+    function follow(a: HTMLAnchorElement, doc: Document) {
+      const to = resolveLink(a, doc);
+      if (!to) return;
+      if ("web" in to) {
+        document.dispatchEvent(new CustomEvent("open-link", { detail: { url: to.web, text: a.textContent ?? "" } }));
         return;
       }
-      if (u.hostname !== "book.invalid") return;
-      const path = decodeURIComponent(u.pathname.slice(1));
-      const frag = decodeURIComponent(u.hash.slice(1));
-      goHref(frag ? `${path}#${frag}` : path);
+      const go = () => goHref(to.frag ? `${to.path}#${to.frag}` : to.path);
+      if (!to.frag || !isNoteRef(a)) return go();
+      void noteOf(to.path, to.frag, a).then((note) => (note ? showNote(note, a, doc, go) : go()), go);
+    }
+
+    /** Whether a link is a note's number: marked as one, or a short mark (1, [2], *, †, a). */
+    function isNoteRef(a: HTMLAnchorElement): boolean {
+      const kind = `${a.getAttributeNS("http://www.idpf.org/2007/ops", "type") ?? a.getAttribute("epub:type") ?? ""} ${a.getAttribute("role") ?? ""}`;
+      if (/\bnoteref\b|doc-noteref|doc-backlink|\bbacklink\b/.test(kind)) return /noteref/.test(kind);
+      return /^[[(]?(\d{1,4}|[*†‡§¶]{1,3}|[a-z])[\])]?\.?$/i.test((a.textContent ?? "").trim());
+    }
+
+    /**
+     * A note's text, found where its number points: in the page shown, else in its file. A note
+     * marked by an empty anchor (`<a id="n1"/>`) is the paragraph it begins.
+     */
+    async function noteOf(path: string, frag: string, from: HTMLAnchorElement): Promise<Element | null> {
+      let target: Element | null = null;
+      for (const f of frames()) if (f.index >= 0 && book.spine[f.index]!.href === path) target ??= f.doc.getElementById(frag);
+      if (!target) {
+        const href = path.split("/").map(encodeURIComponent).join("/");
+        const link = book.publication.readingOrder.findWithHref(href) ?? book.publication.resources?.findWithHref(href);
+        if (!link) return null;
+        const d = (await book.publication.get(link).readAsXML()) as Document | undefined;
+        target = d?.getElementById(frag) ?? null;
+      }
+      if (!target) return null;
+      const block = "p, li, aside, div, section, dd, blockquote";
+      const note = (target.textContent ?? "").trim().length > 4 ? target : (target.closest(block) ?? target.parentElement);
+      const words = (note?.textContent ?? "").trim();
+      // Not a note: nothing there, the reference itself, or a whole section.
+      if (!note || !words || note.contains(from) || words.length > 3000) return null;
+      return note;
+    }
+
+    /** The note, as plain formatting only (its links back to the text left out). */
+    function noteBody(note: Element): HTMLElement {
+      const out = h("div", { class: "epub-note-body" });
+      const KEEP: Record<string, string> = { em: "em", i: "em", strong: "strong", b: "strong", sup: "sup", sub: "sub", br: "br", code: "code", small: "small" };
+      const BLOCK = new Set(["p", "li", "div", "aside", "section", "blockquote", "dd", "dt"]);
+      const walk = (from: Node, into: HTMLElement) => {
+        for (const n of from.childNodes) {
+          if (n.nodeType === Node.TEXT_NODE) into.append(n.textContent ?? "");
+          else if (n.nodeType === Node.ELEMENT_NODE) {
+            const el = n as Element;
+            const tag = el.localName.toLowerCase();
+            if (tag === "script" || tag === "style") continue;
+            if (tag === "a") {
+              const t = (el.textContent ?? "").trim();
+              // A link back to the reference (↵, ↩, "Back", its number).
+              if (/^(↵|↩|⤴|\^|back|return|[[(]?(\d{1,4}|[*†‡§¶]{1,3})[\])]?\.?)$/i.test(t) && (el.getAttribute("href") ?? "").includes("#")) continue;
+              walk(el, into);
+            } else if (KEEP[tag]) {
+              const e = document.createElement(KEEP[tag]!);
+              into.append(e);
+              walk(el, e);
+            } else if (BLOCK.has(tag)) {
+              const p = h("p");
+              into.append(p);
+              walk(el, p);
+            } else walk(el, into);
+          }
+        }
+      };
+      if (BLOCK.has(note.localName.toLowerCase())) walk(note, out.appendChild(h("p")));
+      else walk(note, out);
+      for (const p of [...out.querySelectorAll("p")]) if (!p.textContent?.trim() && !p.querySelector("br")) p.remove();
+      // What the left-out number leaves at the start (". The note…").
+      const walker = document.createTreeWalker(out, NodeFilter.SHOW_TEXT);
+      for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+        const v = (t.textContent ?? "").replace(/^[\s.:)\]–—-]+/, "");
+        t.textContent = v;
+        if (v) break;
+      }
+      return out;
+    }
+
+    /** The note in a popover by its number; "Go to note" goes to where it is. */
+    function showNote(note: Element, a: HTMLAnchorElement, doc: Document, go: () => void) {
+      closePopover();
+      const f = frames().find((x) => x.doc === doc);
+      const fb = f?.el.getBoundingClientRect() ?? new DOMRect();
+      const r = a.getBoundingClientRect();
+      const goBtn = h("button", { type: "button", class: "link-button small", onclick: () => (closePopover(), go()) }, "Go to note");
+      const el = h("div", { class: "epub-popover epub-note", role: "dialog", "aria-label": "Note" },
+        noteBody(note),
+        h("div", { class: "epub-note-foot" }, goBtn, h("button", { type: "button", class: "link-button small", onclick: () => closePopover() }, "Close")));
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          closePopover();
+          frame.focus();
+        }
+      });
+      // In the book's colours (the popover sits outside the book's frame).
+      const t = THEMES[themeOf(settings)];
+      el.style.background = t.backgroundColor;
+      el.style.color = t.textColor;
+      document.body.appendChild(el);
+      // Below the number, or above it when there isn't room; kept on screen.
+      const x = fb.left + r.left, y = fb.top + r.bottom;
+      const w = el.offsetWidth, hgt = el.offsetHeight;
+      el.style.left = `${Math.round(Math.min(Math.max(8, x - 24), window.innerWidth - w - 8))}px`;
+      el.style.top = `${Math.round(y + 8 + hgt > window.innerHeight - 8 ? Math.max(8, fb.top + r.top - hgt - 8) : y + 8)}px`;
+      popover = { kind: "note", el, anchor: frame };
+      chromeWatchers.forEach((cb) => cb(true));
+      goBtn.focus();
     }
     function goHref(href: string) {
       const link = new Link({ href: href.split("#")[0]!.split("/").map(encodeURIComponent).join("/") + (href.includes("#") ? `#${href.split("#")[1]}` : "") });
@@ -408,7 +521,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     frame.addEventListener("wheel", onWheel, { passive: false });
 
     // Popovers from the toolbar: the contents, and the Aa panel.
-    let popover: { kind: "contents" | "settings"; el: HTMLElement; anchor: HTMLElement } | null = null;
+    let popover: { kind: "contents" | "settings" | "note"; el: HTMLElement; anchor: HTMLElement } | null = null;
     const apply = (next: ReadingSettings) => {
       settings = next;
       store?.set("reader.epub", settings);
@@ -418,7 +531,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     function closePopover() {
       if (!popover) return;
       popover.el.remove();
-      popover.anchor.setAttribute("aria-expanded", "false");
+      if (popover.kind !== "note") popover.anchor.setAttribute("aria-expanded", "false");
       popover = null;
       chromeWatchers.forEach((cb) => cb(false));
     }

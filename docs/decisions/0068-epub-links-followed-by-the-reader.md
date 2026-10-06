@@ -49,5 +49,5 @@ Script-generated clicks hid all of this: Readium treats them as clicks regardles
   All but the drag failed before the fix.
 - The streamer test now expects non-linear items in the reading order. That's a deliberate
   change.
-- Footnotes open where the note is (Readium's behaviour). Showing them in a popover, as Apple
-  Books does, is a question for the user (R-066).
+- Footnotes opened where the note is. The user then chose a popover, as Apple Books does
+  (0069).
