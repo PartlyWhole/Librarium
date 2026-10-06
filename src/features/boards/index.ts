@@ -9,7 +9,8 @@ import { folderOf } from "../../shell/folders/model";
 import type { ShellApi } from "../../shell/api";
 import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
-import { renderBoard, shownBoards } from "./page";
+import { appTheme, boardSvg, renderBoard, shownBoards } from "./page";
+import { h, replace } from "../../kit/dom";
 import { Shapes } from "lucide";
 
 const KIND = "board";
@@ -72,6 +73,35 @@ export function boards(shell: ShellApi): void {
     when: () => !!shownBoard(),
     menu: { name: "edit", group: 3, title: "Put a capture, note or item on the board…" },
     run: () => shownBoard()?.insert(),
+  });
+
+  // The board elsewhere (0066): to a file, and shown as a picture in notes (`![[Board|id]]`).
+  for (const [as, title] of [["png", "Export board as a picture (PNG)…"], ["svg", "Export board as a picture (SVG)…"], ["excalidraw", "Export board as an Excalidraw file…"]] as const) {
+    shell.actions.add("boards", {
+      id: `boards.export.${as}`,
+      title,
+      when: () => !!shownBoard(),
+      menu: { name: "file", group: 3 },
+      run: () => void shownBoard()?.exportAs(as),
+    });
+  }
+  shell.embeds.add("boards", KIND, {
+    kind: KIND,
+    render(r, open) {
+      const picture = h("div", { class: "embed-board-picture", role: "img", "aria-label": `The board “${r.title || "Untitled board"}”` }, h("span", { class: "muted small" }, "Drawing the board…"));
+      const go = (e: Event) => (e.preventDefault(), open(r.id));
+      void boardSvg(shell, r.id, appTheme() === "dark").then(
+        (svg) => {
+          svg.removeAttribute("width");
+          svg.removeAttribute("height");
+          replace(picture, svg);
+        },
+        () => replace(picture, h("span", { class: "muted small" }, "This board can’t be drawn here.")),
+      );
+      return h("figure", { class: "embed embed-board" }, h("a", { href: "#", class: "embed-board-link", onclick: go, title: "Open the board" }, picture), h("figcaption", null, h("a", { href: "#", class: "embed-cite", onclick: go }, `— ${r.title || "Untitled board"}`)));
+    },
+    // Export with quotations: a link to the board's readable page.
+    markdown: (r) => `[${r.title || "Board"}](${r.path})`,
   });
 
   // Drawings not saved before the app stopped: said once, when the library opens.

@@ -312,3 +312,20 @@ fn a_note_keeps_versions_that_compare_and_restore() {
     let oid = other["info"]["id"].as_str().unwrap();
     assert!(a.call("history.read", json!({ "id": oid, "hash": hash })).is_err());
 }
+
+#[test]
+fn exports_write_text_or_bytes_outside_the_library() {
+    let (a, fs) = api();
+    a.call("folder.open", json!({ "path": "/lib" })).unwrap();
+    fs.create_dir_all(std::path::Path::new("/out")).unwrap();
+    a.call("export.write", json!({ "path": "/out/board.svg", "text": "<svg/>" })).unwrap();
+    assert_eq!(fs.read(std::path::Path::new("/out/board.svg")).unwrap(), b"<svg/>");
+    // A picture: bytes, given in base64 ("\x89PNG" here).
+    a.call("export.write", json!({ "path": "/out/board.png", "data": "iVBORw==" })).unwrap();
+    assert_eq!(fs.read(std::path::Path::new("/out/board.png")).unwrap(), b"\x89PNG");
+    assert!(a.call("export.write", json!({ "path": "/out/bad.png", "data": "not base64!" })).is_err());
+    assert!(
+        a.call("export.write", json!({ "path": "/lib/notes/x.png", "data": "iVBORw==" })).is_err(),
+        "never into the library"
+    );
+}

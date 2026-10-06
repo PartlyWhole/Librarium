@@ -4,7 +4,7 @@
  */
 import { createElement, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, exportToBlob, exportToSvg, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { passThrough } from "../../kit/keys";
 import { RECORD_LINK, recordOf, type BoardElement, type BoardLink } from "./links";
@@ -314,4 +314,57 @@ export function mountBoard(host: HTMLElement, o: BoardEngineOptions): Promise<Bo
     const wait = () => (api || performance.now() - t0 > 10_000 ? (loadPictures(), resolve(engine)) : requestAnimationFrame(wait));
     wait();
   });
+}
+
+// ---- the board elsewhere: as a picture, and as a file that reads anywhere (0066) -----------
+
+export interface Portable {
+  /** A card's words: a capture's quotation and citation, else the record's name and kind. */
+  cardText(id: string): string;
+  imageOf: BoardEngineOptions["imageOf"];
+}
+
+/**
+ * The drawing made to read anywhere: each card becomes a box with its words (a capture's
+ * quotation and citation), and each picture's data is put back in (from the library).
+ */
+async function portableScene(scene: string, p: Portable) {
+  const d = parse(scene);
+  const out: unknown[] = [];
+  for (const e of d.elements) {
+    const id = e.type === "embeddable" && !e.isDeleted ? recordOf(e.link) : null;
+    if (!id) {
+      out.push(e);
+      continue;
+    }
+    const box = convertToExcalidrawElements([
+      { type: "rectangle", x: e.x, y: e.y, width: e.width, height: e.height, strokeColor: "#868e96", backgroundColor: "transparent", roundness: { type: 3 }, label: { text: p.cardText(id), fontSize: 16, textAlign: "left", verticalAlign: "top" }, link: e.link },
+    ] as never);
+    out.push(...box);
+  }
+  const files: Record<string, unknown> = { ...(d.files ?? {}) };
+  for (const e of d.elements) {
+    const fileId = (e as { fileId?: string | null }).fileId;
+    if (e.type !== "image" || e.isDeleted || !fileId || files[fileId] || !UUID.test(fileId)) continue;
+    const data = await p.imageOf(fileId);
+    if (data) files[fileId] = { id: fileId, mimeType: data.mimeType, dataURL: data.dataURL, created: Date.now() };
+  }
+  return { elements: out as never[], appState: d.appState, files: files as never };
+}
+
+/** The board as an Excalidraw file that opens anywhere (cards as boxes, pictures inside). */
+export async function portableFile(scene: string, p: Portable): Promise<string> {
+  const s = await portableScene(scene, p);
+  return serializeAsJSON(s.elements, s.appState, s.files, "local");
+}
+
+/** The board as a picture (SVG, or PNG at twice the size), in the light or dark look. */
+export async function boardPicture(scene: string, p: Portable, as: "svg"): Promise<SVGSVGElement>;
+export async function boardPicture(scene: string, p: Portable, as: "png"): Promise<Blob>;
+export async function boardPicture(scene: string, p: Portable & { dark?: boolean }, as: "svg" | "png"): Promise<SVGSVGElement | Blob> {
+  const s = await portableScene(scene, p);
+  const elements = s.elements.filter((e: { isDeleted?: boolean }) => !e.isDeleted);
+  const appState = { ...s.appState, exportBackground: true, exportWithDarkMode: !!p.dark, exportPadding: 24 };
+  if (as === "svg") return exportToSvg({ elements, appState, files: s.files, exportPadding: 24 });
+  return exportToBlob({ elements, appState, files: s.files, mimeType: "image/png", exportPadding: 24, getDimensions: (w: number, h: number) => ({ width: w * 2, height: h * 2, scale: 2 }) });
 }

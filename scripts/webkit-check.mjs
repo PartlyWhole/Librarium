@@ -84,6 +84,8 @@ const checks = [
   ["Board: [[ typed in a text reaches the page (the text is finished, to be linked)", r.boardLinks?.started === true && r.boardLinks.editorClosed === true],
   ["Board: a capture put on the board is a card showing the app's own DOM, linked to the capture", r.boardCards?.card === "Card 0192f3a4-7c1e-7b2a-9f00-0000000000aa" && r.boardCards.cardLink === "librarium://record/0192f3a4-7c1e-7b2a-9f00-0000000000aa" && r.boardCards.cardEmbed === true],
   ["Board: a picture goes on by its library ID; the drawing saved keeps the ID, not the picture's data", r.boardCards?.pictureId === "0192f3a4-7c1e-7b2a-9f00-0000000000bb" && r.boardCards.pictureLink === "librarium://record/0192f3a4-7c1e-7b2a-9f00-0000000000bb" && r.boardCards.pictureDataSaved === false],
+  ["Board: drawn as a picture (for notes and export), its cards' words and its pictures show; PNG too", r.boardExport?.svgText === true && r.boardExport.svgPicture === true && r.boardExport.png === true],
+  ["Board: exported as an Excalidraw file that reads anywhere: cards written out, pictures inside", r.boardExport?.fileEmbeds === 0 && r.boardExport.fileCardText === true && r.boardExport.filePicture === true],
   ["Board: linking replaces [[ with the name, measures the text again, and the record's ID is saved with it", r.boardLinks?.linked === true && r.boardLinks.text === "See Jacques Ellul" && r.boardLinks.wider === true && r.boardLinks.link === "librarium://record/0192f3a4-7c1e-7b2a-9f00-000000000099" && r.boardLinks.kept?.includes("Jacques Ellul")],
   ["recognised words in an image can be found", r.ocrImageLines === 3 && r.ocrImageFind?.count === 1],
   ["recognised words in an image can be selected (and so captured)", r.ocrImageSelection === "Gravity and grace are two forces."],

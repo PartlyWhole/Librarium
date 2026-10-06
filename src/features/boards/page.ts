@@ -3,7 +3,7 @@
  * autosave of the drawing and its readable page together, drafts that survive a crash, outside
  * changes, and ⌘Z through the board's place (decision 0060).
  */
-import { call, on, readBytes, BackendCallError } from "../../backend";
+import { call, on, pickSavePath, readBytes, BackendCallError } from "../../backend";
 import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
 import { toast } from "../../kit/toast";
@@ -15,7 +15,8 @@ import type { BoardSaved } from "../../generated/BoardSaved";
 import type { Change } from "../../generated/Change";
 import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
-import type { BoardElement, BoardEngine, BoardEngineOptions, BoardInsert } from "./engine";
+import type { BoardElement, BoardEngine, BoardEngineOptions, BoardInsert, Portable } from "./engine";
+import type * as EngineModule from "./engine";
 import { boardPage } from "./mirror";
 import { recordOf } from "./links";
 import { comboboxDialog } from "../../kit/combobox";
@@ -29,18 +30,49 @@ import { FolderInput } from "lucide";
 export const boardTimings = { save: 1000, draft: 300, retry: 5000 };
 
 type Mount = (host: HTMLElement, o: BoardEngineOptions) => Promise<BoardEngine>;
-/** Excalidraw, loaded when a board first opens (its fonts are the app's own, 0061). */
-let loadEngine = async (): Promise<Mount> => {
+type Engine = Pick<typeof EngineModule, "mountBoard" | "boardPicture" | "portableFile">;
+/** Excalidraw, loaded when a board first opens or is drawn elsewhere (its fonts are the app's own, 0061). */
+let loadEngine = async (): Promise<Engine> => {
   (window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = "/excalidraw/";
-  return (await import("./engine")).mountBoard;
+  return import("./engine");
 };
 /** Tests stand in their own engine (Excalidraw needs a real browser). */
-export function useBoardEngine(mount: Mount): void {
-  loadEngine = async () => mount;
+export function useBoardEngine(mount: Mount, more: Partial<Omit<Engine, "mountBoard">> = {}): void {
+  const missing = () => Promise.reject(new Error("not in tests"));
+  loadEngine = async () => ({ mountBoard: mount, boardPicture: missing as never, portableFile: missing as never, ...more });
+}
+
+/**
+ * How a board reads outside the app (0066): a card's words (a capture's quotation and citation,
+ * as its kind writes it for export; else the record's name and kind), and pictures' data.
+ */
+export function portable(shell: ShellApi): Portable {
+  return {
+    cardText(rid) {
+      const r = shell.records.get(rid);
+      if (!r) return "(gone)";
+      const kind = shell.looks.get(r.kind)?.kindName(r) ?? r.kind.charAt(0).toUpperCase() + r.kind.slice(1);
+      if (r.kind === "capture") {
+        const md = shell.embeds.get(r.kind)?.markdown(r);
+        if (md) return md.split("\n").map((l) => l.replace(/^>\s?/, "")).filter((l, i, all) => l || (i > 0 && all[i - 1])).join("\n").trim();
+      }
+      return `${r.title || "Untitled"}\n${kind}`;
+    },
+    imageOf: async (rid) => {
+      const r = shell.records.get(rid);
+      return r ? pictureData(r).catch(() => null) : null;
+    },
+  };
+}
+
+/** A board drawn as a picture (for a note showing it), from its saved drawing. */
+export async function boardSvg(shell: ShellApi, id: string, dark: boolean): Promise<SVGSVGElement> {
+  const [engine, b] = await Promise.all([loadEngine(), call<BoardLoaded>("boards.load", { id })]);
+  return engine.boardPicture(b.scene, { ...portable(shell), dark } as Portable, "svg");
 }
 
 /** The boards shown, by ID: what the board's commands act on (Link to…, Insert…). */
-export const shownBoards = new Map<string, { linkTo(): void; insert(): void }>();
+export const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: "png" | "svg" | "excalidraw"): Promise<void> }>();
 
 /**
  * Whether a record is a picture (a library item whose original is an image: the library
@@ -69,7 +101,7 @@ async function pictureData(r: RecordInfo): Promise<{ dataURL: string; mimeType: 
 }
 
 /** The app's light or dark look now. */
-function appTheme(): "light" | "dark" {
+export function appTheme(): "light" | "dark" {
   const t = document.documentElement.dataset.theme;
   return t === "dark" || (t !== "light" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
 }
@@ -224,8 +256,10 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
 
     // ---- the drawing -----------------------------------------------------------------------
     let mount: Mount;
+    let module: Engine;
     try {
-      mount = await loadEngine();
+      module = await loadEngine();
+      mount = module.mountBoard;
     } catch (e) {
       if (alive) replace(canvasHost, h("p", { class: "empty" }, `The drawing tools couldn’t be loaded: ${message(e)}`));
       return;
@@ -329,7 +363,33 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
       if (!ids.length) return status("Select something on the board first, then link it.");
       pickRecord(ids.length === 1 ? "Link it to" : `Link ${ids.length} things to`, (to) => engine?.link(ids, to));
     };
-    shownBoards.set(id, { linkTo, insert });
+    // ---- export -----------------------------------------------------------------------------
+    /** The board as a picture or a file to keep or send: saved first, then written where asked. */
+    const exportAs = async (as: "png" | "svg" | "excalidraw") => {
+      await save();
+      if (!engine) return;
+      const scene = engine.current().scene;
+      const name = (info.title || "Board").replace(/[/:\\]/g, "-");
+      const how = { png: "as a picture (PNG)", svg: "as a picture (SVG)", excalidraw: "as an Excalidraw file" }[as];
+      const path = await pickSavePath(`${name}.${as}`, `Export “${info.title}” ${how}`);
+      if (!path) return;
+      try {
+        const p = portable(shell);
+        if (as === "png") {
+          const blob = await module.boardPicture(scene, p, "png");
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          let bin = "";
+          for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+          await call("export.write", { path, data: btoa(bin) });
+        } else if (as === "svg") {
+          await call("export.write", { path, text: (await module.boardPicture(scene, p, "svg")).outerHTML });
+        } else await call("export.write", { path, text: await module.portableFile(scene, p) });
+        status(as === "excalidraw" ? "Exported, with its pictures inside and its cards written out." : "Exported.");
+      } catch (e) {
+        toast(`The board couldn’t be exported: ${message(e)}`);
+      }
+    };
+    shownBoards.set(id, { linkTo, insert, exportAs });
     cleanup.push(() => shownBoards.delete(id));
 
     // ---- outside changes -------------------------------------------------------------------

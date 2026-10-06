@@ -531,7 +531,12 @@ pub struct OrphanSidecar {
 pub struct ExportParams {
     /// A path the user chose.
     pub path: String,
+    /// What to write, as text (a note, an SVG, a drawing)…
+    #[serde(default)]
     pub text: String,
+    /// …or as bytes, in base64 (a picture), when given.
+    #[serde(default)]
+    pub data: Option<String>,
 }
 
 /// A record's stored text, as derived views and anchors see it, with its segments (pages,

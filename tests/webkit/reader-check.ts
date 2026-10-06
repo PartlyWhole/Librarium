@@ -812,7 +812,7 @@ async function run() {
   {
     const before = performance.getEntriesByType("resource").length;
     (window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = "/excalidraw/";
-    const { mountBoard } = await import("../../src/features/boards/engine");
+    const { mountBoard, boardPicture, portableFile } = await import("../../src/features/boards/engine");
     stage.replaceChildren();
     let changes = 0;
     let steps = 0;
@@ -902,6 +902,20 @@ async function run() {
       pictureId: picEl?.fileId ?? null,
       pictureLink: picEl?.link ?? null,
       pictureDataSaved: PIC in (savedNow.files ?? {}),
+    };
+    // The board elsewhere: a picture (SVG, PNG) and a file that reads anywhere, cards written out.
+    const sceneNow = board.current().scene;
+    const p = { cardText: (rid: string) => (rid === CAP ? "Technique integrates everything.\n— The Technological Society, p. 1" : "A note"), imageOf: async () => picture };
+    const svg = await boardPicture(sceneNow, p, "svg");
+    const png = await boardPicture(sceneNow, p, "png");
+    const file = JSON.parse(await portableFile(sceneNow, p)) as { elements: { type: string; text?: string; isDeleted?: boolean }[]; files: Record<string, { dataURL?: string }> };
+    results.boardExport = {
+      svgText: svg.outerHTML.includes("Technique integrates everything.") && svg.outerHTML.includes("The Technological Society"),
+      svgPicture: svg.outerHTML.includes("<image"),
+      png: png.type === "image/png" && png.size > 1000,
+      fileEmbeds: file.elements.filter((e) => e.type === "embeddable" && !e.isDeleted).length,
+      fileCardText: file.elements.some((e) => e.type === "text" && e.text?.includes("Technique integrates everything.")),
+      filePicture: (file.files[PIC]?.dataURL ?? "").startsWith("data:image/png"),
     };
     const external = performance.getEntriesByType("resource").slice(before).map((e) => e.name).filter((n) => !n.startsWith(location.origin) && !n.startsWith("data:") && !n.startsWith("blob:"));
     results.board = { afterLoad, typed, undone, redone, dark, savedType: saved.type, external, editor: !!ta };

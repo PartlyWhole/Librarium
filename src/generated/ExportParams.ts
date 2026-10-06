@@ -4,4 +4,12 @@ export type ExportParams = {
 /**
  * A path the user chose.
  */
-path: string, text: string, };
+path: string, 
+/**
+ * What to write, as text (a note, an SVG, a drawing)…
+ */
+text: string, 
+/**
+ * …or as bytes, in base64 (a picture), when given.
+ */
+data: string | null, };

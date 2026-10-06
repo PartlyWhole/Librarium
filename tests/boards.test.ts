@@ -4,14 +4,14 @@
  * Excalidraw itself needs a real browser (tests/webkit/board-check.ts); here a stand-in engine.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { call, mock, seed, EMPTY_BOARD, boardNote } from "./mock/backend";
+import { call, exports, mock, seed, EMPTY_BOARD, boardNote } from "./mock/backend";
 import { createShell, type Shell } from "../src/shell/shell";
 import { notes } from "../src/features/notes";
 import { boards } from "../src/features/boards";
 import { archive } from "../src/features/archive";
 import { captures } from "../src/features/captures";
 import { library } from "../src/features/library";
-import { boardTimings, useBoardEngine } from "../src/features/boards/page";
+import { boardTimings, portable, useBoardEngine } from "../src/features/boards/page";
 import { boardPage } from "../src/features/boards/mirror";
 import type { BoardElement, BoardEngine, BoardEngineOptions, BoardInsert } from "../src/features/boards/engine";
 import { recordScope } from "../src/shell/undo";
@@ -46,7 +46,25 @@ beforeEach(() => {
   boardTimings.save = 30;
   boardTimings.draft = 10;
   boardTimings.retry = 50;
-  useBoardEngine(async (host: HTMLElement, o: BoardEngineOptions): Promise<BoardEngine> => {
+  useBoardEngine(fakeMount, fakeElsewhere);
+});
+
+/** Drawing a board elsewhere, as the real engine would (here: its texts, and what it was given). */
+const pictures: { scene: string; as: string }[] = [];
+const fakeElsewhere = {
+  boardPicture: (async (sc: string, p: { cardText(id: string): string }, as: string) => {
+    pictures.push({ scene: sc, as });
+    if (as === "png") return new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", "100");
+    const words = elementsOf(sc).map((e) => (e.type === "embeddable" && e.link ? p.cardText(e.link.slice("librarium://record/".length)) : e.text ?? "")).join(" | ");
+    svg.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "text")).textContent = words;
+    return svg;
+  }) as never,
+  portableFile: (async (sc: string) => JSON.stringify({ ...JSON.parse(sc), portable: true })) as never,
+};
+
+async function fakeMount(host: HTMLElement, o: BoardEngineOptions): Promise<BoardEngine> {
     const el = document.createElement("div");
     el.className = "excalidraw";
     el.tabIndex = 0;
@@ -102,8 +120,7 @@ beforeEach(() => {
         return true;
       },
     };
-  });
-});
+}
 
 let last: Shell | null = null;
 afterEach(() => {
@@ -421,6 +438,63 @@ describe("captures, notes, items and pictures on boards", () => {
     expect(r.kind).toBe("item");
     expect(r.path.startsWith("items/Attachments/")).toBe(true);
     await until(() => mock.state.records.get(id)!.body.includes(`![[chart|${item.id}]]`));
+  });
+
+  it("a board placed in a note shows as a picture of it (its cards' words), and opens it", async () => {
+    const { shell, cap } = await bootAll();
+    const { id, f } = await newBoard(shell);
+    shell.actions.run("boards.insert");
+    await pick("Technique integrates");
+    await until(() => mock.state.records.get(id)!.body.includes(cap.id));
+    const embed = shell.embeds.get("board")!;
+    const fig = embed.render(shell.records.get(id)!, (to) => shell.openRecord(to));
+    document.body.appendChild(fig);
+    await until(() => !!fig.querySelector("svg"));
+    expect(fig.querySelector("svg")!.textContent).toContain("Technique integrates everything.");
+    expect(fig.querySelector("svg")!.hasAttribute("width")).toBe(false);
+    expect(fig.querySelector("figcaption")!.textContent).toBe("— Untitled board");
+    expect(embed.markdown(shell.records.get(id)!)).toBe(`[Untitled board](${shell.records.get(id)!.path})`);
+    shell.router.go("notes", {});
+    await wait(20);
+    fig.querySelector<HTMLElement>(".embed-board-link")!.click();
+    await wait(20);
+    expect(shell.router.current()).toMatchObject({ page: "board", params: { id } });
+    void f;
+  });
+
+  it("exports the board, saved first, where asked: a PNG, an SVG, an Excalidraw file that reads anywhere", async () => {
+    const { shell } = await bootAll();
+    const { f } = await newBoard(shell);
+    boardTimings.save = 5000;
+    f.draw("Unsaved words");
+    mock.state.savePath = "/Users/me/Desktop/Map.png";
+    await shell.actions.run("boards.export.png");
+    await until(() => exports.has("/Users/me/Desktop/Map.png"));
+    expect(exports.get("/Users/me/Desktop/Map.png")).toBe("base64:iVBORw==");
+    // Saved before exporting, so the export is what's on screen.
+    expect(pictures.at(-1)!.scene).toBe(f.scene);
+    mock.state.savePath = "/Users/me/Desktop/Map.svg";
+    await shell.actions.run("boards.export.svg");
+    await until(() => exports.has("/Users/me/Desktop/Map.svg"));
+    expect(exports.get("/Users/me/Desktop/Map.svg")).toContain("Unsaved words");
+    mock.state.savePath = "/Users/me/Desktop/Map.excalidraw";
+    await shell.actions.run("boards.export.excalidraw");
+    await until(() => exports.has("/Users/me/Desktop/Map.excalidraw"));
+    expect(JSON.parse(exports.get("/Users/me/Desktop/Map.excalidraw")!).portable).toBe(true);
+    // Not chosen: nothing written.
+    mock.state.savePath = null;
+    const before = exports.size;
+    await shell.actions.run("boards.export.svg");
+    await wait(30);
+    expect(exports.size).toBe(before);
+  });
+
+  it("writes a card's words outside the app: a capture's quotation and citation, else the name and kind", async () => {
+    const { shell, cap, note } = await bootAll();
+    const p = portable(shell);
+    expect(p.cardText(cap.id)).toBe("Technique integrates everything.\n\n— The Technological Society, p. 1");
+    expect(p.cardText(note.id)).toBe("Ellul\nNote");
+    expect(p.cardText("0192f3a4-7c1e-7b2a-9f00-0000000000ff")).toBe("(gone)");
   });
 
   it("a note dragged from the sidebar onto the board goes on it as a card", async () => {

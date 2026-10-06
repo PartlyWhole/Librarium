@@ -311,7 +311,7 @@ const api: Record<string, (p: any) => unknown> = {
   },
   "captures.orphans": () => [],
   "captures.region": (p) => regions.get(`${p.id}#${p.n}`) ?? "data:image/png;base64,",
-  "export.write": (p) => (exports.set(p.path, p.text), null),
+  "export.write": (p) => (exports.set(p.path, p.data !== undefined && p.data !== null ? `base64:${p.data}` : p.text), null),
   "jobs.dismiss": (p) => ((state.jobs = state.jobs.filter((j) => j.id !== p.id)), null),
   "jobs.retry": (p) => {
     const j = state.jobs.find((x) => x.id === p.id);

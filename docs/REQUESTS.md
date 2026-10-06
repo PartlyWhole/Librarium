@@ -144,8 +144,20 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
   - **Known:** a card is interactive (its buttons) after selecting it and clicking again; its
     link marker opens the record at once. Opened at excalidraw.com, a board shows its cards as
     empty frames and its pictures as missing (export with pictures comes in phase 5).
-- **Next:** phase 5, boards elsewhere: a board shown as a picture in a note, and export
-  (PNG, SVG, a self-contained Excalidraw file).
+- **Phase 5 (boards elsewhere) done** (decision 0066):
+  - **A board in a note:** type `![[` and pick a board, as for a capture. The note shows a
+    picture of the board, captioned with its name; a click opens it. It's redrawn when the
+    board is saved.
+  - **Export:** File ▸ Export board as a picture (PNG)… / (SVG)… / as an Excalidraw file….
+    The board is saved first, then written where you choose.
+  - **Reads anywhere:** in pictures and in the Excalidraw file, each card is written out as a
+    box with its words (a capture's quotation and citation; else the record's name and kind).
+    The Excalidraw file carries its pictures inside, so it opens complete at excalidraw.com.
+  - **Tested:** an API test for byte exports, 3 interface tests, and 2 WebKit checks with the
+    real Excalidraw. In the preview: a board with a text and a capture card, shown in a note
+    as its picture with the quotation written out.
+  - **Only in the real app:** the save dialog.
+- **Next:** phase 6, polish (a keys audit, VoiceOver, speed budgets, the architecture report).
 
 ---
 

@@ -197,7 +197,10 @@ combobox). Every action must be in a menu (shell test).
   React (a rule keeps `engine.ts` loaded on demand only). Cards (0065) are embed elements whose
   contents the page draws with `shell.embeds`; pictures are library items kept by record ID
   (their data is loaded with `readBytes`, never saved in the drawing). A board's canvas is
-  `data-takes-embeds`, so the library's paste and Finder-drop handling serves it as it does notes. Keys the app sends on purpose to a component are
+  `data-takes-embeds`, so the library's paste and Finder-drop handling serves it as it does notes.
+  Elsewhere (0066): an embed renderer draws a board as an SVG in notes; exports (PNG, SVG, a
+  portable Excalidraw file) write cards out as boxes with their words (`portable()` in
+  `page.ts`) and put pictures back in. `export.write` takes `data` (base64) for bytes. Keys the app sends on purpose to a component are
   marked with `passThrough` (`kit/keys.ts`) so its shortcuts don't take them again.
 
 ## 7. Lessons learned (keep these)

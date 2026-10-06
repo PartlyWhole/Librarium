@@ -777,7 +777,16 @@ impl Api {
             }
             methods::EXPORT_WRITE => {
                 let p: librarium_contracts::api::ExportParams = params(p)?;
-                self.export_write(Path::new(&p.path), p.text.as_bytes())?;
+                let bytes = match &p.data {
+                    Some(b64) => {
+                        use base64::Engine as _;
+                        base64::engine::general_purpose::STANDARD
+                            .decode(b64)
+                            .map_err(|e| BackendError::invalid(format!("not base64: {e}")))?
+                    }
+                    None => p.text.into_bytes(),
+                };
+                self.export_write(Path::new(&p.path), &bytes)?;
                 Ok(Value::Null)
             }
             methods::DRAFTS_PUT => {

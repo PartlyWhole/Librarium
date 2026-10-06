@@ -130,3 +130,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-05 | The board page: autosave of drawing and page, drafts, changes from elsewhere kept as a copy, ⌘Z interleaving drawing and page steps. | [0063](docs/decisions/0063-the-board-page.md) |
 | 2026-10-05 | Links on boards: `[[` in a text and Link to… (⌥⌘K) link elements to records by ID; the readable page writes them `[[name|id]]` for backlinks. | [0064](docs/decisions/0064-links-on-boards.md) |
 | 2026-10-05 | Captures, notes, items and pictures on boards: cards drawn by the app's embed renderers, pictures by library ID (no data in the drawing), written `![[…]]` in the page. | [0065](docs/decisions/0065-cards-and-pictures-on-boards.md) |
+| 2026-10-05 | Boards elsewhere: shown as a picture in notes (`![[Board|id]]`), exported as PNG, SVG or an Excalidraw file that reads anywhere (cards written out, pictures inside). | [0066](docs/decisions/0066-boards-elsewhere.md) |
