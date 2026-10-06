@@ -1,0 +1,282 @@
+/**
+ * The board page (docs/plans/boards.md, phase 2): Excalidraw for one board, its title (renames),
+ * autosave of the drawing and its readable page together, drafts that survive a crash, outside
+ * changes, and ⌘Z through the board's place (decision 0060).
+ */
+import { call, on, BackendCallError } from "../../backend";
+import { h, replace } from "../../kit/dom";
+import { icon } from "../../kit/icon";
+import { toast } from "../../kit/toast";
+import { recordScope } from "../../shell/undo";
+import type { ShellApi } from "../../shell/api";
+import type { PageContext } from "../../shell/slots";
+import type { BoardLoaded } from "../../generated/BoardLoaded";
+import type { BoardSaved } from "../../generated/BoardSaved";
+import type { Change } from "../../generated/Change";
+import type { Draft } from "../../generated/Draft";
+import type { Written } from "../../generated/Written";
+import type { BoardElement, BoardEngine, BoardEngineOptions } from "./engine";
+import { boardPage } from "./mirror";
+import { FolderInput } from "lucide";
+
+/** How long after the last change the board is saved, and its draft kept (tests shorten them). */
+export const boardTimings = { save: 1000, draft: 300, retry: 5000 };
+
+type Mount = (host: HTMLElement, o: BoardEngineOptions) => Promise<BoardEngine>;
+/** Excalidraw, loaded when a board first opens (its fonts are the app's own, 0061). */
+let loadEngine = async (): Promise<Mount> => {
+  (window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = "/excalidraw/";
+  return (await import("./engine")).mountBoard;
+};
+/** Tests stand in their own engine (Excalidraw needs a real browser). */
+export function useBoardEngine(mount: Mount): void {
+  loadEngine = async () => mount;
+}
+
+/** The app's light or dark look now. */
+function appTheme(): "light" | "dark" {
+  const t = document.documentElement.dataset.theme;
+  return t === "dark" || (t !== "light" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+}
+
+const message = (e: unknown) => String((e as { message?: string })?.message ?? e);
+const elementsOf = (scene: string): BoardElement[] => {
+  try {
+    return (JSON.parse(scene) as { elements?: BoardElement[] }).elements ?? [];
+  } catch {
+    return [];
+  }
+};
+
+export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<string, string>, ctx: PageContext): () => void {
+  const id = params.id ?? "";
+  const scope = recordScope(id);
+  let alive = true;
+  const cleanup: (() => void)[] = [];
+  host.classList.add("board-page");
+
+  void (async () => {
+    let loaded: BoardLoaded;
+    try {
+      loaded = await call<BoardLoaded>("boards.load", { id });
+    } catch {
+      if (alive) replace(host, h("p", { class: "empty" }, "This board can’t be found any more."));
+      return;
+    }
+    const draft = await call<Draft | null>("drafts.get", { id }).catch(() => null);
+    if (!alive) return;
+    let info = loaded.info;
+    const readOnly = !!info.read_only;
+    ctx.setTitle(info.title || "Untitled board");
+    // A drawing not saved before the app stopped is given back (its draft is newer than the file).
+    const recovered = draft && draft.body !== loaded.scene && !readOnly ? draft : null;
+    // What the next save is based on: the version and drawing it was opened from.
+    let base = recovered ? { version: recovered.base_version, sha: recovered.base_body } : { version: info.version, sha: loaded.scene_sha };
+
+    const titleInput = h("input", { class: "title-input board-title", value: info.title, "aria-label": "Title", spellcheck: true, readOnly, placeholder: "Untitled board" }) as HTMLInputElement;
+    const notices = h("div", { class: "notices" });
+    const canvasHost = h("div", { class: "board-host" });
+    replace(host, h("div", { class: "board-head" }, titleInput, notices), canvasHost);
+    const status = (text: string, persistent = false) => shell.status.show(text, persistent ? 0 : 4000);
+
+    // ---- saving ----------------------------------------------------------------------------
+    let engine: BoardEngine | null = null;
+    let dirty = false;
+    let saving: Promise<void> | null = null;
+    let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    let draftTimer: ReturnType<typeof setTimeout> | undefined;
+    const keepDraft = () => {
+      if (!engine || readOnly) return;
+      void call("drafts.put", { id, base_version: base.version, base_body: base.sha, body: engine.current().scene }).catch(() => {});
+    };
+    const changed = () => {
+      if (readOnly) return;
+      dirty = true;
+      clearTimeout(draftTimer);
+      draftTimer = setTimeout(keepDraft, boardTimings.draft);
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => void save(), boardTimings.save);
+    };
+    /** Saves what is unsaved (`snap`: the drawing taken just before the canvas goes). */
+    const save = async (snap?: ReturnType<BoardEngine["current"]> | null): Promise<void> => {
+      if (saving) await saving;
+      if (!dirty || (!engine && !snap) || readOnly) return;
+      clearTimeout(saveTimer);
+      dirty = false;
+      const { scene, elements } = snap ?? engine!.current();
+      saving = (async () => {
+        try {
+          const r = await call<BoardSaved>("boards.save", { id, base_version: base.version, base_scene_sha: base.sha, scene, page: boardPage(id, elements) });
+          base = { version: r.info.version, sha: r.scene_sha };
+          info = r.info;
+          shell.records.put(r.info, r.seq);
+          if (!dirty) {
+            clearTimeout(draftTimer);
+            await call("drafts.discard", { id }).catch(() => {});
+          }
+        } catch (e) {
+          dirty = true;
+          if (e instanceof BackendCallError && e.code === "conflict") await keepTheirs();
+          else {
+            status(`The board couldn’t be saved: ${message(e)}. It is kept, and saving is tried again.`, true);
+            saveTimer = setTimeout(() => void save(), boardTimings.retry);
+          }
+        }
+      })();
+      await saving;
+      saving = null;
+      if (dirty && alive && engine) saveTimer = setTimeout(() => void save(), boardTimings.save);
+    };
+    /**
+     * The board was changed elsewhere while it had unsaved changes here: never merged silently
+     * (0017). The other version is kept as a copy beside it; this one is saved over it.
+     */
+    const keepTheirs = async () => {
+      try {
+        const fresh = await call<BoardLoaded>("boards.load", { id });
+        const folder = info.path.split("/").slice(1, -1).join("/") || undefined;
+        const w = await call<Written>("boards.create", { title: `${info.title} (version from elsewhere)`, folder });
+        const copy = await call<BoardLoaded>("boards.load", { id: w.info.id });
+        const saved = await call<BoardSaved>("boards.save", { id: w.info.id, base_version: copy.info.version, base_scene_sha: copy.scene_sha, scene: fresh.scene, page: boardPage(w.info.id, elementsOf(fresh.scene)) });
+        shell.records.put(saved.info, saved.seq);
+        base = { version: fresh.info.version, sha: fresh.scene_sha };
+        toast(`“${info.title}” was also changed elsewhere. That version was kept as “${saved.info.title}”; yours stays here.`, { action: { label: "Open it", run: () => shell.openRecord(saved.info.id) } });
+      } catch (e) {
+        status(`The board changed elsewhere and couldn’t be kept apart: ${message(e)}`, true);
+      }
+    };
+    cleanup.push(shell.beforeClose(() => save()));
+    cleanup.push(() => {
+      clearTimeout(draftTimer);
+      clearTimeout(saveTimer);
+      // Taken now: the canvas goes next.
+      void save(dirty && engine ? engine.current() : null);
+    });
+
+    // ---- the drawing -----------------------------------------------------------------------
+    let mount: Mount;
+    try {
+      mount = await loadEngine();
+    } catch (e) {
+      if (alive) replace(canvasHost, h("p", { class: "empty" }, `The drawing tools couldn’t be loaded: ${message(e)}`));
+      return;
+    }
+    if (!alive) return;
+    // This board's history: Excalidraw keeps its steps while the board is open; leaving forgets
+    // them (steps done to the board on its page, like renaming, stay).
+    shell.undo.takeText(scope, "");
+    const ready = await mount(canvasHost, {
+      scene: recovered ? recovered.body : loaded.scene,
+      theme: appTheme(),
+      readOnly,
+      onChange: changed,
+      onStep: () => shell.undo.typed(scope, "Drawing"),
+      onPicture: () => toast("Pictures on boards are coming: for now, put the picture in a note and link it from the board."),
+    });
+    if (!alive) return ready.destroy();
+    engine = ready;
+    const detach = shell.undo.attachText(scope, { undo: () => engine!.undo(), redo: () => engine!.redo(), isolate() {} }, engine.el);
+    cleanup.push(() => {
+      detach();
+      engine?.destroy();
+    });
+    // The look follows the app's.
+    const sync = () => engine?.setTheme(appTheme());
+    const themeWatch = new MutationObserver(sync);
+    themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    media?.addEventListener?.("change", sync);
+    cleanup.push(() => (themeWatch.disconnect(), media?.removeEventListener?.("change", sync)));
+
+    if (readOnly) notices.appendChild(h("p", { class: "notice" }, `This board opens read-only. ${info.read_only}`));
+    if (recovered) {
+      const bar = h("p", { class: "notice" }, "A drawing you hadn’t saved was recovered. ", h("button", { class: "link-button", onclick: () => void discard() }, "Discard it"));
+      const discard = async () => {
+        await call("drafts.discard", { id }).catch(() => {});
+        engine?.load(loaded.scene);
+        base = { version: info.version, sha: loaded.scene_sha };
+        dirty = false;
+        bar.remove();
+      };
+      notices.appendChild(bar);
+      changed();
+    } else if (loaded.stale_page && !readOnly) {
+      // The page was written from another drawing (changed outside, or a save cut short).
+      changed();
+    }
+
+    // ---- outside changes -------------------------------------------------------------------
+    cleanup.push(
+      on("event.change", (p) => {
+        const c = p as Change;
+        if (c.id !== id || c.op === "removed") return;
+        void call<BoardLoaded>("boards.load", { id }).then((fresh) => {
+          if (!alive || fresh.info.version === base.version) return;
+          info = fresh.info;
+          titleInput.value = fresh.info.title;
+          ctx.setTitle(fresh.info.title);
+          // With nothing unsaved, the drawing shown becomes the one on disk; otherwise the
+          // next save keeps both (keepTheirs).
+          if (!dirty && fresh.scene_sha !== base.sha) engine?.load(fresh.scene);
+          if (!dirty) base = { version: fresh.info.version, sha: fresh.scene_sha };
+        }, () => {});
+      }),
+    );
+
+    // ---- the title -------------------------------------------------------------------------
+    const retitle = async (to: string, version: string) => {
+      const x = await call<Written>("records.relocate", { id, title: to, base_version: version });
+      shell.records.put(x.info, x.seq);
+      info = x.info;
+      base = { ...base, version: x.info.version };
+      if (shell.router.current.peek().params.id === id) {
+        titleInput.value = to;
+        ctx.setTitle(to);
+      }
+      return x.info.version;
+    };
+    const rename = async () => {
+      const title = titleInput.value.replace(/\s+/g, " ").trim();
+      if (!title || title === info.title) {
+        titleInput.value = info.title;
+        return;
+      }
+      await save();
+      const before = info.title;
+      try {
+        await retitle(title, info.version);
+        // Each expects the version this page last saved or renamed to: the board's own saves
+        // don't stop it; a change from elsewhere does.
+        shell.undo.done(`Renamed to “${title}”`, {
+          label: `rename to “${title}”`,
+          undo: async () => (await save(), void (await retitle(before, base.version))),
+          redo: async () => (await save(), void (await retitle(title, base.version))),
+        }, { scope });
+      } catch (e) {
+        titleInput.value = info.title;
+        toast(message(e));
+      }
+    };
+    titleInput.addEventListener("keydown", (e) => {
+      if (e.isComposing) return;
+      if (e.key === "Enter" || e.key === "Escape") {
+        e.preventDefault();
+        if (e.key === "Escape") titleInput.value = info.title;
+        titleInput.blur();
+      }
+    });
+    titleInput.addEventListener("blur", () => void rename());
+    ctx.setHeaderActions([
+      h("button", { class: "icon-button", "aria-label": "Move to folder", title: "Move to folder", onclick: () => { const r = shell.records.get(id); if (r) void save().then(() => shell.undo.within(scope, () => shell.folders.moveTo([r]))); } }, icon(FolderInput)),
+    ]);
+    if (params.focus === "title") {
+      titleInput.focus();
+      titleInput.select();
+    }
+  })();
+
+  return () => {
+    alive = false;
+    for (const c of cleanup.splice(0)) c();
+  };
+}

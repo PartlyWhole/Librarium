@@ -127,3 +127,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-05 | Undo per place: each note or capture keeps its own history (typing and its own actions, in order) while the app runs; the sidebar and Library pages share one; ⌘Z acts on what is shown. | [0060](docs/decisions/0060-undo-per-place.md) |
 | 2026-10-05 | React and Excalidraw are used only by boards, loaded on demand, pinned, with fonts served locally and no network. | [0061](docs/decisions/0061-react-for-boards-only.md) |
 | 2026-10-05 | Boards are a `board` kind beside notes, as `<id>-slug.md` (a readable page) plus `<id>.excalidraw` (the drawing), saved together with checks; sidecars move with their record. | [0062](docs/decisions/0062-boards-on-disk.md) |
+| 2026-10-05 | The board page: autosave of drawing and page, drafts, changes from elsewhere kept as a copy, ⌘Z interleaving drawing and page steps. | [0063](docs/decisions/0063-the-board-page.md) |

@@ -806,6 +806,53 @@ async function run() {
   const ir = await ip;
   results.imageRegion = ir ? (await pngInfo(ir.png)).w > 0 && ir.w > 0 : false;
   img.view.destroy();
+
+  // Boards: the real Excalidraw (features/boards/engine.ts), offline, with its fonts served here.
+  step("board");
+  {
+    const before = performance.getEntriesByType("resource").length;
+    (window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = "/excalidraw/";
+    const { mountBoard } = await import("../../src/features/boards/engine");
+    stage.replaceChildren();
+    let changes = 0;
+    let steps = 0;
+    const initial = JSON.stringify({ type: "excalidraw", version: 2, source: "test", elements: [], appState: {}, files: {} });
+    const board = await mountBoard(stage, { scene: initial, theme: "light", readOnly: false, onChange: () => changes++, onStep: () => steps++, onPicture() {} });
+    const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    await pause(600);
+    const live = () => board.current().elements.filter((e) => !e.isDeleted);
+    // Loading a drawing (changed outside) is neither a change to save nor a step.
+    board.load(JSON.stringify({ type: "excalidraw", version: 2, source: "test", elements: [{ id: "r1", type: "rectangle", x: 0, y: 0, width: 50, height: 40, version: 1, versionNonce: 1, isDeleted: false, seed: 1 }], appState: {}, files: {} }));
+    await pause(300);
+    const afterLoad = { changes, steps, elements: live().length };
+    // Typing a text: double-click opens Excalidraw's text editor.
+    const canvas = stage.querySelector(".excalidraw canvas.interactive") as HTMLCanvasElement;
+    const cr = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(new MouseEvent("dblclick", { clientX: cr.left + 400, clientY: cr.top + 300, bubbles: true, cancelable: true }));
+    await pause(300);
+    const ta = stage.querySelector("textarea.excalidraw-wysiwyg") as HTMLTextAreaElement | null;
+    if (ta) {
+      ta.value = "Technique";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    }
+    await pause(400);
+    const typed = { changes, steps, texts: live().filter((e) => e.type === "text").map((e) => e.text) };
+    // ⌘Z, sent the way the board page sends it: one step undone, saved as a change, not a new step.
+    board.undo();
+    await pause(400);
+    const undone = { texts: live().filter((e) => e.type === "text").length, steps };
+    board.redo();
+    await pause(400);
+    const redone = live().filter((e) => e.type === "text").length;
+    board.setTheme("dark");
+    await pause(200);
+    const dark = !!stage.querySelector(".excalidraw.theme--dark");
+    const saved = JSON.parse(board.current().scene) as { type: string; elements: unknown[] };
+    const external = performance.getEntriesByType("resource").slice(before).map((e) => e.name).filter((n) => !n.startsWith(location.origin) && !n.startsWith("data:") && !n.startsWith("blob:"));
+    results.board = { afterLoad, typed, undone, redone, dark, savedType: saved.type, external, editor: !!ta };
+    board.destroy();
+  }
 }
 
 run().then(

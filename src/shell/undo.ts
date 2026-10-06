@@ -33,7 +33,8 @@ export interface TextHistory {
 export const LIBRARY = "library";
 export const recordScope = (id: string) => `record:${id}`;
 
-type Entry = { kind: "app"; step: Undoable; n: number } | { kind: "text" };
+/** An app step, or a step of the editor showing the place (typing; a board's drawing). */
+type Entry = { kind: "app"; step: Undoable; n: number } | { kind: "text"; label?: string };
 interface Stacks {
   past: readonly Entry[];
   future: readonly Entry[];
@@ -74,11 +75,11 @@ export class Undo {
   /** What ⌘Z would undo in a place: "Typing", or the step's label (for the Edit menu). */
   undoLabel(scope: string): string | null {
     const e = this.stacks().get(scope)?.past.at(-1);
-    return !e ? null : e.kind === "text" ? "Typing" : e.step.label;
+    return !e ? null : e.kind === "text" ? (e.label ?? "Typing") : e.step.label;
   }
   redoLabel(scope: string): string | null {
     const e = this.stacks().get(scope)?.future.at(-1);
-    return !e ? null : e.kind === "text" ? "Typing" : e.step.label;
+    return !e ? null : e.kind === "text" ? (e.label ?? "Typing") : e.step.label;
   }
 
   /** The latest app step anywhere, and the latest undone one (the Edit menu's "last" items). */
@@ -112,10 +113,10 @@ export class Undo {
     toast(message, { action: { label: "Undo", run: () => void this.undoStep(u) } });
   }
 
-  /** The editor showing a place made a new history step (typing). */
-  typed(scope: string): void {
+  /** The editor showing a place made a new history step (typing; "Drawing" on a board). */
+  typed(scope: string, label?: string): void {
     const s = this.get(scope);
-    this.put(scope, { past: [...s.past, { kind: "text" }], future: [] });
+    this.put(scope, { past: [...s.past, label ? { kind: "text", label } : { kind: "text" }], future: [] });
   }
 
   /** The editor showing a place; returns how to let it go. */

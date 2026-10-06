@@ -13,7 +13,7 @@ import { h, replace } from "../kit/dom";
 import { comboboxDialog } from "../kit/combobox";
 import { count } from "../kit/format";
 import { icon, type IconNode } from "../kit/icon";
-import { display, fromEvent } from "../kit/keys";
+import { display, fromEvent, isPassThrough } from "../kit/keys";
 import { Registry } from "../kit/registry";
 import { batch, effect, signal, untracked } from "../kit/signal";
 import { Tree, type TreeNode } from "../kit/tree";
@@ -514,12 +514,14 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
 
   // ---- keys ---------------------------------------------------------------------------
   function onKey(e: KeyboardEvent) {
+      if (isPassThrough(e)) return;
       const key = fromEvent(e);
       if (!key) return;
       const a = actions.forKey(key);
       if (!a) return;
       const target = e.target as Element | null;
-      if (target?.closest?.(".cm-editor") && !a.reserved) return;
+      // In the editor and on a board's canvas, only the app's reserved keys win.
+      if (target?.closest?.(".cm-editor, .excalidraw") && !a.reserved) return;
       if (!actions.available(a)) return;
       e.preventDefault();
       e.stopPropagation();

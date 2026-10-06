@@ -85,8 +85,25 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
   - **Code:** `crates/features/boards`, `crates/kernel/src/{kinds,folders,store}.rs`,
     `crates/contracts` (`BoardLoaded`, `BoardSaved`, `FolderSpace.kinds`).
   - **Changed on purpose:** the API test now expects `kinds` in the folder list.
-- **Next:** phase 2, the board page (open, draw, autosave, drafts, outside changes, undo).
-  Boards don't show in the app until then.
+- **Phase 2 (the board page) done** (decision 0063):
+  - **New board:** File ▸ New board, ⌥⌘N. It's made beside the note or folder you're in,
+    opens with its title ready to type, and is listed with notes (its own icon) in the sidebar
+    and the Notes page. Rename… and Move to folder… work as for notes.
+  - **Drawing:** Excalidraw's tools, in the app's light or dark look. It saves a second after
+    you stop, with its readable page (the board's texts). A drawing not yet saved when the app
+    stopped comes back, with "Discard it".
+  - **Changed elsewhere:** with nothing unsaved, the board shows the new version. With
+    unsaved changes, the other version is kept as a copy, "… (version from elsewhere)", and
+    yours is saved.
+  - **⌘Z / ⇧⌘Z:** undoes drawing steps, and steps done on the board's page (like renaming),
+    in order. Leaving the board forgets its drawing steps.
+  - **Pictures:** not yet (phase 4); pasting one says so.
+  - **Fixed on the way:** ⌘Z sent to the canvas was caught by the app's own shortcut again,
+    so one press ran through every step.
+  - **Tested:** 9 interface tests and 4 WebKit checks with the real Excalidraw. In the preview:
+    make, name, draw, leave and come back, and ⌘Z / ⇧⌘Z through shapes and the rename.
+  - **Only the real app can show:** ⌘Z from the macOS menu bar reaching the canvas.
+- **Next:** phase 3, links (`[[` on the board, Link to…, backlinks).
 
 ---
 

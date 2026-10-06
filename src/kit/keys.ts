@@ -75,3 +75,14 @@ export function accelerator(keys: string): string {
     .map((p) => (p === "Mod" ? "CmdOrCtrl" : p === "Alt" ? "Alt" : p === "ArrowLeft" ? "Left" : p === "ArrowRight" ? "Right" : p === "ArrowUp" ? "Up" : p === "ArrowDown" ? "Down" : p))
     .join("+");
 }
+
+const PASS = new WeakSet<KeyboardEvent>();
+/**
+ * A key the app sends to a component on purpose (⌘Z to a board's canvas): the app's own
+ * shortcuts let it through, so it isn't taken for the user pressing it again.
+ */
+export function passThrough(e: KeyboardEvent): KeyboardEvent {
+  PASS.add(e);
+  return e;
+}
+export const isPassThrough = (e: KeyboardEvent) => PASS.has(e);

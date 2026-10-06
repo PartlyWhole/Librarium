@@ -149,7 +149,9 @@ export function notes(shell: ShellApi): void {
   effect(() => {
     if (shell.folder()?.state !== "open" || offered) return;
     offered = true;
-    void call<Draft[]>("drafts.list").then((drafts) => {
+    void call<Draft[]>("drafts.list").then((all) => {
+      // Notes' drafts (a board's drawing is offered by boards).
+      const drafts = all.filter((d) => (shell.records.get(d.id)?.kind ?? KIND) === KIND);
       if (!drafts.length) return;
       toast(drafts.length === 1 ? "Text you hadn’t saved was recovered." : `Text you hadn’t saved was recovered in ${drafts.length} notes.`, { action: { label: "Show", run: () => shell.openRecord(drafts[0]!.id) } });
     }, () => {});

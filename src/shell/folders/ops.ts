@@ -27,12 +27,17 @@ export interface FolderStore {
 
 const quoted = (path: string, root: string) => `“${path ? nameOf(path) : root}”`;
 
+/** The kinds each space holds (boards are kept in the Notes folders, 0062), from `folders.list`. */
+export const spaceKinds = new Map<string, readonly string[]>();
+/** Whether records of `recordKind` are kept in the space of `spaceKind`. */
+export const inSpace = (recordKind: string, spaceKind: string) => (spaceKinds.get(spaceKind) ?? [spaceKind]).includes(recordKind);
+
 /** Whether a drag (or a choice of folder) can go into `dest`. */
 export function canMoveInto(shell: ShellApi, p: DragPayload, dest: string, kind: string): boolean {
   if (p.kind !== kind) return false;
   if (p.folders.some((f) => within(dest, f) || parentOf(f) === dest)) return false;
   const rs = p.records.map((id) => shell.records.get(id));
-  if (rs.some((r) => !r || r.kind !== kind)) return false;
+  if (rs.some((r) => !r || !inSpace(r.kind, kind))) return false;
   // Something has to actually move.
   return p.folders.length > 0 || rs.some((r) => r && folderOf(r) !== dest);
 }
@@ -40,7 +45,10 @@ export function canMoveInto(shell: ShellApi, p: DragPayload, dest: string, kind:
 /** Whether a drag can be placed among the things in `folder` (moving there if it must). */
 export function canPlaceIn(shell: ShellApi, p: DragPayload, folder: string, kind: string): boolean {
   if (p.kind !== kind || p.folders.some((f) => within(folder, f))) return false;
-  return p.records.every((id) => shell.records.get(id)?.kind === kind);
+  return p.records.every((id) => {
+    const r = shell.records.get(id);
+    return !!r && inSpace(r.kind, kind);
+  });
 }
 
 /** Moves records and folders into `dest`, offering Undo. */

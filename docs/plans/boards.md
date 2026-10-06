@@ -6,7 +6,8 @@ Request R-057:
 > feature because there are a lot of tools already with excalidraw. Please plan carefully"
 
 Status: **D1–D3 decided (React for boards only, 0061; beside notes; the two-file format,
-0062). Phase 0 passed (§8). Phase 1 (kind and storage) done.** Next: phase 2, the board page.
+0062). Phase 0 passed (§8). Phase 1 (kind and storage) done. Phase 2 (the board page) done (0063).**
+Next: phase 3, links.
 
 In this plan, *fact* means checked (against the code, the brief or the Excalidraw package
 0.18.1, unpacked and read). *Proposal* means my recommendation. *Assumption* means not yet

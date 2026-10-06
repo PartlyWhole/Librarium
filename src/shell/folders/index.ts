@@ -17,7 +17,7 @@ import type { RecordInfo } from "../../generated/RecordInfo";
 import type { FoldersList } from "../../generated/FoldersList";
 import { FileText, Folder, FolderOpen } from "lucide";
 import { Contents, badFolderName, folderOf, join, keyOf, nameOf, parentOf, placed, sortEntries, within, type FolderEntry, type Sort } from "./model";
-import { canMoveInto, canPlaceIn, deleteFolder, moveInto, newFolder, pickFolder, renameFolder, renameRecord, type FolderStore } from "./ops";
+import { canMoveInto, canPlaceIn, deleteFolder, inSpace, moveInto, newFolder, pickFolder, renameFolder, renameRecord, spaceKinds, type FolderStore } from "./ops";
 import { arriveWith, makeFolderHere, renderFiles, type FilesCtx } from "./view";
 
 const folderKey = (name: string) => `folder:${name}`;
@@ -82,12 +82,18 @@ export function createFolders(shell: ShellApi): Folders {
     if (shell.folder()?.state === "open") void refresh();
     else listed.set([]);
   });
+  // Which kinds each space holds (notes and boards share the Notes folders).
+  effect(() => {
+    for (const s of listed()) spaceKinds.set(s.kind, s.kinds?.length ? s.kinds : [s.kind]);
+  });
   // Folders made or removed in Finder show up when the window comes back.
   window.addEventListener("focus", () => void (shell.folder.peek()?.state === "open" && refresh()));
 
   const look = (r: RecordInfo) => shell.looks.get(r.kind);
   const kindName = (r: RecordInfo) => look(r)?.kindName(r) ?? r.kind;
   const spaceOf = (kind: string) => spaces.get(kind);
+  /** The space a record of this kind is kept in (a board: Notes). */
+  const spaceFor = (recordKind: string) => spaces.get(recordKind) ?? [...spaces.values()].find((s) => inSpace(recordKind, s.def.kind));
   const go = (sp: Space, folder: string) => shell.router.go(sp.def.page, folder ? { folder } : {});
 
   const make = (def: FolderSpace): Space => {
@@ -104,7 +110,7 @@ export function createFolders(shell: ShellApi): Folders {
       const l = mine();
       const m = shell.records.byId();
       if (memo && memo.f === l && memo.m === m) return memo.c;
-      const all = [...m.values()].filter((r) => r.kind === kind);
+      const all = [...m.values()].filter((r) => inSpace(r.kind, kind));
       const c = new Contents(l?.folders ?? [], all, (r) => shell.records.isHidden(r));
       memo = { f: l, m, c };
       return c;
@@ -330,7 +336,7 @@ export function createFolders(shell: ShellApi): Folders {
   const currentRecord = () => {
     const id = shell.router.current().params.id;
     const r = id ? shell.records.get(id) : undefined;
-    return r && spaces.has(r.kind) && !r.read_only ? r : undefined;
+    return r && spaceFor(r.kind) && !r.read_only ? r : undefined;
   };
   shell.actions.add("shell", {
     id: "folders.moveTo",
@@ -339,7 +345,7 @@ export function createFolders(shell: ShellApi): Folders {
     menu: { name: "file", group: 2 },
     run: () => {
       const r = untracked(currentRecord);
-      if (r) void spaceOf(r.kind)!.moveRecords([r]);
+      if (r) void spaceFor(r.kind)!.moveRecords([r]);
     },
   });
   shell.actions.add("shell", {
@@ -352,7 +358,7 @@ export function createFolders(shell: ShellApi): Folders {
       if (!r) return;
       // Lands with the record selected.
       arriveWith(folderOf(r), r.id);
-      go(spaceOf(r.kind)!, folderOf(r));
+      go(spaceFor(r.kind)!, folderOf(r));
     },
   });
   // Every record kept in folders can be moved from its menu (records of one kind at a time).
@@ -360,7 +366,7 @@ export function createFolders(shell: ShellApi): Folders {
   shell.recordActions.add("shell", "rename", {
     label: "Rename…",
     single: true,
-    applies: (r) => spaces.has(r.kind) && !r.read_only && !shell.records.isHidden(r),
+    applies: (r) => !!spaceFor(r.kind) && !r.read_only && !shell.records.isHidden(r),
     run: async (rs) => {
       const r = rs[0];
       if (rs.length !== 1 || !r) return;
@@ -371,12 +377,12 @@ export function createFolders(shell: ShellApi): Folders {
   shell.recordActions.add("shell", "move-to-folder", {
     label: (n) => (n === 1 ? "Move to folder…" : `Move ${n} items to folder…`),
     // Not for archived records: they come back where they were.
-    applies: (r) => spaces.has(r.kind) && !r.read_only && !shell.records.isHidden(r),
+    applies: (r) => !!spaceFor(r.kind) && !r.read_only && !shell.records.isHidden(r),
     partial: true,
     run: (rs) => {
-      const kinds = new Set(rs.map((r) => r.kind));
-      if (kinds.size > 1) return toast("Notes and library items have their own folders: move them separately.");
-      void spaceOf(rs[0]!.kind)!.moveRecords(rs);
+      // Notes and boards share folders; library items have their own.
+      if (new Set(rs.map((r) => spaceFor(r.kind))).size > 1) return toast("Notes and library items have their own folders: move them separately.");
+      void spaceFor(rs[0]!.kind)!.moveRecords(rs);
     },
   });
 
@@ -403,7 +409,7 @@ export function createFolders(shell: ShellApi): Folders {
       };
     },
     async moveTo(rs: RecordInfo[]) {
-      const sp = rs[0] ? spaceOf(rs[0].kind) : undefined;
+      const sp = rs[0] ? spaceFor(rs[0].kind) : undefined;
       if (sp) await sp.moveRecords(rs);
     },
   };

@@ -150,7 +150,8 @@ Rules that keep it honest:
   page, new folder: `topMenu`), its empty space offers Go to and New folder for each space,
   and records get Rename… (a dialog; the Files page renames in place instead). Delete
   folder archives what's inside after asking (`deleteFolder` in `ops.ts`, through the
-  `shell.archiver` slot the archive feature fills, 0057). Dragging uses pointer events
+  `shell.archiver` slot the archive feature fills, 0057). A space holds the kinds the backend
+  lists for it (`spaceKinds`, `inSpace`): the Notes space holds notes and boards. Dragging uses pointer events
   (`kit/dnd.ts`) because Tauri claims the platform's drags for file drops.
 - **Links to the web** (`links.ts`, 0036): a dialog asks before opening in the browser; a
   Tauri navigation guard keeps the window in the app.
@@ -187,6 +188,12 @@ Rules that keep it honest:
 
 Accessibility is tested (axe in Vitest, APG patterns for tree, listbox, tabs, menus,
 combobox). Every action must be in a menu (shell test).
+
+- **Boards** (`src/features/boards/`, 0061–0063): `engine.ts` is the only module that uses React
+  and Excalidraw (a dependency-cruiser rule), loaded when a board opens; `page.ts` saves the
+  drawing and its readable page (`mirror.ts`) together, keeps drafts, handles changes from
+  elsewhere, and joins the board's undo place. Keys the app sends on purpose to a component are
+  marked with `passThrough` (`kit/keys.ts`) so its shortcuts don't take them again.
 
 ## 7. Lessons learned (keep these)
 

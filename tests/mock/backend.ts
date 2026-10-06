@@ -35,6 +35,8 @@ const state = {
   menu: [] as MenuSection[],
   pick: null as string | null,
   drafts: new Map<string, { id: string; base_version: string; base_body: string; body: string; updated_ms: number }>(),
+  /** Boards' drawings (`<id>.excalidraw`), by board ID. */
+  scenes: new Map<string, string>(),
   /** Make records.save fail with this error (e.g. a read-only file). */
   failSave: null as string | null,
   today: "2026-10-02",
@@ -59,6 +61,18 @@ const state = {
 };
 
 const FOLDERED = ["note", "item"];
+/** A board's empty drawing and the first line of its page, as the boards crate writes them. */
+export const EMPTY_BOARD = '{\n  "type": "excalidraw",\n  "version": 2,\n  "source": "librarium",\n  "elements": [],\n  "appState": {},\n  "files": {}\n}\n';
+export const boardNote = (id: string) => `<!-- Librarium writes this page from the board's drawing (${id}.excalidraw); edits here are replaced when the board is saved. -->`;
+/** Stands in for SHA-256 (the mock only compares them). */
+const sceneSha = (s: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return `fnv-${(h >>> 0).toString(16)}-${s.length}`;
+};
+/** The kinds kept in each space's folders (boards beside notes, decision 0062). */
+const SPACE_KINDS: Record<string, string[]> = { note: ["note", "board"], item: ["item"] };
+const inSpaceM = (recordKind: string, kind: string) => (SPACE_KINDS[kind] ?? [kind]).includes(recordKind);
 
 /** A record's folder inside its kind's top folder ("" at the top). */
 function folderOf(info: RecordInfo): string {
@@ -95,7 +109,7 @@ function lineDiff(a: string, b: string): { op: string; text: string }[] {
 function allFolders(kind: string): string[] {
   const out = new Set([...state.folders].filter((f) => f.startsWith(`${kind}:`)).map((f) => f.slice(kind.length + 1)));
   for (const r of state.records.values()) {
-    if (r.info.kind !== kind) continue;
+    if (!inSpaceM(r.info.kind, kind)) continue;
     const parts = folderOf(r.info).split("/").filter(Boolean);
     for (let i = 1; i <= parts.length; i++) out.add(parts.slice(0, i).join("/"));
   }
@@ -114,7 +128,7 @@ function cleanFolder(p: string): string {
 }
 
 function moveTo(r: Rec, folder: string) {
-  if (!FOLDERED.includes(r.info.kind)) fail("invalid-input", `“${r.info.title}” can’t be put in a folder`);
+  if (!FOLDERED.some((k) => inSpaceM(r.info.kind, k))) fail("invalid-input", `“${r.info.title}” can’t be put in a folder`);
   r.info.path = pathFor(r.info, folder);
   const field = r.info.kind === "item" ? "library.folder" : "notes.folder";
   if (folder) r.info.fields[field] = folder;
@@ -208,6 +222,35 @@ const api: Record<string, (p: any) => unknown> = {
   "drafts.get": (p) => state.drafts.get(p.id) ?? null,
   "drafts.list": () => [...state.drafts.values()].filter((d) => state.records.get(d.id)?.body !== d.body),
   "drafts.discard": (p) => (state.drafts.delete(p.id), null),
+  // Boards (crates/features/boards): a page and a drawing beside it.
+  "boards.create": (p) => {
+    const info = seed("board", String(p.title ?? "").trim() || "Untitled board", "", {}, p.folder ?? "");
+    const r = need(info.id);
+    r.body = `${boardNote(info.id)}\n`;
+    state.scenes.set(info.id, EMPTY_BOARD);
+    info.fields["boards.scene-sha256"] = sceneSha(EMPTY_BOARD);
+    return { info, seq: touch(r, "created") };
+  },
+  "boards.load": (p) => {
+    const r = need(p.id);
+    if (r.info.kind !== "board") fail("invalid-input", `${p.id} is a ${r.info.kind}, not a board`);
+    const scene = state.scenes.get(p.id) ?? EMPTY_BOARD;
+    const sha = sceneSha(scene);
+    return { info: r.info, scene, scene_sha: sha, stale_page: r.info.fields["boards.scene-sha256"] !== sha };
+  },
+  "boards.save": (p) => {
+    const r = need(p.id);
+    const cur = state.scenes.get(p.id) ?? EMPTY_BOARD;
+    if (r.info.version !== p.base_version || sceneSha(cur) !== p.base_scene_sha) {
+      throw new BackendCallError({ code: "conflict", message: "The board was changed elsewhere since it was opened.", data: { version: r.info.version, scene_sha: sceneSha(cur) } });
+    }
+    if (!Array.isArray(JSON.parse(p.scene)?.elements)) fail("invalid-input", "that isn’t an Excalidraw drawing");
+    state.scenes.set(p.id, p.scene);
+    r.body = p.page;
+    r.info.fields["boards.scene-sha256"] = sceneSha(p.scene);
+    const seq = touch(r, "updated");
+    return { info: r.info, seq, scene_sha: sceneSha(p.scene) };
+  },
   "notes.create": (p) => {
     const info = seed("note", p.title || "Untitled", p.body ?? "", {}, p.folder ?? "");
     return { info, seq: touch(need(info.id), "created") };
@@ -433,7 +476,7 @@ const api: Record<string, (p: any) => unknown> = {
     state.records.set(p.id, r);
     return { info, seq: touch(r, "created") };
   },
-  "folders.list": () => ({ spaces: FOLDERED.map((kind) => ({ kind, kinds: [kind], folders: allFolders(kind), order: structuredClone(state.order[kind] ?? {}) })) }),
+  "folders.list": () => ({ spaces: FOLDERED.map((kind) => ({ kind, kinds: SPACE_KINDS[kind] ?? [kind], folders: allFolders(kind), order: structuredClone(state.order[kind] ?? {}) })) }),
   "folders.setOrder": (p) => {
     const o = (state.order[folderKind(p.kind)] ??= {});
     if (p.order.length) o[p.path] = [...new Set<string>(p.order)];
@@ -465,7 +508,7 @@ const api: Record<string, (p: any) => unknown> = {
     }
     let moved = 0;
     for (const r of state.records.values()) {
-      if (r.info.kind !== kind || !under(folderOf(r.info))) continue;
+      if (!inSpaceM(r.info.kind, kind) || !under(folderOf(r.info))) continue;
       moveTo(r, swap(folderOf(r.info)));
       moved++;
     }
@@ -474,7 +517,7 @@ const api: Record<string, (p: any) => unknown> = {
   "folders.remove": (p) => {
     const kind = folderKind(p.kind);
     const f = cleanFolder(p.path);
-    const inside = [...state.records.values()].filter((r) => r.info.kind === kind && (folderOf(r.info) === f || folderOf(r.info).startsWith(`${f}/`)));
+    const inside = [...state.records.values()].filter((r) => inSpaceM(r.info.kind, kind) && (folderOf(r.info) === f || folderOf(r.info).startsWith(`${f}/`)));
     if (inside.length) fail("conflict", `“${f.split("/").pop()}” isn’t empty: it holds ${inside.length} ${inside.length === 1 ? "item" : "items"} (archived ones count too).`);
     for (const x of [...state.folders]) if (x === `${kind}:${f}` || x.startsWith(`${kind}:${f}/`)) state.folders.delete(x);
     return null;
@@ -577,6 +620,7 @@ export const mock = {
     // IDs keep counting across resets, so nothing from an earlier test can touch a new record.
     listeners.clear();
     state.drafts.clear();
+    state.scenes.clear();
     state.failSave = null;
     state.jobs = [];
     state.confirmations.clear();

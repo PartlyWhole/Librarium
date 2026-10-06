@@ -818,3 +818,12 @@ body.dragging-handle, body.dragging-handle * { user-select: none !important; -we
 .ref-after { margin: 6px 0 0; }
 /* A capture's words are usually short: what uses it shows close below. */
 .capture-words .cm-content { min-height: 4.5em; }
+
+/* Boards (features/boards): the title, then the drawing filling the page. */
+.ws-page.board-page { max-width: none; padding: 0; height: 100%; display: flex; flex-direction: column; }
+.page-scroll:has(> .board-page:not([hidden])) { overflow: hidden; }
+.board-head { padding: 10px 20px 6px; border-bottom: 1px solid var(--border); }
+.board-head .title-input { margin: 0; }
+.board-head .notices:empty { display: none; }
+.board-host { flex: 1; min-height: 0; position: relative; }
+.board-canvas { position: absolute; inset: 0; }
