@@ -39,6 +39,11 @@ While fixing R-027: in web pages saved as PDFs, PDF.js reads some ligatures wron
 across the library uses PDFKit's text and isn't affected. To look into: the stored text
 (PDFKit) has the right words and could correct the reader's text.
 
+### R-065 · Footnotes in EPUBs don't work
+> "the footnotes of EPUBs don't work"
+
+Noted on 2026-10-05, to look at after boards (phase 6).
+
 
 ---
 
