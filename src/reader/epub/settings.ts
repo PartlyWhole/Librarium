@@ -8,6 +8,9 @@ import type { ReaderStore } from "../host";
 
 export type Theme = "white" | "sepia" | "gray" | "night";
 export type Font = keyof typeof FONTS;
+/** How pages are laid out, as in Apple Books' View menu. "two" shows one when there isn't room. */
+export type Layout = "single" | "two" | "scroll";
+export const LAYOUTS: [Layout, string][] = [["single", "Single page"], ["two", "Two pages"], ["scroll", "Scroll"]];
 
 export interface ReadingSettings {
   /** 1 = the book's size. */
@@ -16,14 +19,13 @@ export interface ReadingSettings {
   /** Follow the app's light or dark appearance (white or night). */
   matchApp: boolean;
   theme: Theme;
-  scroll: boolean;
+  layout: Layout;
   spacing: "book" | "tight" | "normal" | "loose";
   width: "narrow" | "medium" | "wide";
-  columns: "auto" | "one";
   justify: boolean;
 }
 
-export const DEFAULT_SETTINGS: ReadingSettings = { fontSize: 1, font: "original", matchApp: true, theme: "white", scroll: false, spacing: "book", width: "medium", columns: "auto", justify: false };
+export const DEFAULT_SETTINGS: ReadingSettings = { fontSize: 1, font: "original", matchApp: true, theme: "white", layout: "two", spacing: "book", width: "medium", justify: false };
 
 /** The fonts offered, as Apple Books offers them (all ship with macOS). */
 export const FONTS = {
@@ -63,10 +65,10 @@ export function readSettings(store: ReaderStore | undefined): ReadingSettings {
     font: pick("font", Object.keys(FONTS), oldFont ?? raw.font),
     matchApp: typeof raw.matchApp === "boolean" ? raw.matchApp : raw.theme === "auto" || raw.theme === undefined,
     theme: pick("theme", Object.keys(THEMES), oldTheme ?? raw.theme),
-    scroll: typeof raw.scroll === "boolean" ? raw.scroll : raw.layout === "scroll",
+    // Before 0070: a scrolling switch, and "Pages: two when wide / one".
+    layout: pick("layout", ["single", "two", "scroll"], raw.scroll === true || raw.layout === "scroll" ? "scroll" : raw.scroll === false || raw.columns ? (raw.columns === "one" ? "single" : "two") : raw.layout),
     spacing: pick("spacing", ["book", "tight", "normal", "loose"]),
     width: pick("width", ["narrow", "medium", "wide"]),
-    columns: pick("columns", ["auto", "one"]),
     justify: raw.justify === true,
   };
 }
@@ -99,11 +101,15 @@ export function toPreferences(s: ReadingSettings): IEpubPreferences {
     minimalLineLength: minimal,
     optimalLineLength: optimal,
     maximalLineLength: maximal,
-    scroll: s.scroll,
-    columnCount: s.columns === "one" ? 1 : null,
+    scroll: s.layout === "scroll",
+    // Two pages when the lines fit (Readium decides from the line length), else one.
+    columnCount: s.layout === "single" ? 1 : null,
     textAlign: s.justify ? ("justify" as IEpubPreferences["textAlign"]) : null,
     // Roomy margins, as in Books.
     pageGutter: Math.round(GUTTER / s.fontSize),
+    // Scrolling has the same side margins as pages (Readium leaves none by default).
+    scrollPaddingLeft: Math.round(GUTTER / s.fontSize),
+    scrollPaddingRight: Math.round(GUTTER / s.fontSize),
     scrollPaddingTop: Math.round(24 / s.fontSize),
     scrollPaddingBottom: Math.round(48 / s.fontSize),
     backgroundColor,
@@ -112,8 +118,13 @@ export function toPreferences(s: ReadingSettings): IEpubPreferences {
   };
 }
 
-/** The Aa panel: text size, theme, font, scrolling, and finer settings under Customise. */
-export function settingsPanel(s: ReadingSettings, apply: (s: ReadingSettings) => void, close: () => void, fixed: boolean): HTMLElement {
+/**
+ * The Aa panel, after Apple Books: text size and the layout first (single page, two pages,
+ * scroll), then theme and font, and finer settings under Customise (decision 0070).
+ * `pagesShown` says how many pages are on screen now, so "Two pages" can say when there isn't
+ * room; the reader sends `laidout` (with the settings now) when that may have changed.
+ */
+export function settingsPanel(s: ReadingSettings, apply: (s: ReadingSettings) => void, close: () => void, fixed: boolean, pagesShown: () => number | null = () => null): HTMLElement {
   let cur = s;
   let customising = false;
   const set = (patch: Partial<ReadingSettings>) => {
@@ -125,14 +136,17 @@ export function settingsPanel(s: ReadingSettings, apply: (s: ReadingSettings) =>
   const sizes = h("div", { class: "aa-sizes" },
     h("button", { type: "button", class: "aa-size small-a", "aria-label": "Smaller text", onclick: () => step(-0.1) }, "A"),
     h("button", { type: "button", class: "aa-size large-a", "aria-label": "Larger text", onclick: () => step(0.1) }, "A"));
+  const layout = h("div", { class: "seg aa-layout", role: "radiogroup", "aria-label": "Layout" },
+    LAYOUTS.map(([value, text]) => h("button", { type: "button", role: "radio", "data-value": value, onclick: () => set({ layout: value }) }, text)));
+  const roomNote = h("p", { class: "aa-note muted small", "aria-live": "polite", hidden: true }, "Not enough room for two pages, so one is shown. A wider window or smaller text makes room.");
   const swatches = h("div", { class: "aa-themes", role: "radiogroup", "aria-label": "Theme" },
     (Object.keys(THEMES) as Theme[]).map((t) => h("button", { type: "button", role: "radio", class: `aa-swatch theme-${t}`, "data-value": t, "aria-label": THEMES[t].name, title: THEMES[t].name, onclick: () => set({ theme: t, matchApp: false }) }, h("span", null, "Aa"))));
   const match = h("input", { type: "checkbox", onchange: () => set({ matchApp: match.checked }) }) as HTMLInputElement;
-  const fonts = h("div", { class: "aa-fonts", role: "radiogroup", "aria-label": "Font" },
-    (Object.keys(FONTS) as Font[]).map((f) => h("button", { type: "button", role: "radio", class: "aa-font", "data-value": f, style: FONTS[f].stack ? `font-family: ${FONTS[f].stack}` : "", onclick: () => set({ font: f }) }, h("span", null, FONTS[f].name), h("span", { class: "aa-check", "aria-hidden": "true" }, "✓"))));
-  const scroll = h("input", { type: "checkbox", onchange: () => set({ scroll: scroll.checked }) }) as HTMLInputElement;
+  // One row: each font named in its own face.
+  const font = h("select", { class: "aa-font-pick", "aria-label": "Font", onchange: () => set({ font: font.value as Font }) },
+    (Object.keys(FONTS) as Font[]).map((f) => h("option", { value: f, style: FONTS[f].stack ? `font-family: ${FONTS[f].stack}` : "" }, FONTS[f].name))) as HTMLSelectElement;
   const justify = h("input", { type: "checkbox", onchange: () => set({ justify: justify.checked }) }) as HTMLInputElement;
-  const seg = <K extends "spacing" | "width" | "columns">(label: string, key: K, options: [ReadingSettings[K], string][]) => {
+  const seg = <K extends "spacing" | "width">(label: string, key: K, options: [ReadingSettings[K], string][]) => {
     const group = h("div", { class: "seg", role: "radiogroup", "aria-label": label },
       options.map(([value, text]) => h("button", { type: "button", role: "radio", "data-value": String(value), onclick: () => set({ [key]: value } as Partial<ReadingSettings>) }, text)));
     return { key, group, row: h("div", { class: "epub-setting" }, h("span", { class: "epub-setting-label" }, label), group) };
@@ -140,28 +154,33 @@ export function settingsPanel(s: ReadingSettings, apply: (s: ReadingSettings) =>
   const segs = [
     seg("Line spacing", "spacing", [["book", "Book’s"], ["tight", "Tight"], ["normal", "Normal"], ["loose", "Loose"]]),
     seg("Line length", "width", [["narrow", "Narrow"], ["medium", "Medium"], ["wide", "Wide"]]),
-    seg("Pages", "columns", [["auto", "Two when wide"], ["one", "One"]]),
   ];
   const custom = h("div", { class: "aa-custom", hidden: true }, segs.map((x) => x.row), h("label", { class: "aa-toggle" }, h("span", null, "Justify text"), justify));
   const customBtn = h("button", { type: "button", class: "aa-disclose", "aria-expanded": "false", onclick: () => ((customising = !customising), refresh()) }, "Customise");
   const refresh = () => {
     const theme = themeOf(cur);
     for (const b of swatches.querySelectorAll<HTMLButtonElement>("button")) b.setAttribute("aria-checked", String(b.dataset.value === theme));
-    for (const b of fonts.querySelectorAll<HTMLButtonElement>("button")) b.setAttribute("aria-checked", String(b.dataset.value === cur.font));
+    for (const b of layout.querySelectorAll<HTMLButtonElement>("button")) b.setAttribute("aria-checked", String(b.dataset.value === cur.layout));
     for (const x of segs) for (const b of x.group.querySelectorAll<HTMLButtonElement>("button")) b.setAttribute("aria-checked", String(b.dataset.value === String(cur[x.key])));
-    segs.find((x) => x.key === "columns")!.row.hidden = cur.scroll;
+    roomNote.hidden = cur.layout !== "two" || pagesShown() !== 1;
+    font.value = cur.font;
     match.checked = cur.matchApp;
-    scroll.checked = cur.scroll;
     justify.checked = cur.justify;
     custom.hidden = !customising;
     customBtn.setAttribute("aria-expanded", String(customising));
   };
   const panel = h("div", { class: "epub-popover epub-settings", role: "dialog", "aria-label": "Reading settings" },
-    fixed ? h("p", { class: "muted small" }, "This book has fixed pages, so its text can’t be restyled.") : sizes,
+    fixed ? h("p", { class: "muted small" }, "This book has fixed pages, so its text can’t be restyled.") : [sizes, layout, roomNote],
     swatches,
     h("label", { class: "aa-toggle" }, h("span", null, "Match the app’s appearance"), match),
-    fixed ? null : [fonts, h("label", { class: "aa-toggle" }, h("span", null, "Scrolling view"), scroll), customBtn, custom],
+    fixed ? null : [h("label", { class: "aa-toggle" }, h("span", null, "Font"), font), customBtn, custom],
     h("div", { class: "epub-settings-foot" }, h("button", { type: "button", class: "link-button small", onclick: () => set({ ...DEFAULT_SETTINGS }) }, "Reset"), h("button", { type: "button", class: "link-button small", onclick: close }, "Done")));
+  // The settings now (changed from the View menu too) and the pages shown.
+  panel.addEventListener("laidout", (e) => {
+    const now = (e as CustomEvent<ReadingSettings | undefined>).detail;
+    if (now) cur = now;
+    refresh();
+  });
   panel.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.stopPropagation();

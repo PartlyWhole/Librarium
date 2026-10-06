@@ -29,6 +29,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     const book = await openBook(await src.bytes(), src.id);
     const store = src.store;
     let settings = readSettings(store);
+    const scrolling = () => settings.layout === "scroll";
 
     // Layout, after Apple Books: the page under a running head (the chapter), arrows at the
     // sides that show while the pointer moves, and a quiet line under the page (pages left in
@@ -89,7 +90,12 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     const frames = (): { win: Window; doc: Document; el: HTMLIFrameElement; index: number }[] => {
       const out: { win: Window; doc: Document; el: HTMLIFrameElement; index: number }[] = [];
       for (const f of ((nav as any)._cframes ?? []) as any[]) {
-        const win: Window | undefined = f?.window;
+        let win: Window | undefined;
+        try {
+          win = f?.window;
+        } catch {
+          continue; // a frame being taken down (the book closing, or laid out again)
+        }
         const doc = win?.document;
         if (!doc || !f.iframe) continue;
         const path = doc.querySelector("meta[name=librarium-href]")?.getAttribute("content") ?? "";
@@ -412,7 +418,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     // Pages left in this chapter, from the layout (columns across the frame), as Books says it.
     function showLeft() {
       left.textContent = "";
-      if (settings.scroll || book.fixed || !current) return;
+      if (scrolling() || book.fixed || !current) return;
       const path = decodeURIComponent(current.href.split("#")[0]!);
       const f = frames().find((x) => x.index >= 0 && book.spine[x.index]!.href === path && x.el.style.visibility !== "hidden");
       const w = f?.el.clientWidth ?? 0;
@@ -430,7 +436,13 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       frame.style.setProperty("--book-muted", `color-mix(in srgb, ${t.textColor} 55%, transparent)`);
     }
     paintChrome();
-    const resized = new ResizeObserver(() => showLeft());
+    // After Readium has laid the pages out again for the new size.
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    const resized = new ResizeObserver(() => {
+      showLeft();
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => (showLeft(), popover?.el.dispatchEvent(new CustomEvent("laidout", { detail: settings }))), 300);
+    });
     resized.observe(stage);
 
     // The arrows show while the pointer moves, then fade.
@@ -455,7 +467,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       flipping = true;
       const away = side === "right" ? -1 : 1;
       try {
-        if (!settings.scroll) {
+        if (!scrolling()) {
           stage.style.transition = reduced ? "opacity 90ms ease-in" : "transform 130ms ease-in, opacity 130ms ease-in";
           stage.style.transform = reduced ? "" : `translateX(${away * 36}px)`;
           stage.style.opacity = "0.15";
@@ -463,7 +475,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
         }
         const before = current?.locations.position ?? current?.locations.totalProgression;
         await new Promise<void>((res) => (side === "right" ? nav.goRight(false, () => res()) : nav.goLeft(false, () => res())));
-        if (!settings.scroll) {
+        if (!scrolling()) {
           const moved = (current?.locations.position ?? current?.locations.totalProgression) !== before;
           stage.style.transition = "none";
           stage.style.transform = reduced || !moved ? "" : `translateX(${-away * 36}px)`;
@@ -494,7 +506,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     let swipeTimer: ReturnType<typeof setTimeout> | undefined;
     function onWheel(e: WheelEvent) {
       const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
-      if (settings.scroll || !sideways) return;
+      if (scrolling() || !sideways) return;
       e.preventDefault();
       const abs = Math.abs(e.deltaX);
       clearTimeout(swipeTimer);
@@ -523,11 +535,54 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     // Popovers from the toolbar: the contents, and the Aa panel.
     let popover: { kind: "contents" | "settings" | "note"; el: HTMLElement; anchor: HTMLElement } | null = null;
     const apply = (next: ReadingSettings) => {
+      // A new layout keeps the reader at the words they were reading (0070): Readium keeps only
+      // the chapter's progression, which is a page or more off between pages and scrolling.
+      const keep = next.layout !== settings.layout ? wordsShown() : null;
       settings = next;
       store?.set("reader.epub", settings);
       paintChrome();
-      void nav.submitPreferences(new EpubPreferences(toPreferences(settings))).then(() => setTimeout(showLeft, 120));
+      void nav.submitPreferences(new EpubPreferences(toPreferences(settings))).then(async () => {
+        if (keep) {
+          await new Promise((r) => setTimeout(r, 120));
+          await view.showPlace?.([{ type: "FragmentSelector", value: keep }]);
+        }
+        setTimeout(() => {
+          showLeft();
+          popover?.el.dispatchEvent(new CustomEvent("laidout", { detail: settings }));
+        }, 120);
+      });
     };
+    /** The first words on screen, as a CFI. */
+    function wordsShown(): string | null {
+      if (!current || book.fixed) return null;
+      const path = decodeURIComponent(current.href.split("#")[0]!);
+      const f = frames().find((x) => x.index >= 0 && book.spine[x.index]!.href === path && x.el.style.visibility !== "hidden");
+      if (!f?.doc.body) return null;
+      const b = stage.getBoundingClientRect();
+      const on = (r: DOMRect) => r.width > 0 && r.right > b.left + 1 && r.left < b.right - 1 && r.bottom > b.top + 1 && r.top < b.bottom - 1;
+      const walk = f.doc.createTreeWalker(f.doc.body, NodeFilter.SHOW_TEXT);
+      const range = f.doc.createRange();
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        const text = n.nodeValue ?? "";
+        if (!text.trim()) continue;
+        range.selectNodeContents(n);
+        if (!screenRects(f, range).some(on)) continue;
+        // The first word of this text that is on screen (its start may be on the page before).
+        for (const m of text.matchAll(/\S+/g)) {
+          range.setStart(n, m.index);
+          range.setEnd(n, m.index + m[0].length);
+          if (screenRects(f, range).some(on)) return selOf(f, range).cfi;
+        }
+      }
+      return null;
+    }
+    /** How many pages are side by side now (1 or 2), or null when scrolling. */
+    function pagesShown(): number | null {
+      if (scrolling() || book.fixed) return null;
+      const f = frames().find((x) => x.index >= 0 && x.el.style.visibility !== "hidden");
+      const n = f ? Number.parseInt(getComputedStyle(f.doc.documentElement).columnCount, 10) : NaN;
+      return Number.isFinite(n) ? n : null;
+    }
     function closePopover() {
       if (!popover) return;
       popover.el.remove();
@@ -540,7 +595,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       closePopover();
       if (was === kind) return;
       const anchor = kind === "contents" ? contentsBtn : aa;
-      const el = kind === "contents" ? contentsList() : settingsPanel(settings, apply, closePopover, book.fixed);
+      const el = kind === "contents" ? contentsList() : settingsPanel(settings, apply, closePopover, book.fixed, pagesShown);
       document.body.appendChild(el);
       const r = anchor.getBoundingClientRect();
       el.style.top = `${Math.round(r.bottom + 6)}px`;
@@ -591,15 +646,15 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       return {
         bounds: () => stage.getBoundingClientRect(),
         margin: 36,
-        delay: settings.scroll ? 0 : 450,
-        repeat: settings.scroll ? 30 : 900,
+        delay: scrolling() ? 0 : 450,
+        repeat: scrolling() ? 30 : 900,
         armed: (dx: number) => {
-          frame.classList.toggle("armed-next", !settings.scroll && dx > 0);
-          frame.classList.toggle("armed-prev", !settings.scroll && dx < 0);
+          frame.classList.toggle("armed-next", !scrolling() && dx > 0);
+          frame.classList.toggle("armed-prev", !scrolling() && dx < 0);
         },
         nudge: async (dx: number, dy: number) => {
           const e = el();
-          if (settings.scroll) {
+          if (scrolling()) {
             if (dy) e.scrollTop += dy * 24;
             return;
           }
@@ -641,6 +696,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       zoomIn: () => apply({ ...settings, fontSize: Math.min(2.5, round(settings.fontSize + 0.1)) }),
       zoomOut: () => apply({ ...settings, fontSize: Math.max(0.6, round(settings.fontSize - 0.1)) }),
       zoomReset: () => apply({ ...settings, fontSize: 1 }),
+      layout: book.fixed ? undefined : { get: () => settings.layout, set: (layout) => apply({ ...settings, layout }) },
       async find(query, opts = {}) {
         if (!query.trim()) {
           view.findClear();
@@ -798,6 +854,7 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       },
       destroy() {
         clearTimeout(saveTimer);
+        clearTimeout(resizeTimer);
         if (current) store?.set(PLACE(src.id), current.serialize());
         themeWatch.disconnect();
         resized.disconnect();
@@ -852,17 +909,19 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       return !!r && r.left >= b.left - 1 && r.left < b.right && r.top >= b.top - 1 && r.top < b.bottom;
     }
     /**
-     * Where a range's page starts in its chapter, as Readium counts progression: the distance
-     * scrolled over the distance that can be scrolled (the whole width less one page, or the whole
-     * height less one screen).
+     * Where a range's page starts in its chapter, as Readium counts progression: in pages, the
+     * distance scrolled over the distance that can be scrolled (the whole width less one page);
+     * scrolling, over the whole height.
      */
     function progressionOf(f: { doc: Document }, range: Range): number {
       const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
       const el = f.doc.scrollingElement ?? f.doc.documentElement;
       const z = zoomOf(f.doc);
-      if (settings.scroll) {
+      if (scrolling()) {
+        // Scrolling, Readium goes to progression × the whole height (not the height less one
+        // screen, as for pages): 24 pixels above the range.
         const room = el.scrollHeight - el.clientHeight;
-        return room > 0 ? Math.min(1, Math.max(0, ((rect.top + el.scrollTop) * z - 24) / room)) : 0;
+        return room > 0 ? Math.min(1, Math.max(0, ((rect.top + el.scrollTop) * z - 24) / el.scrollHeight)) : 0;
       }
       const page = el.clientWidth;
       const room = el.scrollWidth - page;

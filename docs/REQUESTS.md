@@ -50,6 +50,12 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## In progress
 
+(Nothing in progress.)
+
+---
+
+## Done
+
 ### R-066 · EPUB views: two pages, one page and scrolling are hard to switch between
 > "the views of the epub aren't very UX friendly -- switching between two page vs one page vs
 > continuous, there are a lot of options and switching between them isn't easy. Please
@@ -75,11 +81,40 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
   - The View menu has Single Page, Two Pages and Scrolling, with shortcuts.
   - Two pages falls back to one when the window is narrow, and says so.
   - Switching keeps your place; scrolling gets margins; the font list shrinks to one row.
-- **Next:** build it.
+- **Changed:**
+  - **One choice for the layout, at the top of the Aa panel:** text size, then
+    **Single page | Two pages | Scroll**. The old "Scrolling view" switch and the hidden
+    "Pages" row are gone.
+  - **The View menu has Single Page, Two Pages and Scrolling,** with shortcuts, while a book
+    is open (and in the command palette as "Book layout: …").
+  - **Two pages says when there isn't room:** "Not enough room for two pages, so one is shown."
+    It updates as you resize the window.
+  - **Switching keeps your place:** the first words on screen stay on screen.
+  - **Scrolling has margins:** a centred column, as in pages.
+  - **The font list is one row** (each font shown in its own face), so the panel fits without
+    scrolling.
+  - Your saved setting carries over (two when wide → Two pages).
+  - Fixed along the way: showing a place while scrolling landed a little past it.
+- **Use:** Aa in the reader's toolbar, then the Layout row. Or View ▸ Single Page (⌃⌘1),
+  Two Pages (⌃⌘2), Scrolling (⌃⌘3).
+- **Code:** `src/reader/epub/settings.ts` (`layout`, the panel), `src/reader/epub/engine.ts`
+  (`wordsShown`, `pagesShown`, `progressionOf`, `view.layout`), `src/reader/host.ts`
+  (`ReaderView.layout`), `src/features/library/index.ts` (View menu items),
+  `src/shell/shell.css`.
+- **Decision:** 0070 (amends 0046).
+- **Tested:** 4 new WebKit checks on a long test book:
+  - settings from before carry over;
+  - switching scroll → single → scroll → two keeps the first word on screen each time (the
+    scrolling switches failed before the fix);
+  - two pages when wide, one when narrow with the note, single page when chosen;
+  - scrolling margins, wide (centred) and narrow.
 
----
-
-## Done
+  5 new interface tests (migration, preferences, the panel's order and font row, the View
+  menu). All 265 interface tests, 86 WebKit checks and the Rust tests pass; lint is clean.
+  Checked by eye in the preview.
+  Only the real app can show the native View menu itself (its items are tested as data).
+- **Left:** the View menu items aren't ticked to show the layout in effect (the app's menu
+  has no ticks yet); the Aa panel shows it.
 
 ### R-065 · Footnotes in EPUBs don't work
 > "the footnotes of EPUBs don't work" · "fix the EPUB footnotes"

@@ -35,6 +35,8 @@ export interface ReaderView {
   zoomIn(): void;
   zoomOut(): void;
   zoomReset(): void;
+  /** How a book's pages are laid out (books that can be restyled): single, two, or scrolling. */
+  layout?: { get(): "single" | "two" | "scroll"; set(layout: "single" | "two" | "scroll"): void };
   /** Finds `query`; `again` moves to the next (or, with `back`, the previous) match. */
   find(query: string, opts?: { again?: boolean; back?: boolean }): Promise<FindResult>;
   findClear(): void;

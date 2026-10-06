@@ -172,7 +172,8 @@ Rules that keep it honest:
   (`pdf-words.ts`, 0044); mouse selections snap to words (`snapToWords`).
   - **EPUB** (0045): `epub.ts` loads `epub/engine.ts` on first use. `epub/streamer.ts` serves
     the book from memory (OPF → manifest, chapters made safe by `epub-safe.ts`, resources as
-    blob URLs). `epub/settings.ts` holds the reading settings and their panel. Captures use the
+    blob URLs). `epub/settings.ts` holds the reading settings and their panel; the layout (single, two,
+    scroll; 0070) is also `ReaderView.layout`, which the library's View menu items use. Captures use the
     same CFIs as before (`vendor/foliate-js/epubcfi.js`); marks and find are drawn with
     `CSS.highlights` in Readium's frames. Settings and places go through `ReaderSource.store`.
     Readers can edit a capture's parts in place (`editParts`, with `rangeEditor`,
@@ -246,6 +247,9 @@ combobox). Every action must be in a menu (shell test).
     runner (`nativeClick` in `scripts/webkit-run.swift`). Note references open in a popover
     (0069): the note is read from a shown frame or from the book (`readAsXML`), and an empty
     anchor stands for its paragraph.
+  - Readium's progression while scrolling is over the whole height, not the height less one
+    screen as in pages (`progressionOf`). A new layout keeps only the progression: keep the
+    first words on screen yourself (`wordsShown`, 0070).
   - Non-linear spine items belong in the reading order: links lead to them (notes files).
   - PDF.js's text layer must be exactly the drawn page's size: a page border (or any CSS that
     resizes `.page`) makes find and selection drift. PDF.js's stylesheet loads after ours.

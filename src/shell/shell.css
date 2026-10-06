@@ -414,12 +414,10 @@ mark { background: var(--selection); color: inherit; border-radius: 2px; padding
 .aa-swatch.theme-gray { background: #4a4a4d; color: #e3e3e3; }
 .aa-swatch.theme-night { background: #1c1c1e; color: #cfcfcf; }
 .aa-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--small); }
-.aa-fonts { display: grid; border-radius: 10px; overflow: hidden; background: var(--bg-alt); }
-.aa-font { display: flex; justify-content: space-between; align-items: center; border: 0; background: transparent; color: var(--ink); font-size: 15px; padding: 7px 12px; cursor: pointer; text-align: left; }
-.aa-font + .aa-font { border-top: 1px solid var(--border); }
-.aa-font:hover, .aa-font:focus-visible { background: var(--hover); outline: none; }
-.aa-check { visibility: hidden; color: var(--accent-text); }
-.aa-font[aria-checked="true"] .aa-check { visibility: visible; }
+.aa-font-pick { font: inherit; font-size: var(--small); min-width: 0; max-width: 60%; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--r1); background: var(--bg); color: var(--ink); }
+.aa-layout button { white-space: nowrap; }
+.aa-note { margin: -6px 0 0; }
+.aa-note[hidden] { display: none; }
 .aa-disclose { justify-self: start; border: 0; background: transparent; color: var(--accent-text); font: inherit; font-size: var(--small); padding: 0; cursor: pointer; }
 .aa-disclose::before { content: "▸ "; }
 .aa-disclose[aria-expanded="true"]::before { content: "▾ "; }

@@ -38,7 +38,8 @@ chrome out of the way:
     Iowan, Palatino, San Francisco, Seravek, Times New Roman);
   - Scrolling view;
   - under Customise: line spacing, line length, one or two pages, justify.
-  Settings from the first version are carried over.
+  Settings from the first version are carried over. (Later, 0070: the layout became one choice
+  at the top of the panel, Single page | Two pages | Scroll, and the fonts one row.)
 
 ## Later: margins at any text size (R-032)
 

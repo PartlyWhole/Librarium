@@ -18,6 +18,8 @@ import { ask, modal } from "../../kit/dialog";
 import { BookOpen, Globe, FileText, Image as ImageIcon, Library as LibraryIcon, Plus, ZoomIn, ZoomOut, Maximize, ChevronUp, ChevronDown, Info } from "lucide";
 
 const KIND = "item";
+/** The reader open on each item page shown (for the View menu's layouts). */
+const shownReaders = new Map<string, ReaderView>();
 const ORIGINAL = "library.original";
 const EXTENSIONS = ["pdf", "epub", "png", "jpg", "jpeg", "gif", "webp", "heic", "tif", "tiff"];
 
@@ -201,6 +203,24 @@ export function library(shell: ShellApi): void {
       toast(String((e as { message?: string }).message ?? e));
     }
   };
+
+  // A book's layout, as in Apple Books' View menu (0070); also in the Aa panel.
+  const shownBook = () => {
+    const r = shell.router.current();
+    const item = r.page === "item" ? shell.records.get(r.params.id ?? "") : undefined;
+    return item && formatOf(item) === "epub" ? item : undefined;
+  };
+  for (const [layout, title, n] of [["single", "Single Page", 1], ["two", "Two Pages", 2], ["scroll", "Scrolling", 3]] as const) {
+    shell.actions.add("library", {
+      id: `library.layout.${layout}`,
+      title: `Book layout: ${title}`,
+      keys: [`Ctrl+Mod+${n}`],
+      when: () => !!shownBook(),
+      menu: { name: "view", group: 3, title },
+      icon: BookOpen,
+      run: () => shownReaders.get(shownBook()?.id ?? "")?.layout?.set(layout),
+    });
+  }
 
   shell.actions.add("library", {
     id: "library.savePage",
@@ -460,6 +480,7 @@ export function library(shell: ShellApi): void {
           (v) => {
             if (!alive) return v.destroy();
             view = v;
+            shownReaders.set(id, v);
             pos.textContent = v.position();
             // The reader's own controls, and reading without chrome (Apple Books style).
             if (v.controls?.start) toolbar.prepend(...v.controls.start);
@@ -485,6 +506,7 @@ export function library(shell: ShellApi): void {
       return {
         dispose() {
           alive = false;
+          if (shownReaders.get(id) === view) shownReaders.delete(id);
           toolDisposers.forEach((d) => d());
           view?.destroy();
           host.classList.remove("reader-page");

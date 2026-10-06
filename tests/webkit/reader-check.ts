@@ -473,6 +473,100 @@ async function run() {
   stage.style.width = "";
   longBook.view.destroy();
 
+  // Layouts (R-066): switching between single page, two pages and scrolling keeps the words that
+  // were first on screen on screen; two pages says when there isn't room; scrolling has margins.
+  step("epub layouts");
+  const layoutStore = new Map<string, unknown>([["reader.epub", { scroll: false, columns: "auto" }]]);
+  const laid = await open(epubEngine, "long.epub", "epub", undefined, { get: (k) => layoutStore.get(k), set: (k, v) => layoutStore.set(k, v) });
+  await waitFor(() => frameDocs().length > 0);
+  await pause(500);
+  const lv = laid.view;
+  const wordOn = (f: HTMLIFrameElement, r: Range) => {
+    const b = r.getBoundingClientRect();
+    return b.width > 0 && b.left >= -1 && b.right <= f.clientWidth + 1 && b.top >= -1 && b.bottom <= f.clientHeight + 1;
+  };
+  // The same word: the same text node, by its place in the page (the words repeat from
+  // paragraph to paragraph, and a new layout can load the page again).
+  const pathOf = (n: Node) => {
+    const steps: number[] = [];
+    for (let x: Node | null = n; x && x.parentNode; x = x.parentNode) steps.unshift([...x.parentNode.childNodes].indexOf(x as ChildNode));
+    return steps;
+  };
+  // The first word on screen, found here independently of the reader.
+  const firstWord = (): { path: number[]; at: number; text: string } | null => {
+    const f = shownFrame();
+    const d = f?.contentDocument;
+    if (!f || !d) return null;
+    const w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT);
+    const r = d.createRange();
+    for (let n = w.nextNode() as Text | null; n; n = w.nextNode() as Text | null) {
+      for (const m of n.data.matchAll(/\S+/g)) {
+        r.setStart(n, m.index);
+        r.setEnd(n, m.index + m[0].length);
+        if (wordOn(f, r)) return { path: pathOf(n), at: m.index, text: n.data.slice(m.index, m.index + 40) };
+      }
+    }
+    return null;
+  };
+  const stillOn = (w: { path: number[]; at: number; text: string } | null) => {
+    const f = shownFrame();
+    const d = f?.contentDocument;
+    if (!f || !d || !w) return false;
+    let n: Node | undefined = d;
+    for (const i of w.path) n = n?.childNodes[i];
+    if (!n || (n as Text).data?.slice(w.at, w.at + w.text.length) !== w.text) return false;
+    const r = d.createRange();
+    r.setStart(n, w.at);
+    r.setEnd(n, w.at + w.text.split(/\s/)[0]!.length);
+    return wordOn(f, r);
+  };
+  results.epubLayoutMigrated = lv.layout?.get() ?? null;
+  // A few pages into the chapter.
+  for (let i = 0; i < 3; i++) {
+    (stage.querySelector(".epub-arrow.next") as HTMLButtonElement).click();
+    await pause(450);
+  }
+  const kept: Record<string, boolean | string> = {};
+  for (const layout of ["scroll", "single", "scroll", "two"] as const) {
+    const before = firstWord();
+    lv.layout?.set(layout);
+    await pause(1600);
+    kept[`${layout}${Object.keys(kept).length}`] = stillOn(before);
+  }
+  results.epubLayoutKept = kept;
+  results.epubLayoutSaved = (layoutStore.get("reader.epub") as { layout?: string } | undefined)?.layout ?? null;
+  // Two pages in a wide window; in a narrow one, one, and the Aa panel says why.
+  stage.style.width = "1500px";
+  await pause(900);
+  const colsWide = getComputedStyle(shownFrame()!.contentDocument!.documentElement).columnCount;
+  stage.style.width = "560px";
+  await pause(900);
+  const colsNarrow = getComputedStyle(shownFrame()!.contentDocument!.documentElement).columnCount;
+  (lv.controls?.end?.find((b) => b.classList.contains("epub-aa")) as HTMLButtonElement).click();
+  await pause(300);
+  const note = () => !(document.querySelector(".epub-settings .aa-note") as HTMLElement | null)?.hidden;
+  const narrowNote = note();
+  stage.style.width = "1500px";
+  await pause(900);
+  const wideNote = note();
+  const layoutRadios = [...document.querySelectorAll(".epub-settings .aa-layout [role=radio]")].map((b) => `${b.textContent}:${b.getAttribute("aria-checked")}`);
+  (document.querySelector(".epub-settings .aa-layout [data-value=single]") as HTMLButtonElement).click();
+  await pause(1200);
+  const colsSingle = getComputedStyle(shownFrame()!.contentDocument!.documentElement).columnCount;
+  results.epubTwoPages = { colsWide, colsNarrow, narrowNote, wideNote, colsSingle, layoutRadios };
+  // Scrolling in a wide window: a centred column with margins, as in pages.
+  (document.querySelector(".epub-settings .aa-layout [data-value=scroll]") as HTMLButtonElement).click();
+  await pause(1500);
+  const sf = shownFrame()!;
+  const sp = [...sf.contentDocument!.querySelectorAll("p")].map((p) => p.getBoundingClientRect()).find((r) => r.width > 0)!;
+  results.epubScrollMargins = { frame: sf.clientWidth, left: Math.round(sp.left), right: Math.round(sf.clientWidth - sp.right) };
+  stage.style.width = "560px";
+  await pause(900);
+  const sp2 = [...sf.contentDocument!.querySelectorAll("p")].map((p) => p.getBoundingClientRect()).find((r) => r.width > 0)!;
+  results.epubScrollMarginsNarrow = { left: Math.round(sp2.left), right: Math.round(sf.clientWidth - sp2.right) };
+  stage.style.width = "";
+  lv.destroy();
+
   step("epub fixed layout");
   const fixedBook = await open(epubEngine, "fixed.epub", "epub");
   await waitFor(() => /^Page 1 of 2/.test(fixedBook.view.position()));
