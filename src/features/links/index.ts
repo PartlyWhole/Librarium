@@ -15,7 +15,7 @@ export function links(shell: ShellApi): void {
     id: "links",
     title: "Links",
     icon: Link2,
-    applies: (r) => !!r.params.id && (r.page === "note" || r.page === "item" || r.page === "capture"),
+    applies: (r) => !!r.params.id && (r.page === "note" || r.page === "item" || r.page === "capture" || r.page === "board"),
     render(host, r) {
       const id = r.params.id!;
       const note = r.page === "note";

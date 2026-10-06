@@ -103,7 +103,27 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
   - **Tested:** 9 interface tests and 4 WebKit checks with the real Excalidraw. In the preview:
     make, name, draw, leave and come back, and ⌘Z / ⇧⌘Z through shapes and the rename.
   - **Only the real app can show:** ⌘Z from the macOS menu bar reaching the canvas.
-- **Next:** phase 3, links (`[[` on the board, Link to…, backlinks).
+- **Phase 3 (links) done** (decision 0064):
+  - **Typing `[[`** in a text on a board opens the title picker. Picking puts the record's
+    name in the text and links it.
+  - **Edit ▸ Link to a note or item… (⌥⌘K)** links whatever is selected. ⌘K on a board
+    stays Excalidraw's own link to a web address.
+  - **Clicking a link** opens the record (⌘-click: a new tab). Web links ask first.
+  - **Backlinks:** a linked note lists the board under "Linked from". Boards show the Links
+    view too. A renamed record's new name is written into the board's readable page at its
+    next save.
+  - **Fixed before it could happen:** renaming a linked note makes the background job refresh
+    names in the board's page. That would have made a board with unsaved changes save a
+    "version from elsewhere" copy. A page-only change is no longer a conflict.
+  - **Kept React out of start-up:** a new code rule allows the drawing engine to be imported
+    only on demand. It caught an import of mine that would have pulled React into the start-up
+    bundle.
+  - **Tested:** 6 more interface tests and 2 more WebKit checks with the real Excalidraw. In
+    the preview: `[[` → picked a note → the text reads its name → clicking the link opened the
+    note, whose Links view lists the board.
+  - **Not ideal:** hovering a link shows its address (`librarium://record/…`), not the
+    record's name. That's Excalidraw's own tooltip.
+- **Next:** phase 4, captures, library items, notes and pictures on the board.
 
 ---
 

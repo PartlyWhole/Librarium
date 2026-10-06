@@ -34,6 +34,13 @@ module.exports = {
       to: { path: "(^|/)node_modules/(react|react-dom|@excalidraw/[^/]+)/|^(react|react-dom|@excalidraw/excalidraw)($|/)" },
     },
     {
+      name: "board-engine-loads-on-demand",
+      comment: "The board engine (React and Excalidraw) is loaded when a board opens: imported only on demand, or for its types, so it stays out of the start-up bundle (decision 0061).",
+      severity: "error",
+      from: { pathNot: "^src/features/boards/engine\\.ts$" },
+      to: { path: "^src/features/boards/engine\\.ts$", dependencyTypesNot: ["type-only", "dynamic-import"] },
+    },
+    {
       name: "generated-is-leaf",
       comment: "Generated types import only generated types.",
       severity: "error",

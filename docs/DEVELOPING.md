@@ -192,7 +192,9 @@ combobox). Every action must be in a menu (shell test).
 - **Boards** (`src/features/boards/`, 0061–0063): `engine.ts` is the only module that uses React
   and Excalidraw (a dependency-cruiser rule), loaded when a board opens; `page.ts` saves the
   drawing and its readable page (`mirror.ts`) together, keeps drafts, handles changes from
-  elsewhere, and joins the board's undo place. Keys the app sends on purpose to a component are
+  elsewhere, and joins the board's undo place. Links (0064) are `librarium://record/<id>` on
+  elements with `customData.librarium.links`; `links.ts` holds what the page needs without
+  React (a rule keeps `engine.ts` loaded on demand only). Keys the app sends on purpose to a component are
   marked with `passThrough` (`kit/keys.ts`) so its shortcuts don't take them again.
 
 ## 7. Lessons learned (keep these)

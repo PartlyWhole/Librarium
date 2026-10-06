@@ -9,7 +9,7 @@ import { folderOf } from "../../shell/folders/model";
 import type { ShellApi } from "../../shell/api";
 import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
-import { renderBoard } from "./page";
+import { renderBoard, shownBoards } from "./page";
 import { Shapes } from "lucide";
 
 const KIND = "board";
@@ -46,6 +46,21 @@ export function boards(shell: ShellApi): void {
         toast(String((e as { message?: string }).message ?? e));
       }
     },
+  });
+
+  // Links from a board: what is selected, to a record (⌘K stays Excalidraw's link to the web).
+  const shownBoard = () => {
+    const r = shell.router.current();
+    return r.page === "board" ? shownBoards.get(r.params.id ?? "") : undefined;
+  };
+  shell.actions.add("boards", {
+    id: "boards.linkTo",
+    title: "Link to…",
+    keys: ["Mod+Alt+K"],
+    reserved: true,
+    when: () => !!shownBoard(),
+    menu: { name: "edit", group: 3, title: "Link to a note or item…" },
+    run: () => shownBoard()?.linkTo(),
   });
 
   // Drawings not saved before the app stopped: said once, when the library opens.

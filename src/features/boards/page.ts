@@ -17,6 +17,9 @@ import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
 import type { BoardElement, BoardEngine, BoardEngineOptions } from "./engine";
 import { boardPage } from "./mirror";
+import { recordOf } from "./links";
+import { comboboxDialog } from "../../kit/combobox";
+import { askToOpen } from "../../shell/links";
 import { FolderInput } from "lucide";
 
 /** How long after the last change the board is saved, and its draft kept (tests shorten them). */
@@ -32,6 +35,9 @@ let loadEngine = async (): Promise<Mount> => {
 export function useBoardEngine(mount: Mount): void {
   loadEngine = async () => mount;
 }
+
+/** The boards shown, by ID: what the board's commands act on (Link to…). */
+export const shownBoards = new Map<string, { linkTo(): void }>();
 
 /** The app's light or dark look now. */
 function appTheme(): "light" | "dark" {
@@ -79,6 +85,9 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
     replace(host, h("div", { class: "board-head" }, titleInput, notices), canvasHost);
     const status = (text: string, persistent = false) => shell.status.show(text, persistent ? 0 : 4000);
 
+    /** A record's name now (the readable page writes links with it). */
+    const titleOf = (rid: string) => shell.records.get(rid)?.title || null;
+
     // ---- saving ----------------------------------------------------------------------------
     let engine: BoardEngine | null = null;
     let dirty = false;
@@ -106,7 +115,7 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
       const { scene, elements } = snap ?? engine!.current();
       saving = (async () => {
         try {
-          const r = await call<BoardSaved>("boards.save", { id, base_version: base.version, base_scene_sha: base.sha, scene, page: boardPage(id, elements) });
+          const r = await call<BoardSaved>("boards.save", { id, base_version: base.version, base_scene_sha: base.sha, scene, page: boardPage(id, elements, titleOf) });
           base = { version: r.info.version, sha: r.scene_sha };
           info = r.info;
           shell.records.put(r.info, r.seq);
@@ -134,6 +143,13 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
     const keepTheirs = async () => {
       try {
         const fresh = await call<BoardLoaded>("boards.load", { id });
+        // Only the readable page changed (links' names refreshed after a rename, or the page
+        // edited outside): it is written from the drawing anyway, so this save goes ahead.
+        if (fresh.scene_sha === base.sha) {
+          base = { version: fresh.info.version, sha: fresh.scene_sha };
+          info = fresh.info;
+          return;
+        }
         const folder = info.path.split("/").slice(1, -1).join("/") || undefined;
         const w = await call<Written>("boards.create", { title: `${info.title} (version from elsewhere)`, folder });
         const copy = await call<BoardLoaded>("boards.load", { id: w.info.id });
@@ -172,6 +188,13 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
       onChange: changed,
       onStep: () => shell.undo.typed(scope, "Drawing"),
       onPicture: () => toast("Pictures on boards are coming: for now, put the picture in a note and link it from the board."),
+      // `[[` typed in a text: what to link it to.
+      onLinkStart: (elementId) => pickRecord("Link this text to", (to) => engine?.link([elementId], to, { replaceTyped: true })),
+      onOpenLink: (link, newTab) => {
+        const target = recordOf(link);
+        if (target) shell.openRecord(target, {}, { newTab });
+        else void askToOpen(link, { from: info.title });
+      },
     });
     if (!alive) return ready.destroy();
     engine = ready;
@@ -205,6 +228,23 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
       changed();
     }
 
+    // ---- links -----------------------------------------------------------------------------
+    /** Asks which record (anything that opens: notes, boards, items, captures). */
+    function pickRecord(label: string, done: (to: { id: string; label: string }) => void) {
+      const choices = shell.records
+        .list()
+        .filter((r) => r.id !== id && shell.openers.get(r.kind) && !shell.records.isHidden(r))
+        .map((r) => ({ id: r.id, label: r.title || "Untitled", detail: r.kind === "note" ? undefined : (shell.looks.get(r.kind)?.kindName(r) ?? r.kind), icon: shell.looks.get(r.kind)?.icon(r) }));
+      comboboxDialog({ label, placeholder: "Type a title", emptyText: "Nothing has that title.", choices, onPick: (c) => done({ id: c.id, label: c.label }) });
+    }
+    const linkTo = () => {
+      const ids = engine?.selected() ?? [];
+      if (!ids.length) return status("Select something on the board first, then link it.");
+      pickRecord(ids.length === 1 ? "Link it to" : `Link ${ids.length} things to`, (to) => engine?.link(ids, to));
+    };
+    shownBoards.set(id, { linkTo });
+    cleanup.push(() => shownBoards.delete(id));
+
     // ---- outside changes -------------------------------------------------------------------
     cleanup.push(
       on("event.change", (p) => {
@@ -216,9 +256,10 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
           titleInput.value = fresh.info.title;
           ctx.setTitle(fresh.info.title);
           // With nothing unsaved, the drawing shown becomes the one on disk; otherwise the
-          // next save keeps both (keepTheirs).
+          // next save keeps both (keepTheirs). When only the page changed (names refreshed),
+          // the drawing is the same: the next save is based on the new version.
           if (!dirty && fresh.scene_sha !== base.sha) engine?.load(fresh.scene);
-          if (!dirty) base = { version: fresh.info.version, sha: fresh.scene_sha };
+          if (!dirty || fresh.scene_sha === base.sha) base = { version: fresh.info.version, sha: fresh.scene_sha };
         }, () => {});
       }),
     );

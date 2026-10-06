@@ -81,6 +81,8 @@ const checks = [
   ["Board: typing a text is a change and one undo step; the drawing saves in Excalidraw's format", r.board?.editor === true && r.board.typed.texts?.[0] === "Technique" && r.board.typed.steps === 1 && r.board.typed.changes > 0 && r.board.savedType === "excalidraw"],
   ["Board: ⌘Z undoes that step (not a new step), ⇧⌘Z redoes it", r.board?.undone?.texts === 0 && r.board.undone.steps === 1 && r.board.redone === 1],
   ["Board: the look follows the app (dark), and nothing goes to the network", r.board?.dark === true && r.board.external?.length === 0],
+  ["Board: [[ typed in a text reaches the page (the text is finished, to be linked)", r.boardLinks?.started === true && r.boardLinks.editorClosed === true],
+  ["Board: linking replaces [[ with the name, measures the text again, and the record's ID is saved with it", r.boardLinks?.linked === true && r.boardLinks.text === "See Jacques Ellul" && r.boardLinks.wider === true && r.boardLinks.link === "librarium://record/0192f3a4-7c1e-7b2a-9f00-000000000099" && r.boardLinks.kept?.includes("Jacques Ellul")],
   ["recognised words in an image can be found", r.ocrImageLines === 3 && r.ocrImageFind?.count === 1],
   ["recognised words in an image can be selected (and so captured)", r.ocrImageSelection === "Gravity and grace are two forces."],
   ["editing on an image: a recognised passage's start dragged forward; a region resized with its picture taken again", r.ocrImageHandles === true && !!r.ocrImageEdited?.text && r.ocrImageEdited.text !== "Gravity and grace are two forces." && r.ocrImageEdited.text.length < "Gravity and grace are two forces.".length && r.ocrImageEdited.region === true],

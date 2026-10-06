@@ -39,5 +39,8 @@ describe("interface direction", () => {
     // React and Excalidraw only inside boards.
     expect(v.some((s) => s.startsWith("react-only-in-boards: src/features/notes/index.ts"))).toBe(true);
     expect(v.some((s) => s.startsWith("react-only-in-boards: src/features/boards/"))).toBe(false);
+    // The board engine is loaded on demand, never imported outright.
+    expect(v).toContain("board-engine-loads-on-demand: src/features/boards/page.ts -> src/features/boards/engine.ts");
+    expect(v.some((s) => s.startsWith("board-engine-loads-on-demand: src/features/boards/lazy.ts"))).toBe(false);
   });
 });

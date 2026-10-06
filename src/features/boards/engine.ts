@@ -4,24 +4,15 @@
  */
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { CaptureUpdateAction, Excalidraw, getSceneVersion, restore, serializeAsJSON } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, Excalidraw, getSceneVersion, restore, restoreElements, serializeAsJSON } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { passThrough } from "../../kit/keys";
+import { RECORD_LINK, type BoardElement, type BoardLink } from "./links";
 
 type Api = Parameters<NonNullable<Parameters<typeof Excalidraw>[0]["excalidrawAPI"]>>[0];
 type AppState = ReturnType<Api["getAppState"]>;
 
-/** A drawing element as the readable page needs it. */
-export interface BoardElement {
-  id: string;
-  type: string;
-  x: number;
-  y: number;
-  text?: string;
-  link?: string | null;
-  isDeleted?: boolean;
-  containerId?: string | null;
-}
+export type { BoardElement, BoardLink } from "./links";
 
 export interface BoardEngineOptions {
   /** The drawing, in Excalidraw's file format. */
@@ -34,6 +25,10 @@ export interface BoardEngineOptions {
   onStep(): void;
   /** Pictures wait for a later phase (they will be library attachments, plan §4). */
   onPicture(): void;
+  /** `[[` was typed in a text (its element): the page offers what to link to. */
+  onLinkStart(elementId: string): void;
+  /** A link on the board was clicked (with ⌘: in a new tab). */
+  onOpenLink(link: string, newTab: boolean): void;
 }
 
 export interface BoardEngine {
@@ -41,6 +36,13 @@ export interface BoardEngine {
   current(): { scene: string; elements: readonly BoardElement[] };
   /** Shows another drawing (changed outside), not as a step to undo. */
   load(scene: string): void;
+  /** The elements selected (their IDs). */
+  selected(): string[];
+  /**
+   * Links elements to a record (one step to undo). In a text, `[[` just typed is replaced by
+   * the record's name; a text keeps each of its links (Excalidraw follows the first).
+   */
+  link(ids: string[], to: BoardLink, opts?: { replaceTyped?: boolean }): boolean;
   /** Excalidraw's undo / redo; whether anything changed. */
   undo(): boolean;
   redo(): boolean;
@@ -105,6 +107,11 @@ export function mountBoard(host: HTMLElement, o: BoardEngineOptions): Promise<Bo
         },
         theme,
         viewModeEnabled: o.readOnly,
+        onLinkOpen: (element: { link: string | null }, event: CustomEvent<{ nativeEvent: MouseEvent | { metaKey?: boolean } }>) => {
+          if (!element.link) return;
+          event.preventDefault();
+          o.onOpenLink(element.link, !!event.detail?.nativeEvent?.metaKey);
+        },
         aiEnabled: false,
         onChange,
         // Saving, opening and exporting go through Librarium.
@@ -132,8 +139,60 @@ export function mountBoard(host: HTMLElement, o: BoardEngineOptions): Promise<Bo
     return true;
   };
 
+  // `[[` typed in a text being edited: the text is finished (so it can be linked), and the page
+  // offers what to link to.
+  el.addEventListener(
+    "input",
+    (e) => {
+      const ta = e.target as HTMLTextAreaElement;
+      if (!ta.classList?.contains("excalidraw-wysiwyg") || !api) return;
+      const at = ta.selectionStart ?? ta.value.length;
+      if (ta.value.slice(Math.max(0, at - 2), at) !== "[[") return;
+      const editing = api.getAppState().editingTextElement;
+      if (!editing) return;
+      ta.blur();
+      setTimeout(() => o.onLinkStart(editing.id), 0);
+    },
+    true,
+  );
+
   const engine: BoardEngine = {
     el,
+    selected() {
+      const s = api?.getAppState().selectedElementIds ?? {};
+      return Object.keys(s).filter((k) => s[k]);
+    },
+    link(ids, to, opts = {}) {
+      if (!api || !ids.length) return false;
+      const all = api.getSceneElementsIncludingDeleted();
+      let changed = false;
+      const next = all.map((e) => {
+        if (!ids.includes(e.id) || e.isDeleted) return e;
+        changed = true;
+        const had = ((e.customData as BoardElement["customData"])?.librarium?.links ?? []).filter((l) => l.id !== to.id);
+        const links = [...had, to];
+        const patch: Record<string, unknown> = {
+          // Excalidraw follows one link per element: the first record linked.
+          link: `${RECORD_LINK}${links[0]!.id}`,
+          customData: { ...(e.customData ?? {}), librarium: { ...((e.customData as BoardElement["customData"])?.librarium ?? {}), links } },
+          version: e.version + 1,
+          versionNonce: Math.floor(Math.random() * 2 ** 31),
+          updated: Date.now(),
+        };
+        if (e.type === "text" && opts.replaceTyped) {
+          const t = e as unknown as { text: string; originalText: string };
+          const cut = (s: string) => (s.endsWith("[[") ? s.slice(0, -2) : s) + to.label;
+          patch.text = cut(t.text);
+          patch.originalText = cut(t.originalText ?? t.text);
+        }
+        return { ...e, ...patch };
+      });
+      if (!changed) return false;
+      // Texts are measured again (their words changed).
+      const fixed = restoreElements(next as never, null, { refreshDimensions: true, repairBindings: true });
+      api.updateScene({ elements: fixed, captureUpdate: CaptureUpdateAction.IMMEDIATELY });
+      return true;
+    },
     current() {
       const a = api!;
       const elements = a.getSceneElementsIncludingDeleted();

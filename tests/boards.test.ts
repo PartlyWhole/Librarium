@@ -28,6 +28,8 @@ interface Fake {
   undos: number;
   redos: number;
   destroyed: boolean;
+  /** What is selected on the board. */
+  selection: string[];
   /** The user draws: a text (or a shape) is added. */
   draw(text?: string): void;
 }
@@ -52,6 +54,7 @@ beforeEach(() => {
       undos: 0,
       redos: 0,
       destroyed: false,
+      selection: [],
       draw(text) {
         const els = elementsOf(f.scene);
         els.push({ id: `e${els.length}`, type: text ? "text" : "rectangle", x: 10 * els.length, y: 0, ...(text ? { text } : {}) });
@@ -70,6 +73,20 @@ beforeEach(() => {
       redo: () => (f.redos++, el.dispatchEvent(passThrough(new KeyboardEvent("keydown", { key: "Z", metaKey: true, shiftKey: true, bubbles: true, cancelable: true }))), true),
       setTheme() {},
       destroy: () => void (f.destroyed = true),
+      selected: () => f.selection,
+      // As the real engine does: the link on the element, its links kept, [[ replaced by the name.
+      link: (ids, to, opts = {}) => {
+        const els = elementsOf(f.scene).map((e) => {
+          if (!ids.includes(e.id)) return e;
+          const links = [...(e.customData?.librarium?.links ?? []).filter((l) => l.id !== to.id), to];
+          const text = e.type === "text" && opts.replaceTyped && e.text ? (e.text.endsWith("[[") ? e.text.slice(0, -2) : e.text) + to.label : e.text;
+          return { ...e, text, link: `librarium://record/${links[0]!.id}`, customData: { librarium: { links } } };
+        });
+        f.scene = scene(els);
+        o.onChange();
+        o.onStep();
+        return true;
+      },
     };
   });
 });
@@ -176,6 +193,23 @@ describe("boards", () => {
     expect(document.body.textContent).toContain("was also changed elsewhere");
   });
 
+  it("save over a page changed elsewhere when the drawing is the same (link names refreshed): no copy", async () => {
+    const { shell } = await boot();
+    const { id, f } = await newBoard(shell);
+    await wait(40);
+    boardTimings.save = 300;
+    f.draw("Mine");
+    // The links' repair job rewrites the page (a linked note was renamed); the drawing is untouched.
+    const r = mock.state.records.get(id)!;
+    r.body = `${r.body}\nrefreshed\n`;
+    r.info.version = `${r.info.version}-repaired`;
+    mock.emit("event.change", { seq: 900, id, kind: "board", op: "updated", origin: "app" });
+    await until(() => mock.state.scenes.get(id) === f.scene);
+    expect(elementsOf(mock.state.scenes.get(id)!).map((e) => e.text)).toContain("Mine");
+    expect([...mock.state.records.values()].some((x) => x.info.title.endsWith("(version from elsewhere)"))).toBe(false);
+    expect(mock.state.records.get(id)!.body).not.toContain("refreshed");
+  });
+
   it("rewrite a page written from another drawing when opened", async () => {
     const { shell } = await boot();
     const w = await call<{ info: { id: string } }>("boards.create", {});
@@ -237,7 +271,101 @@ describe("boards", () => {
   });
 });
 
+/** Picks a title in the open picker. */
+async function pick(text: string) {
+  await until(() => !!document.querySelector("dialog[open] .combo-input"));
+  const input = document.querySelector<HTMLInputElement>("dialog[open] .combo-input")!;
+  input.value = text;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  await wait(20);
+}
+
+describe("links on boards", () => {
+  it("[[ in a text links it to a record: the name replaces [[, and the record lists the board", async () => {
+    const { shell, note } = await boot();
+    const { id, f } = await newBoard(shell);
+    f.draw("See [[");
+    const textId = elementsOf(f.scene).at(-1)!.id;
+    f.o.onLinkStart(textId);
+    await pick("Ellul");
+    const el = elementsOf(f.scene).find((e) => e.id === textId)!;
+    expect(el.text).toBe("See Ellul");
+    expect(el.link).toBe(`librarium://record/${note.id}`);
+    // Saved: the readable page has the link, so the note's backlinks list the board.
+    await until(() => mock.state.records.get(id)!.body.includes(`[[Ellul|${note.id}]]`));
+    expect(mock.state.records.get(id)!.body).toBe(`${boardNote(id)}
+
+See [[Ellul|${note.id}]]
+`);
+    const back = await call<{ source: string }[]>("links.backlinks", { id: note.id });
+    expect(back.map((b) => b.source)).toContain(id);
+  });
+
+  it("Link to… links what is selected; renaming the record shows in the page at the next save", async () => {
+    const { shell, note } = await boot();
+    const { id, f } = await newBoard(shell);
+    f.draw();
+    f.selection = [elementsOf(f.scene)[0]!.id];
+    expect(shell.actions.get("boards.linkTo")!.keys).toEqual(["Mod+Alt+K"]);
+    shell.actions.run("boards.linkTo");
+    await pick("Ellul");
+    await until(() => mock.state.records.get(id)!.body.includes(`[[Ellul|${note.id}]]`));
+    // Renamed: the link follows (by ID); its name is today's at the next save.
+    await call("records.relocate", { id: note.id, title: "Jacques Ellul" });
+    await shell.records.load();
+    f.draw("And more");
+    await until(() => mock.state.records.get(id)!.body.includes(`[[Jacques Ellul|${note.id}]]`));
+    // Nothing selected: it says what to do.
+    f.selection = [];
+    shell.actions.run("boards.linkTo");
+    expect(document.querySelector("dialog[open]")).toBeNull();
+  });
+
+  it("a click on a link opens the record (⌘: in a new tab); a web link asks first", async () => {
+    const { shell, note } = await boot();
+    const { f } = await newBoard(shell);
+    // With ⌘, beside the board, in a new tab; then without, in this one.
+    const tabs = shell.router.tabs().length;
+    f.o.onOpenLink(`librarium://record/${note.id}`, true);
+    await wait(20);
+    expect(shell.router.tabs().length).toBe(tabs + 1);
+    shell.router.select(0);
+    await wait(20);
+    f.o.onOpenLink(`librarium://record/${note.id}`, false);
+    await wait(20);
+    expect(shell.router.current()).toMatchObject({ page: "note", params: { id: note.id } });
+    f.o.onOpenLink("https://example.org/essay", false);
+    await until(() => !!document.querySelector("dialog[open]"));
+    expect(document.querySelector("dialog[open]")!.textContent).toContain("example.org");
+  });
+});
+
 describe("a board's readable page", () => {
+  it("writes links as [[name|id]]: in a text where their names are, around a linked shape's words, or on a line", () => {
+    const A = "0192f3a4-7c1e-7b2a-9f00-00000000000a";
+    const B = "0192f3a4-7c1e-7b2a-9f00-00000000000b";
+    const els: BoardElement[] = [
+      { id: "t", type: "text", x: 0, y: 0, text: "Ellul and Weil, and Ellul", link: `librarium://record/${A}`, customData: { librarium: { links: [{ id: A, label: "Ellul" }, { id: B, label: "Weil" }] } } },
+      { id: "box", type: "rectangle", x: 0, y: 100, link: `librarium://record/${B}` },
+      { id: "words", type: "text", x: 10, y: 110, text: "Gravity", containerId: "box" },
+      { id: "lone", type: "ellipse", x: 0, y: 200, link: `librarium://record/${A}`, customData: { librarium: { links: [{ id: A, label: "Ellul" }] } } },
+      { id: "web", type: "ellipse", x: 0, y: 300, link: "https://example.org" },
+    ];
+    const titles: Record<string, string> = { [A]: "Jacques Ellul", [B]: "Simone | Weil" };
+    expect(boardPage("b", els, (id) => titles[id] ?? null)).toBe(
+      `${boardNote("b")}
+
+[[Jacques Ellul|${A}]] and [[Simone \\| Weil|${B}]], and Ellul
+
+[[Gravity|${B}]]
+
+[[Jacques Ellul|${A}]]
+`,
+    );
+  });
+
+
   it("is its texts in reading order, deleted ones left out, under the line saying what it is", () => {
     const els: BoardElement[] = [
       { id: "1", type: "text", x: 200, y: 0, text: "Right" },

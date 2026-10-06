@@ -817,7 +817,8 @@ async function run() {
     let changes = 0;
     let steps = 0;
     const initial = JSON.stringify({ type: "excalidraw", version: 2, source: "test", elements: [], appState: {}, files: {} });
-    const board = await mountBoard(stage, { scene: initial, theme: "light", readOnly: false, onChange: () => changes++, onStep: () => steps++, onPicture() {} });
+    const linkStarts: string[] = [];
+    const board = await mountBoard(stage, { scene: initial, theme: "light", readOnly: false, onChange: () => changes++, onStep: () => steps++, onPicture() {}, onLinkStart: (el) => void linkStarts.push(el), onOpenLink() {} });
     const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
     await pause(600);
     const live = () => board.current().elements.filter((e) => !e.isDeleted);
@@ -849,6 +850,33 @@ async function run() {
     await pause(200);
     const dark = !!stage.querySelector(".excalidraw.theme--dark");
     const saved = JSON.parse(board.current().scene) as { type: string; elements: unknown[] };
+    // Links: `[[` typed in a new text reaches the page; linking replaces it with the name, keeps
+    // the record's ID on the element, and measures the text again.
+    canvas.dispatchEvent(new MouseEvent("dblclick", { clientX: cr.left + 200, clientY: cr.top + 500, bubbles: true, cancelable: true }));
+    await pause(300);
+    const ta2 = stage.querySelector("textarea.excalidraw-wysiwyg") as HTMLTextAreaElement | null;
+    if (ta2) {
+      ta2.value = "See [[";
+      ta2.setSelectionRange(6, 6);
+      ta2.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    await pause(400);
+    const NOTE = "0192f3a4-7c1e-7b2a-9f00-000000000099";
+    const started = linkStarts[0] ?? "";
+    const widthBefore = (live().find((e) => e.id === started) as { width?: number } | undefined)?.width ?? 0;
+    const linked = started ? board.link([started], { id: NOTE, label: "Jacques Ellul" }, { replaceTyped: true }) : false;
+    await pause(300);
+    const el = live().find((e) => e.id === started) as { text?: string; width?: number } | undefined;
+    const reloaded = (JSON.parse(board.current().scene) as { elements: { id: string; link?: string; customData?: unknown }[] }).elements.find((e) => e.id === started);
+    results.boardLinks = {
+      started: !!started,
+      editorClosed: !stage.querySelector("textarea.excalidraw-wysiwyg"),
+      linked,
+      text: el?.text ?? null,
+      link: reloaded?.link ?? null,
+      kept: JSON.stringify(reloaded?.customData ?? null),
+      wider: (el?.width ?? 0) > widthBefore,
+    };
     const external = performance.getEntriesByType("resource").slice(before).map((e) => e.name).filter((n) => !n.startsWith(location.origin) && !n.startsWith("data:") && !n.startsWith("blob:"));
     results.board = { afterLoad, typed, undone, redone, dark, savedType: saved.type, external, editor: !!ta };
     board.destroy();
