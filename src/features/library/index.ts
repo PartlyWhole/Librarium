@@ -359,13 +359,15 @@ export function library(shell: ShellApi): void {
     kind: KIND,
     render(r, open) {
       if (formatOf(r) === "image") {
-        const img = h("img", { class: "embed-image", alt: r.title || "Image", title: r.title, onclick: () => open(r.id) }) as HTMLImageElement;
+        // ⌘-click opens it in a new tab, as captures and links do.
+        const img = h("img", { class: "embed-image", alt: r.title || "Image", title: r.title, onclick: (e: MouseEvent) => open(r.id, undefined, { newTab: e.metaKey }) }) as HTMLImageElement;
         void readBytes(r.id).then((b) => (img.src = URL.createObjectURL(new Blob([b]))), () => (img.alt = `${r.title} (can’t be shown)`));
         return h("figure", { class: "embed embed-figure" }, img);
       }
-      return h("figure", { class: "embed embed-card" }, h("a", { href: "#", class: "list-link", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, icon(iconFor(r), 16), " ", r.title || "Untitled"));
+      return h("figure", { class: "embed embed-card" }, h("a", { href: "#", class: "list-link", onclick: (e: MouseEvent) => (e.preventDefault(), open(r.id, undefined, { newTab: e.metaKey })) }, icon(iconFor(r), 16), " ", r.title || "Untitled"));
     },
     markdown: (r) => (formatOf(r) === "image" ? `![${r.title}](${r.path.replace(/record\.json$/, String(r.fields[ORIGINAL] ?? ""))})` : `[${r.title}](${r.path})`),
+    resizable: (r) => formatOf(r) === "image",
   });
   effect(() => document.body.classList.toggle("dropping", dropping()));
 

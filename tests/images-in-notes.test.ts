@@ -51,3 +51,75 @@ describe("images in notes", () => {
     expect(shell.records.get(item.id)!.path).toMatch(/^items\/Attachments\//);
   });
 });
+
+describe("resizing images in notes (R-067, decision 0071)", () => {
+  it("keeps a width after the embed, set from the picture's corner", async () => {
+    mock.reset();
+    mock.state.folder = "/lib";
+    const pic = seed("item", "chart", "", { "library.format": "image", "library.original": "chart.png" });
+    const n = seed("note", "Draft", `Before.\n\n![[chart|${pic.id}]]{width=200}\n\nAfter.\n`);
+    document.body.innerHTML = '<div id="app"></div>';
+    const shell = createShell(document.getElementById("app")!, [notes, library, captures]);
+    await wait(60);
+    shell.openRecord(n.id);
+    await wait(80);
+    const page = () => document.querySelector<HTMLElement>(".ws-page:not([hidden])")!;
+    const figure = () => page().querySelector<HTMLElement>(".cm-embed.embed-figure")!;
+    // Drawn at that width, the attribute hidden with the embed.
+    expect(figure().style.width).toBe("200px");
+    expect(figure().classList.contains("embed-sized")).toBe(true);
+    expect(page().querySelector(".cm-content")!.textContent).not.toContain("{width=");
+    const handle = () => figure().querySelector<HTMLElement>(".embed-resize[role=slider]")!;
+    expect(handle().getAttribute("aria-label")).toBe("Width of chart");
+    // The keys: Home is the smallest; End the picture's own size (no width kept).
+    handle().dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+    await wait(1100);
+    expect(mock.state.records.get(n.id)!.body).toContain(`![[chart|${pic.id}]]{width=48}\n`);
+    handle().dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+    await wait(1100);
+    expect(mock.state.records.get(n.id)!.body).toContain(`![[chart|${pic.id}]]\n\nAfter.`);
+    expect(figure().classList.contains("embed-sized")).toBe(false);
+    expect(figure().style.width).toBe("");
+    // A width given again replaces the one kept, never adds a second.
+    handle().dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+    handle().dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+    await wait(1100);
+    expect(mock.state.records.get(n.id)!.body.match(/\{width=/g)?.length).toBe(1);
+    // Double-click: its own size again.
+    handle().dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await wait(1100);
+    expect(mock.state.records.get(n.id)!.body).not.toContain("{width=");
+    shell.destroy();
+  });
+});
+
+describe("⌘-click on an item shown in a note (R-068)", () => {
+  it("opens it in a new tab, as captures and links do; a plain click opens it here", async () => {
+    mock.reset();
+    mock.state.folder = "/lib";
+    const pic = seed("item", "chart", "", { "library.format": "image", "library.original": "chart.png" });
+    const page = seed("item", "An article", "", { "library.format": "web" });
+    const n = seed("note", "Draft", `Top.\n\n![[chart|${pic.id}]]\n\n![[An article|${page.id}]]\n\nAfter.\n`);
+    document.body.innerHTML = '<div id="app"></div>';
+    const shell = createShell(document.getElementById("app")!, [notes, library, captures]);
+    await wait(60);
+    shell.openRecord(n.id);
+    await wait(80);
+    const embeds = () => [...document.querySelectorAll<HTMLElement>(".ws-page:not([hidden]) .cm-embed")];
+    embeds()[0]!.querySelector("img")!.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
+    await wait(30);
+    expect(shell.router.tabs().length).toBe(2);
+    shell.router.select(0);
+    await wait(30);
+    embeds()[1]!.querySelector("a")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
+    await wait(30);
+    expect(shell.router.tabs().length).toBe(3);
+    shell.router.select(0);
+    await wait(30);
+    embeds()[1]!.querySelector("a")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await wait(30);
+    expect(shell.router.tabs().length).toBe(3);
+    expect(shell.router.current.peek().params.id).toBe(page.id);
+    shell.destroy();
+  });
+});

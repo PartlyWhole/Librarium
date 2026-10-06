@@ -56,6 +56,46 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Done
 
+### R-068 · ⌘-click on an item shown in a note should open a new tab
+> "Cmd-clicking a link should open up a new tab (this one doesn't, but captures do)"
+
+- **Diagnosis:** the item shown in your note was a library item's card (a saved web page).
+  Cards, images and board pictures in notes ignored ⌘; links in the text and capture
+  quotations already used it.
+- **Changed:** ⌘-click on a card, an image or a board shown in a note opens it in a new tab; a
+  plain click still opens it in the tab you're in.
+- **Use:** ⌘-click.
+- **Code:** `src/features/library/index.ts` (cards and images), `src/features/boards/index.ts`
+  (board pictures).
+- **Tested:** an interface test (⌘-click on an image and on a card each opens a tab; a plain
+  click doesn't); tried in the preview.
+- **Left:** nothing.
+
+### R-067 · Resize images in notes
+> "I want to be able to resize images in notes"
+
+- **Changed:** an image (or a board) shown in a note has a handle at its bottom-right corner,
+  shown when you point at it. Drag it to resize; the note keeps the width for that place, so
+  the same image can be a different size in another note.
+- **Use:**
+  - drag the corner; ⌘Z undoes it;
+  - double-click the corner: back to its own size;
+  - with the keyboard: Tab to the handle, then ← → (10% at a time), Home (smallest), End (its
+    own size).
+
+  In the note's text the width follows the image: `![[chart|…]]{width=320}`. You see it only
+  on the line you're editing.
+- **Code:** `src/features/captures/embeds.ts` (`widthAfter`, `sizable`), `src/shell/slots.ts`
+  (`EmbedRenderer.resizable`), `src/features/library/index.ts`, `src/features/boards/index.ts`,
+  `src/shell/shell.css`.
+- **Decision:** 0071 (why the width goes after the embed: the link's own syntax can't hold it,
+  and its label is rewritten by the repair job).
+- **Tested:** an interface test: the width is drawn and hidden with the embed; the keys and
+  double-click write, replace and remove it, never twice. In the preview: dragged an image
+  from 250 to 150 pixels, saw `{width=192}` written (the preview's pixels), and ⌘Z put it
+  back in one step. All interface tests, WebKit checks and Rust tests pass; lint is clean.
+- **Left:** other Markdown apps (Obsidian too) show `{width=320}` as text after the image.
+
 ### R-066 · EPUB views: two pages, one page and scrolling are hard to switch between
 > "the views of the epub aren't very UX friendly -- switching between two page vs one page vs
 > continuous, there are a lot of options and switching between them isn't easy. Please

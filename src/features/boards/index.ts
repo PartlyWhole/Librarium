@@ -89,7 +89,7 @@ export function boards(shell: ShellApi): void {
     kind: KIND,
     render(r, open) {
       const picture = h("div", { class: "embed-board-picture", role: "img", "aria-label": `The board “${r.title || "Untitled board"}”` }, h("span", { class: "muted small" }, "Drawing the board…"));
-      const go = (e: Event) => (e.preventDefault(), open(r.id));
+      const go = (e: MouseEvent) => (e.preventDefault(), open(r.id, undefined, { newTab: e.metaKey }));
       void boardSvg(shell, r.id, appTheme() === "dark").then(
         (svg) => {
           svg.removeAttribute("width");
@@ -102,6 +102,7 @@ export function boards(shell: ShellApi): void {
     },
     // Export with quotations: a link to the board's readable page.
     markdown: (r) => `[${r.title || "Board"}](${r.path})`,
+    resizable: () => true,
   });
 
   // Drawings not saved before the app stopped: said once, when the library opens.

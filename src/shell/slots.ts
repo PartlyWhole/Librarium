@@ -233,6 +233,11 @@ export interface EmbedRenderer {
   render(r: RecordInfo, open: (id: string, params?: Record<string, string>, opts?: { newTab?: boolean }) => void): HTMLElement;
   /** Plain Markdown for "Export with quotations". */
   markdown(r: RecordInfo): string;
+  /**
+   * Whether the block can be given a width in a note (a picture): kept after the embed as
+   * `{width=320}` (decision 0071), and set by dragging its corner.
+   */
+  resizable?(r: RecordInfo): boolean;
 }
 
 /** Every interface slot, for the architecture report. */

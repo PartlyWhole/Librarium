@@ -181,7 +181,8 @@ Rules that keep it honest:
     The chrome follows Apple Books (0046): readers can be `immersive` (the library page's
     toolbar shows on approach) and add their own toolbar `controls`.
 - **Captures** (`src/features/captures/`): `index.ts` (making, the panel, the pages, embeds),
-  `embeds.ts` (placed in writing; a click opens the capture), `references.ts` (where a capture
+  `embeds.ts` (placed in writing; a click opens the capture; pictures keep a width after the
+  embed, `{width=320}`, set from a corner handle, 0071), `references.ts` (where a capture
   is used, and rewriting those places; pure, unit-tested) and `delete.ts` (the per-place
   dialog before deleting a used capture, with one Undo; 0059).
 - **Kit** (`src/kit/`): small, dependency-free pieces (signals, DOM helper, dialogs, menus,
