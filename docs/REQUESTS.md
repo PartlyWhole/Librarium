@@ -123,7 +123,29 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
     note, whose Links view lists the board.
   - **Not ideal:** hovering a link shows its address (`librarium://record/…`), not the
     record's name. That's Excalidraw's own tooltip.
-- **Next:** phase 4, captures, library items, notes and pictures on the board.
+- **Phase 4 (captures, notes, items and pictures on boards) done** (decision 0065):
+  - **Put on the board… (⌥⌘I, Edit menu)** puts a capture, note, item or board on the board
+    shown. You can also drag things from the sidebar or a folder page, paste a picture, or drop
+    files from Finder.
+  - **A capture is a card** showing its quotation and citation, as in notes, with Show in the
+    source. It's redrawn when the capture changes. Notes, items and boards are cards with
+    their icon and name; a click opens them.
+  - **Pictures** come from the library (pasted ones are kept in Attachments, as in notes). The
+    drawing file keeps only their ID; they're loaded from the library when the board opens.
+  - **The readable page** writes captures and pictures as `![[…]]`, so a capture lists the
+    boards using it.
+  - **Fixed on the way:** cards didn't show at all. Excalidraw's element builder doesn't make
+    embed elements; they're now built the way its file reader builds them.
+  - **Tested:** 6 more interface tests and 2 more WebKit checks with the real Excalidraw. In
+    the preview: a capture put on a board showed its quotation and citation. A picture
+    dragged from the sidebar landed where it was dropped, and came back after leaving the
+    board.
+  - **Only in the real app:** dropping files from Finder onto a board.
+  - **Known:** a card is interactive (its buttons) after selecting it and clicking again; its
+    link marker opens the record at once. Opened at excalidraw.com, a board shows its cards as
+    empty frames and its pictures as missing (export with pictures comes in phase 5).
+- **Next:** phase 5, boards elsewhere: a board shown as a picture in a note, and export
+  (PNG, SVG, a self-contained Excalidraw file).
 
 ---
 

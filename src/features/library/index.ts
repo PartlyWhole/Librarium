@@ -275,8 +275,8 @@ export function library(shell: ShellApi): void {
   // Files dropped anywhere on the window are added.
   const dropping = signal(false);
   onFileDrop((paths, at) => {
-    // Dropped on a note being written: added to the library, and shown in the note there.
-    const ed = document.elementFromPoint?.(at.x, at.y)?.closest<HTMLElement>(".cm-editor");
+    // Dropped on a note being written (or a board): added to the library, and shown there.
+    const ed = document.elementFromPoint?.(at.x, at.y)?.closest<HTMLElement>(".cm-editor, [data-takes-embeds]");
     if (ed && !ed.closest("[hidden]")) void embedPaths(ed, paths, at);
     else void importPaths(paths);
   }, (over) => dropping.set(over));
@@ -309,9 +309,9 @@ export function library(shell: ShellApi): void {
       toast(String((e as { message?: string }).message ?? e));
     }
   };
-  // Pasted into a note (an image copied in another app): the same, from the data.
+  // Pasted into a note or a board (an image copied in another app): the same, from the data.
   document.addEventListener("librarium:files", (ev) => {
-    const ed = (ev.target as HTMLElement).closest<HTMLElement>(".cm-editor");
+    const ed = (ev.target as HTMLElement).closest<HTMLElement>(".cm-editor, [data-takes-embeds]");
     const files = (ev as CustomEvent<{ files: File[] }>).detail?.files ?? [];
     if (!ed || !files.length) return;
     void (async () => {

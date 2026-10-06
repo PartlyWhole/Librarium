@@ -63,6 +63,17 @@ export function boards(shell: ShellApi): void {
     run: () => shownBoard()?.linkTo(),
   });
 
+  // Captures, notes, items and pictures, put on the board shown.
+  shell.actions.add("boards", {
+    id: "boards.insert",
+    title: "Put on the board…",
+    keys: ["Mod+Alt+I"],
+    reserved: true,
+    when: () => !!shownBoard(),
+    menu: { name: "edit", group: 3, title: "Put a capture, note or item on the board…" },
+    run: () => shownBoard()?.insert(),
+  });
+
   // Drawings not saved before the app stopped: said once, when the library opens.
   let offered = false;
   const offer = () => {

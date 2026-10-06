@@ -82,6 +82,8 @@ const checks = [
   ["Board: ⌘Z undoes that step (not a new step), ⇧⌘Z redoes it", r.board?.undone?.texts === 0 && r.board.undone.steps === 1 && r.board.redone === 1],
   ["Board: the look follows the app (dark), and nothing goes to the network", r.board?.dark === true && r.board.external?.length === 0],
   ["Board: [[ typed in a text reaches the page (the text is finished, to be linked)", r.boardLinks?.started === true && r.boardLinks.editorClosed === true],
+  ["Board: a capture put on the board is a card showing the app's own DOM, linked to the capture", r.boardCards?.card === "Card 0192f3a4-7c1e-7b2a-9f00-0000000000aa" && r.boardCards.cardLink === "librarium://record/0192f3a4-7c1e-7b2a-9f00-0000000000aa" && r.boardCards.cardEmbed === true],
+  ["Board: a picture goes on by its library ID; the drawing saved keeps the ID, not the picture's data", r.boardCards?.pictureId === "0192f3a4-7c1e-7b2a-9f00-0000000000bb" && r.boardCards.pictureLink === "librarium://record/0192f3a4-7c1e-7b2a-9f00-0000000000bb" && r.boardCards.pictureDataSaved === false],
   ["Board: linking replaces [[ with the name, measures the text again, and the record's ID is saved with it", r.boardLinks?.linked === true && r.boardLinks.text === "See Jacques Ellul" && r.boardLinks.wider === true && r.boardLinks.link === "librarium://record/0192f3a4-7c1e-7b2a-9f00-000000000099" && r.boardLinks.kept?.includes("Jacques Ellul")],
   ["recognised words in an image can be found", r.ocrImageLines === 3 && r.ocrImageFind?.count === 1],
   ["recognised words in an image can be selected (and so captured)", r.ocrImageSelection === "Gravity and grace are two forces."],

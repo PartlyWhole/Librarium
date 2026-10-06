@@ -2,12 +2,12 @@
  * Excalidraw, mounted for a board (decision 0061: the only place React and Excalidraw are used,
  * loaded when a board opens). The page (page.ts) talks to it through `BoardEngine` only.
  */
-import { createElement } from "react";
+import { createElement, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { CaptureUpdateAction, Excalidraw, getSceneVersion, restore, restoreElements, serializeAsJSON } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { passThrough } from "../../kit/keys";
-import { RECORD_LINK, type BoardElement, type BoardLink } from "./links";
+import { RECORD_LINK, recordOf, type BoardElement, type BoardLink } from "./links";
 
 type Api = Parameters<NonNullable<Parameters<typeof Excalidraw>[0]["excalidrawAPI"]>>[0];
 type AppState = ReturnType<Api["getAppState"]>;
@@ -23,8 +23,12 @@ export interface BoardEngineOptions {
   onChange(): void;
   /** A step that Excalidraw's own undo would undo: a shape drawn, moved, a text typed… */
   onStep(): void;
-  /** Pictures wait for a later phase (they will be library attachments, plan §4). */
-  onPicture(): void;
+  /** Pictures pasted: the page makes them library attachments, then inserts them. */
+  onFiles(files: File[]): void;
+  /** Draws a record's card (a capture's quotation, an item, a note) into `host`; returns how to stop. */
+  renderCard(id: string, host: HTMLElement): () => void;
+  /** A picture's data (a library item, by ID). */
+  imageOf(id: string): Promise<{ dataURL: string; mimeType: string; width: number; height: number } | null>;
   /** `[[` was typed in a text (its element): the page offers what to link to. */
   onLinkStart(elementId: string): void;
   /** A link on the board was clicked (with ⌘: in a new tab). */
@@ -36,6 +40,11 @@ export interface BoardEngine {
   current(): { scene: string; elements: readonly BoardElement[] };
   /** Shows another drawing (changed outside), not as a step to undo. */
   load(scene: string): void;
+  /**
+   * Puts records on the board, as one step: pictures as pictures, anything else as a card (a
+   * capture's quotation, an item, a note). At a point on screen (`at`), or in the middle.
+   */
+  insert(items: BoardInsert[], at?: { x: number; y: number }): Promise<void>;
   /** The elements selected (their IDs). */
   selected(): string[];
   /**
@@ -50,6 +59,25 @@ export interface BoardEngine {
   /** The element holding the canvas (keys and focus). */
   readonly el: HTMLElement;
   destroy(): void;
+}
+
+/** A record to put on the board. */
+export interface BoardInsert {
+  id: string;
+  label: string;
+  picture: boolean;
+  /** Written `![[…]]` in the readable page (a capture: its quotation). */
+  embed: boolean;
+}
+
+/** Pictures and cards kept by record ID (a UUID), not as data in the drawing (0065). */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** A card: our own DOM (from the page), held by React inside Excalidraw's embed element. */
+function Card(props: { id: string; render: (id: string, host: HTMLElement) => () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => props.render(props.id, ref.current!), [props.id, props.render]);
+  return createElement("div", { ref, className: "board-card-host" });
 }
 
 /** A gesture in progress: its steps are counted when it ends. */
@@ -116,13 +144,21 @@ export function mountBoard(host: HTMLElement, o: BoardEngineOptions): Promise<Bo
         onChange,
         // Saving, opening and exporting go through Librarium.
         UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false }, tools: { image: false } },
+        // Pictures pasted become library attachments (the page), then are put here by ID.
         onPaste: (data: { files?: object; elements?: readonly { type: string }[] | null }, event: ClipboardEvent | null) => {
-          const pictures = Object.keys(data.files ?? {}).length > 0 || !!data.elements?.some((e) => e.type === "image") || [...(event?.clipboardData?.files ?? [])].some((f) => f.type.startsWith("image/"));
-          if (pictures) {
-            o.onPicture();
+          const files = [...(event?.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+          if (files.length) {
+            o.onFiles(files);
             return false;
           }
-          return true;
+          // Pictures copied from another board are put back by their IDs (their data isn't copied).
+          return !(Object.keys(data.files ?? {}).length > 0 && !data.elements?.length);
+        },
+        // Cards are Librarium's records only (no web pages, videos or posts).
+        validateEmbeddable: (link: string) => recordOf(link) !== null,
+        renderEmbeddable: (element: { link: string | null }) => {
+          const id = recordOf(element.link);
+          return id ? createElement(Card, { id, render: o.renderCard }) : null;
         },
       }),
     );
@@ -156,8 +192,61 @@ export function mountBoard(host: HTMLElement, o: BoardEngineOptions): Promise<Bo
     true,
   );
 
+  /** Pictures on the board whose data isn't loaded yet: from the library, by ID. */
+  const loading = new Set<string>();
+  const loadPictures = () => {
+    if (!api) return;
+    const have = api.getFiles();
+    for (const e of api.getSceneElements()) {
+      const fileId = (e as { fileId?: string | null }).fileId;
+      if (e.type !== "image" || !fileId || have[fileId] || loading.has(fileId) || !UUID.test(fileId)) continue;
+      loading.add(fileId);
+      void o.imageOf(fileId).then((d) => {
+        loading.delete(fileId);
+        if (d) api?.addFiles([{ id: fileId, dataURL: d.dataURL, mimeType: d.mimeType, created: Date.now() } as never]);
+      }, () => loading.delete(fileId));
+    }
+  };
+
+  /** Where on the drawing a point on screen is (the middle of the view, by default). */
+  const scenePoint = (at?: { x: number; y: number }) => {
+    const s = api!.getAppState();
+    const p = at ?? { x: s.offsetLeft + s.width / 2, y: s.offsetTop + s.height / 2 };
+    return viewportCoordsToSceneCoords({ clientX: p.x, clientY: p.y }, s);
+  };
+
   const engine: BoardEngine = {
     el,
+    async insert(items, at) {
+      if (!api || !items.length) return;
+      const origin = scenePoint(at);
+      const made: unknown[] = [];
+      let dx = 0;
+      for (const it of items) {
+        const custom = { librarium: { links: [{ id: it.id, label: it.label }], ...(it.embed ? { embed: true } : {}) } };
+        const link = `${RECORD_LINK}${it.id}`;
+        if (it.picture) {
+          const d = await o.imageOf(it.id);
+          if (!d) continue;
+          api.addFiles([{ id: it.id, dataURL: d.dataURL, mimeType: d.mimeType, created: Date.now() } as never]);
+          const scale = Math.min(1, 480 / Math.max(1, d.width));
+          // Centred on the point (the first; any others beside it).
+          const [el] = convertToExcalidrawElements([{ type: "image", fileId: it.id as never, x: origin.x + dx - (dx ? 0 : (d.width * scale) / 2), y: origin.y - (d.height * scale) / 2, width: d.width * scale, height: d.height * scale }] as never);
+          made.push({ ...el, link, customData: custom, status: "saved" });
+          dx += d.width * scale + 24;
+        } else {
+          const [w, h] = it.embed ? [400, 180] : [280, 72];
+          // Excalidraw's element builder doesn't make embed elements: its file reader fills in
+          // what a card needs, as when a drawing is opened.
+          const id = `card-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+          const [el] = restoreElements([{ type: "embeddable", id, link, x: origin.x + dx - (dx ? 0 : w / 2), y: origin.y - h / 2, width: w, height: h, strokeColor: "transparent", backgroundColor: "transparent", roundness: null, customData: custom }] as never, null);
+          made.push(el);
+          dx += w + 24;
+        }
+      }
+      if (!made.length) return;
+      api.updateScene({ elements: [...api.getSceneElementsIncludingDeleted(), ...(made as never[])], captureUpdate: CaptureUpdateAction.IMMEDIATELY });
+    },
     selected() {
       const s = api?.getAppState().selectedElementIds ?? {};
       return Object.keys(s).filter((k) => s[k]);
@@ -196,7 +285,9 @@ export function mountBoard(host: HTMLElement, o: BoardEngineOptions): Promise<Bo
     current() {
       const a = api!;
       const elements = a.getSceneElementsIncludingDeleted();
-      return { scene: serializeAsJSON(elements, a.getAppState(), a.getFiles(), "local"), elements: elements as unknown as readonly BoardElement[] };
+      // Pictures that are library items are kept by ID only (loaded from the library).
+      const files = Object.fromEntries(Object.entries(a.getFiles()).filter(([id]) => !UUID.test(id)));
+      return { scene: serializeAsJSON(elements, a.getAppState(), files, "local"), elements: elements as unknown as readonly BoardElement[] };
     },
     load(scene) {
       const d = parse(scene);
@@ -204,6 +295,7 @@ export function mountBoard(host: HTMLElement, o: BoardEngineOptions): Promise<Bo
       quietUntil = performance.now() + 250;
       api?.updateScene({ elements: d.elements, appState: { viewBackgroundColor: d.appState.viewBackgroundColor }, captureUpdate: CaptureUpdateAction.NEVER });
       if (d.files) api?.addFiles(Object.values(d.files));
+      loadPictures();
     },
     undo: () => key(false),
     redo: () => key(true),
@@ -219,7 +311,7 @@ export function mountBoard(host: HTMLElement, o: BoardEngineOptions): Promise<Bo
   // Ready when Excalidraw has handed over its API.
   return new Promise((resolve) => {
     const t0 = performance.now();
-    const wait = () => (api || performance.now() - t0 > 10_000 ? resolve(engine) : requestAnimationFrame(wait));
+    const wait = () => (api || performance.now() - t0 > 10_000 ? (loadPictures(), resolve(engine)) : requestAnimationFrame(wait));
     wait();
   });
 }

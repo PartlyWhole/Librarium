@@ -827,3 +827,10 @@ body.dragging-handle, body.dragging-handle * { user-select: none !important; -we
 .board-head .notices:empty { display: none; }
 .board-host { flex: 1; min-height: 0; position: relative; }
 .board-canvas { position: absolute; inset: 0; }
+/* A card on a board: a capture's quotation, an item or a note (features/boards). */
+.board-card-host { width: 100%; height: 100%; overflow: auto; }
+.board-card { box-sizing: border-box; min-height: 100%; padding: 10px 12px; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r2, 8px); font-size: var(--small); }
+.board-card .embed { margin: 0; }
+.board-card-link { display: flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; }
+.board-card-link .muted { margin-left: auto; }
+.board-card.missing { color: var(--muted); font-style: italic; }

@@ -194,7 +194,10 @@ combobox). Every action must be in a menu (shell test).
   drawing and its readable page (`mirror.ts`) together, keeps drafts, handles changes from
   elsewhere, and joins the board's undo place. Links (0064) are `librarium://record/<id>` on
   elements with `customData.librarium.links`; `links.ts` holds what the page needs without
-  React (a rule keeps `engine.ts` loaded on demand only). Keys the app sends on purpose to a component are
+  React (a rule keeps `engine.ts` loaded on demand only). Cards (0065) are embed elements whose
+  contents the page draws with `shell.embeds`; pictures are library items kept by record ID
+  (their data is loaded with `readBytes`, never saved in the drawing). A board's canvas is
+  `data-takes-embeds`, so the library's paste and Finder-drop handling serves it as it does notes. Keys the app sends on purpose to a component are
   marked with `passThrough` (`kit/keys.ts`) so its shortcuts don't take them again.
 
 ## 7. Lessons learned (keep these)

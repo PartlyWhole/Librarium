@@ -3,7 +3,7 @@
  * autosave of the drawing and its readable page together, drafts that survive a crash, outside
  * changes, and ⌘Z through the board's place (decision 0060).
  */
-import { call, on, BackendCallError } from "../../backend";
+import { call, on, readBytes, BackendCallError } from "../../backend";
 import { h, replace } from "../../kit/dom";
 import { icon } from "../../kit/icon";
 import { toast } from "../../kit/toast";
@@ -15,10 +15,13 @@ import type { BoardSaved } from "../../generated/BoardSaved";
 import type { Change } from "../../generated/Change";
 import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
-import type { BoardElement, BoardEngine, BoardEngineOptions } from "./engine";
+import type { BoardElement, BoardEngine, BoardEngineOptions, BoardInsert } from "./engine";
 import { boardPage } from "./mirror";
 import { recordOf } from "./links";
 import { comboboxDialog } from "../../kit/combobox";
+import { dropTarget } from "../../kit/dnd";
+import { effect, untracked } from "../../kit/signal";
+import type { RecordInfo } from "../../generated/RecordInfo";
 import { askToOpen } from "../../shell/links";
 import { FolderInput } from "lucide";
 
@@ -36,8 +39,34 @@ export function useBoardEngine(mount: Mount): void {
   loadEngine = async () => mount;
 }
 
-/** The boards shown, by ID: what the board's commands act on (Link to…). */
-export const shownBoards = new Map<string, { linkTo(): void }>();
+/** The boards shown, by ID: what the board's commands act on (Link to…, Insert…). */
+export const shownBoards = new Map<string, { linkTo(): void; insert(): void }>();
+
+/**
+ * Whether a record is a picture (a library item whose original is an image: the library
+ * feature's `library.format`). Pictures go on a board as pictures, anything else as a card.
+ */
+const isPicture = (r: RecordInfo | undefined) => r?.kind === "item" && r.fields["library.format"] === "image";
+const MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", heic: "image/heic", tif: "image/tiff", tiff: "image/tiff", bmp: "image/bmp" };
+
+/** A picture's data and size, from the library. */
+async function pictureData(r: RecordInfo): Promise<{ dataURL: string; mimeType: string; width: number; height: number } | null> {
+  const ext = String(r.fields["library.original"] ?? "").split(".").pop()?.toLowerCase() ?? "";
+  const mimeType = MIME[ext] ?? "image/png";
+  const bytes = new Uint8Array(await readBytes(r.id));
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  const dataURL = `data:${mimeType};base64,${btoa(bin)}`;
+  const size = await new Promise<{ width: number; height: number }>((resolve) => {
+    // A picture that never loads still goes on the board, at a usual size.
+    setTimeout(() => resolve({ width: 400, height: 300 }), 3000);
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth || 400, height: img.naturalHeight || 300 });
+    img.onerror = () => resolve({ width: 400, height: 300 });
+    img.src = dataURL;
+  });
+  return { dataURL, mimeType, ...size };
+}
 
 /** The app's light or dark look now. */
 function appTheme(): "light" | "dark" {
@@ -87,6 +116,30 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
 
     /** A record's name now (the readable page writes links with it). */
     const titleOf = (rid: string) => shell.records.get(rid)?.title || null;
+
+    /**
+     * A card on the board: a capture's quotation and citation, an item or a note, drawn as notes
+     * draw embeds (`shell.embeds`), and drawn again when the record changes.
+     */
+    function renderCard(rid: string, host: HTMLElement): () => void {
+      const open = (to: string, params?: Record<string, string>, opts?: { newTab?: boolean }) => shell.openRecord(to, params ?? {}, opts);
+      let shownVersion: string | null = null;
+      return effect(() => {
+        const r = shell.records.get(rid);
+        if ((r?.version ?? "") === shownVersion) return;
+        shownVersion = r?.version ?? "";
+        untracked(() => {
+          if (!r) return replace(host, h("div", { class: "board-card missing" }, "This was deleted or can’t be found."));
+          const look = shell.looks.get(r.kind);
+          const renderer = r.kind === "note" ? undefined : shell.embeds.get(r.kind);
+          const body = renderer
+            ? renderer.render(r, open)
+            : h("a", { href: "#", class: "board-card-link", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, look ? icon(look.icon(r), 16) : null, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, look?.kindName(r) ?? r.kind.charAt(0).toUpperCase() + r.kind.slice(1)));
+          const archived = shell.records.isHidden(r) ? h("p", { class: "muted small" }, "In the archive.") : null;
+          replace(host, h("div", { class: `board-card kind-${r.kind}` }, body, archived));
+        });
+      });
+    }
 
     // ---- saving ----------------------------------------------------------------------------
     let engine: BoardEngine | null = null;
@@ -187,7 +240,13 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
       readOnly,
       onChange: changed,
       onStep: () => shell.undo.typed(scope, "Drawing"),
-      onPicture: () => toast("Pictures on boards are coming: for now, put the picture in a note and link it from the board."),
+      // Pasted pictures: attached by the library (as in notes), then put here.
+      onFiles: (files) => void canvasHost.dispatchEvent(new CustomEvent("librarium:files", { bubbles: true, detail: { files } })),
+      renderCard,
+      imageOf: async (rid) => {
+        const r = shell.records.get(rid);
+        return r ? pictureData(r).catch(() => null) : null;
+      },
       // `[[` typed in a text: what to link it to.
       onLinkStart: (elementId) => pickRecord("Link this text to", (to) => engine?.link([elementId], to, { replaceTyped: true })),
       onOpenLink: (link, newTab) => {
@@ -228,13 +287,41 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
       changed();
     }
 
+    // ---- cards and pictures ------------------------------------------------------------------
+    /** Records put on the board: pictures, or cards (captures as quotations, written ![[…]]). */
+    const toInsert = (ids: string[]): BoardInsert[] =>
+      ids.flatMap((rid) => {
+        const r = shell.records.get(rid);
+        if (!r || rid === id) return [];
+        return [{ id: rid, label: r.title || "Untitled", picture: isPicture(r), embed: r.kind === "capture" || isPicture(r) }];
+      });
+    const insertRecords = (ids: string[], at?: { x: number; y: number }) => {
+      const items = toInsert(ids);
+      if (items.length) void engine?.insert(items, at);
+    };
+    // Pictures pasted or dropped from Finder, attached by the library, come back here.
+    canvasHost.dataset.takesEmbeds = "";
+    canvasHost.addEventListener("librarium:insert-embeds", (ev) => {
+      const d = (ev as CustomEvent<{ links: { id: string }[]; x?: number; y?: number }>).detail;
+      insertRecords(d.links.map((l) => l.id), d.x !== undefined && d.y !== undefined ? { x: d.x, y: d.y } : undefined);
+    });
+    // Records dragged from the sidebar or a folder page.
+    let dropAt: { x: number; y: number } | undefined;
+    dropTarget(canvasHost, {
+      accepts: (p) => !readOnly && p.records.length > 0 && !p.records.includes(id),
+      where: (_p, x, y) => ((dropAt = { x, y }), "into"),
+      drop: (p) => insertRecords(p.records, dropAt),
+    });
+    const insert = () =>
+      pickRecord("Put on the board", (to) => insertRecords([to.id]));
+
     // ---- links -----------------------------------------------------------------------------
     /** Asks which record (anything that opens: notes, boards, items, captures). */
     function pickRecord(label: string, done: (to: { id: string; label: string }) => void) {
       const choices = shell.records
         .list()
         .filter((r) => r.id !== id && shell.openers.get(r.kind) && !shell.records.isHidden(r))
-        .map((r) => ({ id: r.id, label: r.title || "Untitled", detail: r.kind === "note" ? undefined : (shell.looks.get(r.kind)?.kindName(r) ?? r.kind), icon: shell.looks.get(r.kind)?.icon(r) }));
+        .map((r) => ({ id: r.id, label: r.title || "Untitled", detail: r.kind === "note" ? undefined : (shell.looks.get(r.kind)?.kindName(r) ?? r.kind.charAt(0).toUpperCase() + r.kind.slice(1)), icon: shell.looks.get(r.kind)?.icon(r) }));
       comboboxDialog({ label, placeholder: "Type a title", emptyText: "Nothing has that title.", choices, onPick: (c) => done({ id: c.id, label: c.label }) });
     }
     const linkTo = () => {
@@ -242,7 +329,7 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
       if (!ids.length) return status("Select something on the board first, then link it.");
       pickRecord(ids.length === 1 ? "Link it to" : `Link ${ids.length} things to`, (to) => engine?.link(ids, to));
     };
-    shownBoards.set(id, { linkTo });
+    shownBoards.set(id, { linkTo, insert });
     cleanup.push(() => shownBoards.delete(id));
 
     // ---- outside changes -------------------------------------------------------------------

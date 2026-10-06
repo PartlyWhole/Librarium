@@ -9,9 +9,11 @@ import { createShell, type Shell } from "../src/shell/shell";
 import { notes } from "../src/features/notes";
 import { boards } from "../src/features/boards";
 import { archive } from "../src/features/archive";
+import { captures } from "../src/features/captures";
+import { library } from "../src/features/library";
 import { boardTimings, useBoardEngine } from "../src/features/boards/page";
 import { boardPage } from "../src/features/boards/mirror";
-import type { BoardElement, BoardEngine, BoardEngineOptions } from "../src/features/boards/engine";
+import type { BoardElement, BoardEngine, BoardEngineOptions, BoardInsert } from "../src/features/boards/engine";
 import { recordScope } from "../src/shell/undo";
 import { passThrough } from "../src/kit/keys";
 
@@ -30,6 +32,8 @@ interface Fake {
   destroyed: boolean;
   /** What is selected on the board. */
   selection: string[];
+  /** What was put on the board, and where. */
+  inserts: { items: BoardInsert[]; at?: { x: number; y: number } }[];
   /** The user draws: a text (or a shape) is added. */
   draw(text?: string): void;
 }
@@ -55,6 +59,7 @@ beforeEach(() => {
       redos: 0,
       destroyed: false,
       selection: [],
+      inserts: [],
       draw(text) {
         const els = elementsOf(f.scene);
         els.push({ id: `e${els.length}`, type: text ? "text" : "rectangle", x: 10 * els.length, y: 0, ...(text ? { text } : {}) });
@@ -74,6 +79,15 @@ beforeEach(() => {
       setTheme() {},
       destroy: () => void (f.destroyed = true),
       selected: () => f.selection,
+      // As the real engine does: a card or picture element, linked, its link kept, `embed` marked.
+      insert: async (items, at) => {
+        f.inserts.push({ items, at });
+        const els = elementsOf(f.scene);
+        for (const it of items) els.push({ id: `c${els.length}`, type: it.picture ? "image" : "embeddable", x: 0, y: 200 + 50 * els.length, link: `librarium://record/${it.id}`, customData: { librarium: { links: [{ id: it.id, label: it.label }], ...(it.embed ? { embed: true } : {}) } } });
+        f.scene = scene(els);
+        o.onChange();
+        o.onStep();
+      },
       // As the real engine does: the link on the element, its links kept, [[ replaced by the name.
       link: (ids, to, opts = {}) => {
         const els = elementsOf(f.scene).map((e) => {
@@ -341,7 +355,101 @@ See [[Ellul|${note.id}]]
   });
 });
 
+describe("captures, notes, items and pictures on boards", () => {
+  async function bootAll() {
+    last?.destroy();
+    mock.reset();
+    mock.state.folder = "/lib";
+    const note = seed("note", "Ellul", "On technique.\n", {}, "Thinkers");
+    const src = seed("item", "The Technological Society", "", { "library.format": "pdf", "library.pages": 2 });
+    const cap = seed("capture", "Technique integrates", "", { "captures.source": src.id, "captures.quote": "Technique integrates everything.", "captures.locator": "p. 1", "captures.parts": 1 });
+    document.body.innerHTML = '<div id="app"></div>';
+    const shell = createShell(document.getElementById("app")!, [notes, boards, library, captures, archive]);
+    last = shell;
+    await wait(60);
+    return { shell, note, src, cap };
+  }
+
+  it("Put on the board… puts a capture as a card: its quotation and citation, kept current, written ![[…]]", async () => {
+    const { shell, cap } = await bootAll();
+    const { id, f } = await newBoard(shell);
+    expect(shell.actions.get("boards.insert")!.keys).toEqual(["Mod+Alt+I"]);
+    shell.actions.run("boards.insert");
+    await pick("Technique integrates");
+    await until(() => f.inserts.length > 0);
+    expect(f.inserts[0]!.items).toEqual([{ id: cap.id, label: "Technique integrates", picture: false, embed: true }]);
+    await until(() => mock.state.records.get(id)!.body.includes(`![[Technique integrates|${cap.id}]]`));
+    // The card: the capture as notes show it, drawn again when the capture changes.
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const stop = f.o.renderCard(cap.id, host);
+    expect(host.querySelector("blockquote")?.textContent).toBe("Technique integrates everything.");
+    expect(host.textContent).toContain("The Technological Society");
+    const changed = { ...shell.records.get(cap.id)!, version: "v2", fields: { ...shell.records.get(cap.id)!.fields, "captures.quote": "Technique integrates everything it meets." } };
+    shell.records.put(changed, 999);
+    await until(() => host.querySelector("blockquote")?.textContent === "Technique integrates everything it meets.");
+    stop();
+  });
+
+  it("a note's card shows its name and opens it; a record that's gone says so", async () => {
+    const { shell, note } = await bootAll();
+    const { f } = await newBoard(shell);
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    f.o.renderCard(note.id, host);
+    expect(host.textContent).toContain("Ellul");
+    expect(host.textContent).toContain("Note");
+    host.querySelector<HTMLElement>(".board-card-link")!.click();
+    await wait(20);
+    expect(shell.router.current()).toMatchObject({ page: "note", params: { id: note.id } });
+    const gone = document.createElement("div");
+    f.o.renderCard("0192f3a4-7c1e-7b2a-9f00-0000000000ff", gone);
+    expect(gone.textContent).toContain("deleted or can’t be found");
+  });
+
+  it("a picture pasted on a board becomes a library attachment, then goes on the board as a picture", async () => {
+    const { shell } = await bootAll();
+    const { id, f } = await newBoard(shell);
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "chart.png", { type: "image/png" });
+    f.o.onFiles([file]);
+    // (Earlier tests' apps leave the library's paste listener on the page; this app's is the one
+    // whose records know the new picture.)
+    await until(() => f.inserts.some((i) => i.items.length > 0));
+    const item = f.inserts.find((i) => i.items.length > 0)!.items[0]!;
+    expect(item).toMatchObject({ picture: true, embed: true, label: "chart" });
+    const r = shell.records.get(item.id)!;
+    expect(r.kind).toBe("item");
+    expect(r.path.startsWith("items/Attachments/")).toBe(true);
+    await until(() => mock.state.records.get(id)!.body.includes(`![[chart|${item.id}]]`));
+  });
+
+  it("a note dragged from the sidebar onto the board goes on it as a card", async () => {
+    const { shell, note } = await bootAll();
+    const { f } = await newBoard(shell);
+    await wait(40);
+    const row = [...document.querySelectorAll<HTMLElement>(".tree [role=treeitem]")].find((t) => t.textContent === "Ellul")!;
+    const canvas = document.querySelector<HTMLElement>(".board-host")!;
+    document.elementFromPoint = () => canvas;
+    row.dispatchEvent(new PointerEvent("pointerdown", { clientX: 50, clientY: 50, bubbles: true, button: 0 }));
+    window.dispatchEvent(new PointerEvent("pointermove", { clientX: 300, clientY: 200, bubbles: true }));
+    window.dispatchEvent(new PointerEvent("pointerup", { clientX: 300, clientY: 200, bubbles: true }));
+    await until(() => f.inserts.length > 0);
+    expect(f.inserts[0]!.items).toEqual([{ id: note.id, label: "Ellul", picture: false, embed: false }]);
+    expect(f.inserts[0]!.at).toEqual({ x: 300, y: 200 });
+  });
+});
+
 describe("a board's readable page", () => {
+  it("writes a capture's card and a picture as embeds, ![[…]], and other cards as links", () => {
+    const C = "0192f3a4-7c1e-7b2a-9f00-00000000000c";
+    const N = "0192f3a4-7c1e-7b2a-9f00-00000000000d";
+    const els: BoardElement[] = [
+      { id: "c", type: "embeddable", x: 0, y: 0, link: `librarium://record/${C}`, customData: { librarium: { links: [{ id: C, label: "Technique" }], embed: true } } },
+      { id: "n", type: "embeddable", x: 0, y: 100, link: `librarium://record/${N}`, customData: { librarium: { links: [{ id: N, label: "Ellul" }] } } },
+    ];
+    expect(boardPage("b", els)).toBe(`${boardNote("b")}\n\n![[Technique|${C}]]\n\n[[Ellul|${N}]]\n`);
+  });
+
   it("writes links as [[name|id]]: in a text where their names are, around a linked shape's words, or on a line", () => {
     const A = "0192f3a4-7c1e-7b2a-9f00-00000000000a";
     const B = "0192f3a4-7c1e-7b2a-9f00-00000000000b";

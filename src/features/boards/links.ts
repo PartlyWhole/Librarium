@@ -19,7 +19,8 @@ export interface BoardElement {
   link?: string | null;
   isDeleted?: boolean;
   containerId?: string | null;
-  customData?: { librarium?: { links?: BoardLink[] } } & Record<string, unknown>;
+  /** Links kept on the element; `embed`: a card or picture written `![[…]]` (a capture's quotation, a picture). */
+  customData?: { librarium?: { links?: BoardLink[]; embed?: boolean } } & Record<string, unknown>;
 }
 
 /** An element's link to a record (Excalidraw keeps one link per element). */

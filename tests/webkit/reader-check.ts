@@ -818,7 +818,13 @@ async function run() {
     let steps = 0;
     const initial = JSON.stringify({ type: "excalidraw", version: 2, source: "test", elements: [], appState: {}, files: {} });
     const linkStarts: string[] = [];
-    const board = await mountBoard(stage, { scene: initial, theme: "light", readOnly: false, onChange: () => changes++, onStep: () => steps++, onPicture() {}, onLinkStart: (el) => void linkStarts.push(el), onOpenLink() {} });
+    // A small red picture (a library item's data, as the page gives it).
+    const pc = Object.assign(document.createElement("canvas"), { width: 40, height: 20 });
+    const pctx = pc.getContext("2d")!;
+    pctx.fillStyle = "#c00";
+    pctx.fillRect(0, 0, 40, 20);
+    const picture = { dataURL: pc.toDataURL("image/png"), mimeType: "image/png", width: 40, height: 20 };
+    const board = await mountBoard(stage, { scene: initial, theme: "light", readOnly: false, onChange: () => changes++, onStep: () => steps++, onFiles() {}, renderCard: (rid, host) => (host.append(Object.assign(document.createElement("div"), { className: "probe-card", textContent: `Card ${rid}` })), () => host.replaceChildren()), imageOf: async () => picture, onLinkStart: (el) => void linkStarts.push(el), onOpenLink() {} });
     const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
     await pause(600);
     const live = () => board.current().elements.filter((e) => !e.isDeleted);
@@ -876,6 +882,26 @@ async function run() {
       link: reloaded?.link ?? null,
       kept: JSON.stringify(reloaded?.customData ?? null),
       wider: (el?.width ?? 0) > widthBefore,
+    };
+    // Cards and pictures: a capture's card shows our own DOM; a picture goes in by its record ID,
+    // and the drawing saved keeps the ID, not the picture's data.
+    const CAP = "0192f3a4-7c1e-7b2a-9f00-0000000000aa";
+    const PIC = "0192f3a4-7c1e-7b2a-9f00-0000000000bb";
+    await board.insert([
+      { id: CAP, label: "Technique integrates everything", picture: false, embed: true },
+      { id: PIC, label: "Red", picture: true, embed: true },
+    ]);
+    await pause(900);
+    const savedNow = JSON.parse(board.current().scene) as { files: Record<string, unknown>; elements: { type: string; fileId?: string; link?: string; customData?: { librarium?: { embed?: boolean } } }[] };
+    const cardEl = savedNow.elements.find((e) => e.type === "embeddable");
+    const picEl = savedNow.elements.find((e) => e.type === "image");
+    results.boardCards = {
+      card: stage.querySelector(".excalidraw .probe-card")?.textContent ?? null,
+      cardLink: cardEl?.link ?? null,
+      cardEmbed: cardEl?.customData?.librarium?.embed ?? false,
+      pictureId: picEl?.fileId ?? null,
+      pictureLink: picEl?.link ?? null,
+      pictureDataSaved: PIC in (savedNow.files ?? {}),
     };
     const external = performance.getEntriesByType("resource").slice(before).map((e) => e.name).filter((n) => !n.startsWith(location.origin) && !n.startsWith("data:") && !n.startsWith("blob:"));
     results.board = { afterLoad, typed, undone, redone, dark, savedType: saved.type, external, editor: !!ta };

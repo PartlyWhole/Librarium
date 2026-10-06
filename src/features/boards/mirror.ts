@@ -50,11 +50,12 @@ export function boardPage(id: string, elements: readonly BoardElement[], titleOf
       }
       paragraphs.push({ x: e.x, y: e.y, text });
     } else if (!bound.has(e.id)) {
-      // A linked shape with no words of its own: its link, on a line.
+      // A linked shape with no words of its own, a card or a picture: its link, on a line (a
+      // capture's card and a picture as embeds, `![[…]]`, as in notes).
       const target = recordOf(e.link);
       if (!target) continue;
       const kept = linksOf(e).find((l) => l.id === target);
-      paragraphs.push({ x: e.x, y: e.y, text: formatLink(titleOf(target) ?? kept?.label ?? "Linked", target) });
+      paragraphs.push({ x: e.x, y: e.y, text: formatLink(titleOf(target) ?? kept?.label ?? "Linked", target, !!e.customData?.librarium?.embed) });
     }
   }
   paragraphs.sort((a, b) => Math.round(a.y / ROW) - Math.round(b.y / ROW) || a.x - b.x);
