@@ -55,6 +55,12 @@ Noted on 2026-10-05, to look at after boards (phase 6).
 
 ## In progress
 
+(nothing)
+
+---
+
+## Done
+
 ### R-057 · Boards: a note you can draw on (Excalidraw), with captures and links
 > "Please plan an excalidraw page "feature" that supports putting in captures and [[]] links,
 > etc. Basically a note but can draw/write on it like a whiteboard. This is going to be a big
@@ -162,11 +168,27 @@ Noted on 2026-10-05, to look at after boards (phase 6).
     real Excalidraw. In the preview: a board with a text and a capture card, shown in a note
     as its picture with the quotation written out.
   - **Only in the real app:** the save dialog.
-- **Next:** phase 6, polish (a keys audit, VoiceOver, speed budgets, the architecture report).
-
----
-
-## Done
+- **Phase 6 (polish) done** (decision 0067):
+  - **Keys:** Excalidraw's own shortcuts work on a board, except ⌘/, ⇧⌘P, ⌘O and ⇧⌘[ / ⇧⌘],
+    which stay the app's (Excalidraw's ⌥⌘[ / ⌥⌘] still bring forward and send back). ⌘Z /
+    ⇧⌘Z go to the board. A test fails if a new app shortcut takes another of Excalidraw's.
+  - **VoiceOver:** the canvas is named ("Drawing: …"), and a list beside it reads what is on
+    the board (texts, links, cards and pictures by name). Cards are named. The board page
+    passes the axe check.
+  - **Speed:** a board of 380 elements opens in 20 ms, saves in 1 ms and is drawn as a picture
+    in 58 ms, checked in WebKit.
+  - **The architecture report** covers every feature, and captures got their proper name and
+    icon in pickers and on boards.
+- **All six phases are done.** The plan, `docs/plans/boards.md`, is complete. Decisions
+  0061–0067 record what was chosen.
+- **Only the real app can show:**
+  - ⌘Z from the macOS menu bar reaching the canvas;
+  - files dropped from Finder onto a board;
+  - the save dialog for exports.
+- **Left:**
+  - a link's tooltip on the canvas shows its address, not the record's name;
+  - a card's buttons work after selecting it and clicking again;
+  - Excalidraw forgets a board's drawing steps when the board is closed.
 
 ### R-064 · ⌘Z for the page you are on, each page keeping its history
 > "I want cmd-z to handle whatever page the user is on. If it's on a note, it's whatever edits

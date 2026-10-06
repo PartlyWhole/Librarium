@@ -138,6 +138,8 @@ function cite(title: string, locators: (string | null | undefined)[]): string {
 
 export function captures(shell: ShellApi): void {
   shell.openers.add("captures", KIND, "capture");
+  // How a capture looks where records are listed (pickers, cards on boards).
+  shell.looks.add("captures", KIND, { kind: KIND, icon: () => Quote, kindName: () => "Capture" });
   /**
    * Deleting a capture moves it to the archive (with Undo), the first of the library's two steps;
    * it is deleted for good from there. Done through the archive's own record action.

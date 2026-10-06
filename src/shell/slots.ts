@@ -236,4 +236,4 @@ export interface EmbedRenderer {
 }
 
 /** Every interface slot, for the architecture report. */
-export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", "shell.embeds", "shell.hiding-fields", "shell.record-actions", "shell.record-looks", READER_TOOLS, ITEM_CHILDREN] as const;
+export const SHELL_SLOTS = ["shell.pages", "shell.actions", "shell.keys", "shell.menu-items", "shell.sidebar-sections", "shell.side-panel-sections", "shell.settings-sections", "shell.editor-extensions", "shell.reader-engines", "shell.openers", "shell.embeds", "shell.hiding-fields", "shell.record-actions", "shell.record-looks", READER_TOOLS, ITEM_CHILDREN, ARCHIVER] as const;

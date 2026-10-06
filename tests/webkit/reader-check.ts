@@ -920,6 +920,31 @@ async function run() {
     const external = performance.getEntriesByType("resource").slice(before).map((e) => e.name).filter((n) => !n.startsWith(location.origin) && !n.startsWith("data:") && !n.startsWith("blob:"));
     results.board = { afterLoad, typed, undone, redone, dark, savedType: saved.type, external, editor: !!ta };
     board.destroy();
+
+    // A large board: 300 shapes, 40 texts, 30 cards, 10 pictures. Opening, saving and drawing it
+    // as a picture stay quick.
+    step("board, large");
+    const big: unknown[] = [];
+    const base = { version: 1, versionNonce: 1, isDeleted: false, seed: 1, angle: 0, strokeColor: "#1e1e1e", backgroundColor: "transparent", fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid", roughness: 1, opacity: 100, groupIds: [], frameId: null, roundness: null, boundElements: null, updated: 1, link: null, locked: false };
+    for (let i = 0; i < 300; i++) big.push({ ...base, id: `r${i}`, type: i % 3 ? "rectangle" : "ellipse", x: (i % 20) * 120, y: Math.floor(i / 20) * 100, width: 90, height: 60 });
+    for (let i = 0; i < 40; i++) big.push({ ...base, id: `t${i}`, type: "text", x: (i % 8) * 300, y: 1600 + Math.floor(i / 8) * 60, width: 200, height: 25, text: `Text number ${i}`, originalText: `Text number ${i}`, fontSize: 20, fontFamily: 5, textAlign: "left", verticalAlign: "top", containerId: null, lineHeight: 1.25, autoResize: true });
+    for (let i = 0; i < 30; i++) big.push({ ...base, id: `c${i}`, type: "embeddable", x: (i % 6) * 420, y: 2000 + Math.floor(i / 6) * 200, width: 400, height: 180, link: `librarium://record/0192f3a4-7c1e-7b2a-9f00-${String(i).padStart(12, "0")}`, customData: { librarium: { links: [{ id: "x", label: "x" }], embed: true } } });
+    for (let i = 0; i < 10; i++) big.push({ ...base, id: `p${i}`, type: "image", x: i * 300, y: 3200, width: 240, height: 120, fileId: `0192f3a4-7c1e-7b2a-9f00-${String(100 + i).padStart(12, "0")}`, status: "saved", scale: [1, 1] });
+    const bigScene = JSON.stringify({ type: "excalidraw", version: 2, source: "test", elements: big, appState: {}, files: {} });
+    stage.replaceChildren();
+    let cards = 0;
+    const t0 = performance.now();
+    const large = await mountBoard(stage, { scene: bigScene, theme: "light", readOnly: false, onChange() {}, onStep() {}, onFiles() {}, renderCard: (_rid, host) => (cards++, host.append("card"), () => host.replaceChildren()), imageOf: async () => picture, onLinkStart() {}, onOpenLink() {} });
+    const openMs = performance.now() - t0;
+    await pause(800);
+    const t1 = performance.now();
+    const current = large.current();
+    const saveMs = performance.now() - t1;
+    const t2 = performance.now();
+    const bigSvg = await boardPicture(current.scene, { cardText: () => "A card", imageOf: async () => picture }, "svg");
+    const pictureMs = performance.now() - t2;
+    results.boardLarge = { openMs: Math.round(openMs), saveMs: Math.round(saveMs), pictureMs: Math.round(pictureMs), elements: current.elements.length, cardsDrawn: cards, svg: bigSvg.outerHTML.length > 10000 };
+    large.destroy();
   }
 }
 

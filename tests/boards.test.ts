@@ -12,10 +12,14 @@ import { archive } from "../src/features/archive";
 import { captures } from "../src/features/captures";
 import { library } from "../src/features/library";
 import { boardTimings, portable, useBoardEngine } from "../src/features/boards/page";
-import { boardPage } from "../src/features/boards/mirror";
+import { boardOutline, boardPage } from "../src/features/boards/mirror";
+import axe from "axe-core";
 import type { BoardElement, BoardEngine, BoardEngineOptions, BoardInsert } from "../src/features/boards/engine";
 import { recordScope } from "../src/shell/undo";
-import { passThrough } from "../src/kit/keys";
+import { normalize, passThrough } from "../src/kit/keys";
+import { daily } from "../src/features/daily";
+import { search } from "../src/features/search";
+import { links } from "../src/features/links";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function until(check: () => boolean) {
@@ -510,6 +514,57 @@ describe("captures, notes, items and pictures on boards", () => {
     await until(() => f.inserts.length > 0);
     expect(f.inserts[0]!.items).toEqual([{ id: note.id, label: "Ellul", picture: false, embed: false }]);
     expect(f.inserts[0]!.at).toEqual({ x: 300, y: 200 });
+  });
+});
+
+/**
+ * Excalidraw 0.18.1's keyboard shortcuts with ⌘ or ⌥ (its `shortcutMap`, as on a Mac). Upgrading
+ * Excalidraw: list them again (the keys audit, 0067).
+ */
+const EXCALIDRAW_KEYS = ["Mod+S", "Mod+O", "Mod+Delete", "Mod+Shift+E", "Mod+/", "Mod+Shift+P", "Mod+X", "Mod+C", "Mod+V", "Mod+Alt+C", "Mod+Alt+V", "Mod+A", "Mod+D", "Mod+[", "Mod+]", "Mod+Alt+[", "Mod+Shift+[", "Mod+Alt+]", "Mod+Shift+]", "Mod+G", "Mod+Shift+G", "Mod+'", "Mod+K", "Mod+Shift+L", "Mod+0", "Mod+-", "Mod++", "Mod+F", "Mod+Z", "Mod+Shift+Z", "Alt+Z", "Alt+S", "Alt+/", "Alt+R", "Shift+Alt+D", "Shift+Alt+C"];
+
+describe("keys on a board", () => {
+  it("the app's reserved shortcuts take only these from Excalidraw, and none of its single keys", async () => {
+    mock.reset();
+    mock.state.folder = "/lib";
+    document.body.innerHTML = '<div id="app"></div>';
+    const shell = createShell(document.getElementById("app")!, [notes, boards, daily, library, captures, search, links, archive]);
+    last = shell;
+    await wait(40);
+    const reserved = shell.actions.all().filter((a) => a.reserved).flatMap((a) => a.keys ?? []).map(normalize);
+    const taken = EXCALIDRAW_KEYS.map(normalize).filter((k) => reserved.includes(k)).sort();
+    // Decided (0067): the app's shortcuts list, palette and Open win; ⇧⌘[ / ⇧⌘] switch tabs
+    // (Excalidraw's ⌥⌘[ / ⌥⌘] still bring forward and send back); ⌘Z / ⇧⌘Z are sent on to it.
+    expect(taken).toEqual(["Mod+/", "Mod+O", "Mod+Shift+P", "Mod+Shift+Z", "Mod+Shift+[", "Mod+Shift+]", "Mod+Z"].map(normalize).sort());
+    // Its tools are single keys (V, R, D, O, A, L, P, T, E, H…): none is the app's.
+    expect(reserved.filter((k) => !/(^|\+)(Mod|Ctrl)\+/.test(k) && !k.startsWith("Mod") && !k.startsWith("Ctrl"))).toEqual([]);
+  });
+});
+
+describe("boards and VoiceOver", () => {
+  it("name the canvas and list what is on it, as words; the page passes an axe check", async () => {
+    const { shell } = await boot();
+    const { f } = await newBoard(shell);
+    const region = document.querySelector(".board-host")!;
+    expect(region.getAttribute("role")).toBe("region");
+    expect(region.getAttribute("aria-label")).toBe("Drawing: Untitled board");
+    f.draw("Technique");
+    await until(() => document.querySelector(".board-outline")?.textContent === "Technique");
+    const title = document.querySelector<HTMLInputElement>(".board-title")!;
+    title.value = "Map";
+    title.dispatchEvent(new Event("blur"));
+    await until(() => region.getAttribute("aria-label") === "Drawing: Map");
+    const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
+    expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(", ")}`)).toEqual([]);
+  });
+
+  it("the outline reads links, cards and pictures by name", () => {
+    const A = "0192f3a4-7c1e-7b2a-9f00-00000000000a";
+    const els: BoardElement[] = [
+      { id: "t", type: "text", x: 0, y: 0, text: "See Ellul", customData: { librarium: { links: [{ id: A, label: "Ellul" }] } } },
+      { id: "c", type: "embeddable", x: 0, y: 100, link: `librarium://record/${A}`, customData: { librarium: { links: [{ id: A, label: "Ellul" }], embed: true } } },
+    ];
+    expect(boardOutline(els, (id) => (id === A ? "Jacques [Ellul]" : null))).toEqual(["See Jacques [Ellul]", "Jacques [Ellul]"]);
   });
 });
 

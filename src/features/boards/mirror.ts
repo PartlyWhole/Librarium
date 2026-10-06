@@ -61,3 +61,15 @@ export function boardPage(id: string, elements: readonly BoardElement[], titleOf
   paragraphs.sort((a, b) => Math.round(a.y / ROW) - Math.round(b.y / ROW) || a.x - b.x);
   return `${[pageNote(id), ...paragraphs.map((p) => p.text)].join("\n\n")}\n`;
 }
+
+/**
+ * What is on a board, as words to read aloud (VoiceOver can't read a canvas): its texts, and its
+ * links, cards and pictures by name, in reading order.
+ */
+export function boardOutline(elements: readonly BoardElement[], titleOf: (id: string) => string | null = () => null): string[] {
+  return boardPage("", elements, titleOf)
+    .split("\n\n")
+    .slice(1)
+    .map((p) => p.trim().replace(/!?\[\[((?:\\.|[^\]|])*)\|[^\]]*\]\]/g, (_m, label: string) => label.replace(/\\(.)/g, "$1")))
+    .filter(Boolean);
+}

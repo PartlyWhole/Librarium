@@ -200,7 +200,10 @@ combobox). Every action must be in a menu (shell test).
   `data-takes-embeds`, so the library's paste and Finder-drop handling serves it as it does notes.
   Elsewhere (0066): an embed renderer draws a board as an SVG in notes; exports (PNG, SVG, a
   portable Excalidraw file) write cards out as boxes with their words (`portable()` in
-  `page.ts`) and put pictures back in. `export.write` takes `data` (base64) for bytes. Keys the app sends on purpose to a component are
+  `page.ts`) and put pictures back in. `export.write` takes `data` (base64) for bytes.
+  On the canvas, only reserved shortcuts win; the ones Excalidraw gives up are pinned by a
+  test (`EXCALIDRAW_KEYS`, 0067), re-listed on every Excalidraw upgrade. VoiceOver reads the
+  board through `boardOutline` (a visually hidden list beside the canvas). Keys the app sends on purpose to a component are
   marked with `passThrough` (`kit/keys.ts`) so its shortcuts don't take them again.
 
 ## 7. Lessons learned (keep these)

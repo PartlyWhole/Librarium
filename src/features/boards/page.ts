@@ -17,7 +17,7 @@ import type { Draft } from "../../generated/Draft";
 import type { Written } from "../../generated/Written";
 import type { BoardElement, BoardEngine, BoardEngineOptions, BoardInsert, Portable } from "./engine";
 import type * as EngineModule from "./engine";
-import { boardPage } from "./mirror";
+import { boardOutline, boardPage } from "./mirror";
 import { recordOf } from "./links";
 import { comboboxDialog } from "../../kit/combobox";
 import { dropTarget } from "../../kit/dnd";
@@ -142,8 +142,19 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
 
     const titleInput = h("input", { class: "title-input board-title", value: info.title, "aria-label": "Title", spellcheck: true, readOnly, placeholder: "Untitled board" }) as HTMLInputElement;
     const notices = h("div", { class: "notices" });
-    const canvasHost = h("div", { class: "board-host" });
-    replace(host, h("div", { class: "board-head" }, titleInput, notices), canvasHost);
+    // The canvas, named; and what is on it, as words VoiceOver can read (kept current).
+    const outline = h("ul", { class: "visually-hidden board-outline", "aria-label": "What is on the board" });
+    const canvasHost = h("div", { class: "board-host", role: "region", "aria-label": `Drawing: ${info.title || "Untitled board"}` });
+    replace(host, h("div", { class: "board-head" }, titleInput, notices), canvasHost, outline);
+    let outlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const tellOutline = () => {
+      clearTimeout(outlineTimer);
+      outlineTimer = setTimeout(() => {
+        if (!engine) return;
+        const lines = boardOutline(engine.current().elements, (rid) => shell.records.get(rid)?.title || null);
+        replace(outline, ...(lines.length ? lines.map((l) => h("li", null, l)) : [h("li", null, "Nothing yet.")]));
+      }, 400);
+    };
     const status = (text: string, persistent = false) => shell.status.show(text, persistent ? 0 : 4000);
 
     /** A record's name now (the readable page writes links with it). */
@@ -168,7 +179,7 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
             ? renderer.render(r, open)
             : h("a", { href: "#", class: "board-card-link", onclick: (e: Event) => (e.preventDefault(), open(r.id)) }, look ? icon(look.icon(r), 16) : null, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, look?.kindName(r) ?? r.kind.charAt(0).toUpperCase() + r.kind.slice(1)));
           const archived = shell.records.isHidden(r) ? h("p", { class: "muted small" }, "In the archive.") : null;
-          replace(host, h("div", { class: `board-card kind-${r.kind}` }, body, archived));
+          replace(host, h("div", { class: `board-card kind-${r.kind}`, role: "group", "aria-label": `${look?.kindName(r) ?? r.kind}: ${r.title || "Untitled"}` }, body, archived));
         });
       });
     }
@@ -184,6 +195,7 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
       void call("drafts.put", { id, base_version: base.version, base_body: base.sha, body: engine.current().scene }).catch(() => {});
     };
     const changed = () => {
+      tellOutline();
       if (readOnly) return;
       dirty = true;
       clearTimeout(draftTimer);
@@ -291,6 +303,8 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
     });
     if (!alive) return ready.destroy();
     engine = ready;
+    tellOutline();
+    cleanup.push(() => clearTimeout(outlineTimer));
     const detach = shell.undo.attachText(scope, { undo: () => engine!.undo(), redo: () => engine!.redo(), isolate() {} }, engine.el);
     cleanup.push(() => {
       detach();
@@ -402,6 +416,7 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
           info = fresh.info;
           titleInput.value = fresh.info.title;
           ctx.setTitle(fresh.info.title);
+          canvasHost.setAttribute("aria-label", `Drawing: ${fresh.info.title || "Untitled board"}`);
           // With nothing unsaved, the drawing shown becomes the one on disk; otherwise the
           // next save keeps both (keepTheirs). When only the page changed (names refreshed),
           // the drawing is the same: the next save is based on the new version.
@@ -420,6 +435,7 @@ export function renderBoard(shell: ShellApi, host: HTMLElement, params: Record<s
       if (shell.router.current.peek().params.id === id) {
         titleInput.value = to;
         ctx.setTitle(to);
+        canvasHost.setAttribute("aria-label", `Drawing: ${to || "Untitled board"}`);
       }
       return x.info.version;
     };
