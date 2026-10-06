@@ -39,27 +39,97 @@ While fixing R-027: in web pages saved as PDFs, PDF.js reads some ligatures wron
 across the library uses PDFKit's text and isn't affected. To look into: the stored text
 (PDFKit) has the right words and could correct the reader's text.
 
-### R-065 · Footnotes in EPUBs don't work
-> "the footnotes of EPUBs don't work"
-
-Noted on 2026-10-05, to look at after boards (phase 6).
-
 
 ---
 
 ## Waiting for you
 
-(nothing)
+### EPUB views (R-066): how should the layouts be chosen?
+- **A (recommended, as Apple Books and Kindle do):** one **Layout** control at the top of the
+  Aa panel: `Two pages | One page | Scrolling`, always visible.
+  - Two pages says when there isn't room ("Not enough room; showing one page").
+  - The same three choices go in the View menu, with shortcuts, and in the palette.
+  - Switching keeps your exact place.
+  - Scrolling gets the same centred column and margins as pages.
+  - The font list shrinks to one "Font" row, so the panel fits without scrolling.
+- **B: fewer choices.** Pages pick one or two by themselves (as now), plus a single
+  Pages/Scrolling switch. Simpler, but you can't force two pages or one.
+- **C: a layout button in the reader's toolbar** that cycles through the three, plus A's fixes.
+  Quick to reach, but cycling makes you pass through a layout you don't want.
+
+### EPUB footnotes (R-065, follow-up): where should a note show?
+- **A (recommended, as Apple Books does):** in a popover over the page when you click its
+  number, with a link to "Go to note". You keep your page.
+- **B: as now.** Go to the note, and come back with the book's own back-link (↵) or a "Back"
+  button the reader adds after a jump.
 
 ---
 
 ## In progress
 
-(nothing)
+### R-066 · EPUB views: two pages, one page and scrolling are hard to switch between
+> "the views of the epub aren't very UX friendly -- switching between two page vs one page vs
+> continuous, there are a lot of options and switching between them isn't easy. Please
+> diagnose the state of it before we fix it"
+
+- **Diagnosis (2026-10-06):** checked in the preview and in WebKit.
+  1. **Two controls, far apart, for one choice.** "Scrolling view" is a checkbox below the list
+     of nine fonts. "Pages: Two when wide / One" is hidden under Customise, and at a normal
+     window height you must also scroll inside the panel to reach it.
+  2. **The panel jumps.** "Pages" disappears while scrolling is on, so the controls move under
+     your pointer.
+  3. **"Two when wide" is invisible.** Whether you get two pages depends on the window, the
+     text size and the line length. At 720 px it showed one page with nothing saying why.
+     Resizing the window or opening the side panel flips it silently.
+  4. **Scrolling view has no side margins.** The text sits against the left edge, unlike
+     pages, where it's a centred column.
+  5. **Switching loses your place.** Pages → scrolling kept it (paragraph 60), but scrolling →
+     pages moved about a page on (paragraph 67).
+  6. **Only through the Aa panel,** behind the toolbar that appears on hover: no menu item, no
+     shortcut, no palette command.
+- **Next:** the design question under Waiting for you; then the fix.
 
 ---
 
 ## Done
+
+### R-065 · Footnotes in EPUBs don't work
+> "the footnotes of EPUBs don't work" · "fix the EPUB footnotes"
+
+- **Diagnosis:** clicked as a hand clicks (real clicks from the test runner, the pointer moving
+  a few pixels), three things went wrong:
+  - **Readium drops a click that moved more than one pixel,** and stops the browser following
+    the link. So a footnote often did nothing, depending on how still your hand was.
+  - **Footnote numbers are tiny** (`2` is about 5 pixels wide). Let go just off it, and the
+    click belongs to the paragraph, not the link.
+  - **Notes files marked `linear="no"`** (common) were left out of the reader, so links into
+    them went nowhere.
+  - Clicks made by a test script hid all three: Readium accepts those regardless of movement.
+    Your books follow both common layouts. *Dialectical Theology and Jacques Ellul* has notes
+    at the end of each chapter; *Either/Or* has a separate notes file. In real clicks, both
+    failed in the same way.
+- **Changed:**
+  - The reader now follows links in the book itself. A link is followed when you let go within
+    a few pixels of it. A drag that selects text still selects; it doesn't jump.
+  - Notes files marked non-linear are part of the book.
+  - Links to the web still ask before opening.
+- **Use:** click a footnote number to go to the note; its back-link (↵, when the book has one)
+  returns you.
+- **Code:** `src/reader/epub/engine.ts` (`follow`, the frame's link handling),
+  `src/reader/epub/streamer.ts` (reading order), `scripts/webkit-run.swift` (`nativeClick`:
+  real clicks for checks).
+- **Decision:** 0068.
+- **Tested:** 5 WebKit checks with real moving clicks on a test book shaped like yours:
+  - a note several pages on in the same chapter, and back;
+  - a note in a separate notes file, and back;
+  - a note in a non-linear file with a space in its name;
+  - a drag from a note number selecting text rather than jumping.
+
+  All but the drag failed before the fix. The streamer test now expects non-linear items in
+  the book (a deliberate change). All 242 interface tests, 80 WebKit checks and the Rust tests
+  pass; lint is clean. Your two books were checked from temporary copies, deleted afterwards.
+- **Left:** a note opens where it is, so you leave your page. A popover, as in Apple Books, is
+  the question under Waiting for you (R-066).
 
 ### R-057 · Boards: a note you can draw on (Excalidraw), with captures and links
 > "Please plan an excalidraw page "feature" that supports putting in captures and [[]] links,

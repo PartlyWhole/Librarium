@@ -153,6 +153,29 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
       // Not passive: a sideways swipe in pages mustn't scroll the columns (it fights the turn).
       doc.addEventListener("wheel", onWheel, { passive: false });
       doc.addEventListener("mousedown", () => closePopover());
+      // Links in the book (footnotes, cross-references; R-065) are followed here. Readium drops a
+      // click whose pointer moved more than a pixel, and stops the browser following it; and when
+      // the pointer is let go just off a small footnote number, the click is the paragraph's, not
+      // the link's. So a footnote often did nothing. The link pressed is followed when the
+      // pointer is let go within a few pixels; a drag that selected text isn't followed.
+      let down: { x: number; y: number; link: HTMLAnchorElement | null } | null = null;
+      const linkOf = (t: EventTarget | null) => (t as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      const still = (e: MouseEvent) => !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8;
+      /** The link a click is on: the one under it, or the one pressed if let go close by. */
+      const clickedLink = (e: MouseEvent) => linkOf(e.target) ?? (still(e) ? (down?.link ?? null) : null);
+      doc.addEventListener("pointerdown", (e) => void (down = { x: e.clientX, y: e.clientY, link: e.button === 0 ? linkOf(e.target) : null }), true);
+      doc.addEventListener("pointerup", (e) => {
+        // Not to Readium as well (it would follow the link a second time).
+        if (clickedLink(e) && still(e)) e.stopImmediatePropagation();
+      }, true);
+      doc.addEventListener("click", (e) => {
+        const a = clickedLink(e);
+        if (!a || e.button !== 0) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (!still(e) || doc.getSelection()?.isCollapsed === false) return;
+        follow(a, doc);
+      }, true);
       doc.addEventListener("mousemove", (e) => {
         const f = frames().find((x) => x.doc === doc);
         const b = f?.el.getBoundingClientRect();
@@ -230,6 +253,28 @@ export const readiumEngine: Pick<ReaderEngine, "open"> = {
     const done = () => {};
     function turn(dir: 1 | -1) {
       void flip(dir > 0 === (nav.readingProgression !== "rtl") ? "right" : "left");
+    }
+    /** Follows a link in the book: to the web (asked first), or to a place in the book. */
+    function follow(a: HTMLAnchorElement, doc: Document) {
+      const raw = (a.getAttribute("href") ?? "").trim();
+      if (!raw || /^javascript:/i.test(raw)) return;
+      if (/^(https?:|mailto:|tel:)/i.test(raw)) {
+        document.dispatchEvent(new CustomEvent("open-link", { detail: { url: raw, text: a.textContent ?? "" } }));
+        return;
+      }
+      // Relative to the file the link is in (its frame's spine item).
+      const f = frames().find((x) => x.doc === doc);
+      const here = f && f.index >= 0 ? book.spine[f.index]!.href : decodeURIComponent((current?.href ?? "").split("#")[0]!);
+      let u: URL;
+      try {
+        u = new URL(raw, `https://book.invalid/${here.split("/").map(encodeURIComponent).join("/")}`);
+      } catch {
+        return;
+      }
+      if (u.hostname !== "book.invalid") return;
+      const path = decodeURIComponent(u.pathname.slice(1));
+      const frag = decodeURIComponent(u.hash.slice(1));
+      goHref(frag ? `${path}#${frag}` : path);
     }
     function goHref(href: string) {
       const link = new Link({ href: href.split("#")[0]!.split("/").map(encodeURIComponent).join("/") + (href.includes("#") ? `#${href.split("#")[1]}` : "") });

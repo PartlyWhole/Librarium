@@ -1,6 +1,10 @@
 // Loads a page in an offscreen WKWebView (the engine the app uses) and prints
 // `window.__result` as JSON once the page sets it. Usage: swift webkit-run.swift URL SECONDS
 // (with SNAPSHOT=file.png in the environment, it also saves a picture of the page then)
+//
+// A page can ask for a real click, as a hand makes one (trusted by WebKit, unlike a click made
+// in JavaScript): `await window.webkit.messageHandlers.nativeClick.postMessage({ x, y, dx })`,
+// in the page's coordinates; `dx` moves the pointer that far between press and release.
 import AppKit
 import WebKit
 
@@ -22,7 +26,37 @@ final class Nav: NSObject, WKNavigationDelegate {
     func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { FileHandle.standardError.write("load failed: \(e)\n".data(using: .utf8)!) }
 }
 let nav = Nav()
-let web = WKWebView(frame: window.contentView!.bounds, configuration: WKWebViewConfiguration())
+final class Clicker: NSObject, WKScriptMessageHandlerWithReply {
+    weak var web: WKWebView?
+    func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage, replyHandler: @escaping (Any?, String?) -> Void) {
+        guard let web = web, let d = m.body as? [String: Any], let x = (d["x"] as? NSNumber)?.doubleValue, let y = (d["y"] as? NSNumber)?.doubleValue else {
+            replyHandler(nil, "nativeClick needs { x, y }")
+            return
+        }
+        let dx = (d["dx"] as? NSNumber)?.doubleValue ?? 0
+        let n = web.window!.windowNumber
+        func event(_ type: NSEvent.EventType, _ px: Double) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: web.convert(NSPoint(x: px, y: y), to: nil), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: n, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)!
+        }
+        web.mouseDown(with: event(.leftMouseDown, x))
+        if dx != 0 {
+            // A drag that says how far it moved (WebKit's movementX comes from the event's delta).
+            let at = web.window!.convertPoint(toScreen: web.convert(NSPoint(x: x + dx, y: y), to: nil))
+            let cg = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: CGPoint(x: at.x, y: NSScreen.screens[0].frame.height - at.y), mouseButton: .left)!
+            cg.setIntegerValueField(.mouseEventDeltaX, value: Int64(dx))
+            cg.setIntegerValueField(.mouseEventDeltaY, value: 0)
+            let drag = NSEvent(cgEvent: cg)!
+            web.mouseDragged(with: NSEvent.mouseEvent(with: .leftMouseDragged, location: web.convert(NSPoint(x: x + dx, y: y), to: nil), modifierFlags: [], timestamp: drag.timestamp, windowNumber: n, context: nil, eventNumber: 0, clickCount: 1, pressure: 1).map { _ in drag } ?? drag)
+        }
+        web.mouseUp(with: event(.leftMouseUp, x + dx))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { replyHandler(true, nil) }
+    }
+}
+let clicker = Clicker()
+let config = WKWebViewConfiguration()
+config.userContentController.addScriptMessageHandler(clicker, contentWorld: .page, name: "nativeClick")
+let web = WKWebView(frame: window.contentView!.bounds, configuration: config)
+clicker.web = web
 web.navigationDelegate = nav
 window.contentView!.addSubview(web)
 window.orderFrontRegardless()

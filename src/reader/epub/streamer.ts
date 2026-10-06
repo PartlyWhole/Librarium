@@ -169,9 +169,11 @@ export async function openBook(bytes: ArrayBuffer | Uint8Array, id: string, opts
     const p = (ref.getAttribute("properties") ?? "").split(/\s+/);
     return p.includes("page-spread-left") ? "left" : p.includes("page-spread-right") ? "right" : p.includes("page-spread-center") || p.includes("rendition:page-spread-center") ? "center" : undefined;
   };
+  // Every spine item, non-linear ones too (notes, answers, a cover): links lead to them, and a
+  // reading order without them leaves those links going nowhere (R-065).
   const readingOrder = itemrefs
     .map((ref) => ({ ref, it: items.get(ref.getAttribute("idref") ?? "") }))
-    .filter((x) => x.it && x.ref.getAttribute("linear") !== "no")
+    .filter((x) => x.it)
     .map(({ ref, it }) => ({ href: toHref(it!.path), type: it!.type, ...(pageOf(ref) ? { properties: { page: pageOf(ref) } } : {}) }));
   if (!readingOrder.length) throw new Error("This EPUB has nothing to read in its spine.");
   const inOrder = new Set(readingOrder.map((l) => fromHref(l.href)));

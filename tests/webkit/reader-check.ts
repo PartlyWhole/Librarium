@@ -743,6 +743,75 @@ async function run() {
     book.view.destroy();
   }
 
+  // Footnotes (R-065): a click on a note's number shows the note (several pages on, or in another
+  // file), and its link back returns to the reference.
+  step("epub footnotes");
+  {
+    const notesBook = await open(epubEngine, "footnotes.epub", "epub");
+    await waitFor(() => frameDocs().length > 0);
+    await pause(600);
+    /** Whether the element with this ID is on the page shown (in any frame shown). */
+    const shownId = (id: string) =>
+      [...stage.querySelectorAll("iframe")].some((f) => {
+        const fr = f as HTMLIFrameElement;
+        const el = fr.style.visibility !== "hidden" ? fr.contentDocument?.getElementById(id) : null;
+        if (!el) return false;
+        const r = fr.contentDocument!.createRange();
+        r.selectNodeContents(el);
+        return rangeOnPage(fr, r);
+      });
+    /**
+     * Clicks the link with this ID in the book, as a reader would: on what is under the pointer
+     * (a <sup> inside it, often), the hand moving a few pixels between press and release (as a
+     * real click does).
+     */
+    const clickLink = async (id: string) => {
+      const fr = [...stage.querySelectorAll("iframe")].find((f) => (f as HTMLIFrameElement).contentDocument?.getElementById(id)) as HTMLIFrameElement | undefined;
+      const a = fr?.contentDocument?.getElementById(id);
+      if (!a) return false;
+      const target = (a.firstElementChild as HTMLElement | null) ?? a;
+      const r = target.getBoundingClientRect();
+      const fb = fr!.getBoundingClientRect();
+      // A real click from the runner (trusted, as a hand's), moving 3 pixels between press and
+      // release; else (another runner) one made here.
+      const native = (window as unknown as { webkit?: { messageHandlers?: { nativeClick?: { postMessage(m: unknown): Promise<unknown> } } } }).webkit?.messageHandlers?.nativeClick;
+      if (native) await native.postMessage({ x: fb.left + r.left + r.width / 2, y: fb.top + r.top + r.height / 2, dx: 3 });
+      else target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }));
+      await pause(1500);
+      return true;
+    };
+    const start = { ref1: shownId("return-footnote-1"), note1: shownId("footnote-1") };
+    // A drag that starts on a note's number selects text; it doesn't follow the link.
+    const native0 = (window as unknown as { webkit?: { messageHandlers?: { nativeClick?: { postMessage(m: unknown): Promise<unknown> } } } }).webkit?.messageHandlers?.nativeClick;
+    let dragStays: boolean | null = null;
+    if (native0) {
+      const fr0 = [...stage.querySelectorAll("iframe")].find((f) => (f as HTMLIFrameElement).contentDocument?.getElementById("return-footnote-1")) as HTMLIFrameElement;
+      const sup0 = fr0.contentDocument!.getElementById("return-footnote-1")!.firstElementChild as HTMLElement;
+      const b0 = fr0.getBoundingClientRect(), r0 = sup0.getBoundingClientRect();
+      const before0 = notesBook.view.position();
+      await native0.postMessage({ x: b0.left + r0.left + r0.width / 2, y: b0.top + r0.top + r0.height / 2, dx: 60 });
+      await pause(1200);
+      dragStays = notesBook.view.position() === before0 && shownId("return-footnote-1");
+      fr0.contentDocument!.getSelection()?.removeAllRanges();
+    }
+    const sameFile = (await clickLink("return-footnote-1")) && shownId("footnote-1");
+    const back = sameFile && (await clickLink("footnote-1") ? true : false);
+    // The link back is inside the note: find it there.
+    const backLink = [...stage.querySelectorAll("iframe")].map((f) => (f as HTMLIFrameElement).contentDocument?.querySelector('#footnote-1 a[href="#return-footnote-1"]') as HTMLElement | null).find(Boolean);
+    if (backLink) {
+      backLink.id = "lib-back-1";
+      await clickLink("lib-back-1");
+    }
+    const backShown = shownId("return-footnote-1");
+    const otherFile = (await clickLink("ref2")) && shownId("n2");
+    const fromNotes = [...stage.querySelectorAll("iframe")].map((f) => (f as HTMLIFrameElement).contentDocument?.querySelector('#n2 a') as HTMLElement | null).find(Boolean);
+    if (fromNotes) fromNotes.id = "lib-back-2";
+    const backFromNotes = fromNotes ? (await clickLink("lib-back-2")) && shownId("ref2") : false;
+    const spaced = (await clickLink("ref3")) && shownId("n3");
+    results.epubFootnotes = { dragStays, native: !!(window as unknown as { webkit?: { messageHandlers?: { nativeClick?: unknown } } }).webkit?.messageHandlers?.nativeClick, start, sameFile, back, backShown, otherFile, backFromNotes, spaced, position: notesBook.view.position() };
+    notesBook.view.destroy();
+  }
+
   step("epub picture");
   const pictured = await open(epubEngine, "styled.epub", "epub");
   await new Promise((r) => setTimeout(r, 900));

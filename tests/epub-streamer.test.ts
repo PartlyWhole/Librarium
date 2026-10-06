@@ -73,9 +73,9 @@ describe("a richer EPUB: resources, nested contents, links, non-linear items", (
     expect(css).toMatch(/src: url\("blob:test\/\d+"\)/);
   });
 
-  it("keeps non-linear items out of the reading order but in the spine (for CFIs)", async () => {
+  it("keeps non-linear items in the reading order, where links reach them (notes; R-065), and in the spine (for CFIs)", async () => {
     const book = await openBook(styled, "s", opts);
-    expect(book.publication.readingOrder.items.map((l) => l.href)).toEqual(["EPUB/text/one.xhtml", "EPUB/text/two.xhtml"]);
+    expect(book.publication.readingOrder.items.map((l) => l.href)).toEqual(["EPUB/text/one.xhtml", "EPUB/text/notes.xhtml", "EPUB/text/two.xhtml"]);
     expect(book.spine.map((s) => [s.href, s.linear, s.cfi])).toEqual([
       ["EPUB/text/one.xhtml", true, "epubcfi(/6/2[r1])"],
       ["EPUB/text/notes.xhtml", false, "epubcfi(/6/4[r-notes])"],

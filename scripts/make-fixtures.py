@@ -189,6 +189,31 @@ def long_epub(path):
         z.writestr("c.xhtml", chapter("The Long Chapter", (8, 60, 112)))
         z.writestr("d.xhtml", chapter("The Second Chapter", (30, 95)))
 
+def footnotes_epub(path):
+    """Footnotes as books mark them (R-065): a note at the end of the same chapter, several pages
+    on (`#footnote-1`, with a link back), a note in a separate notes file (`notes.xhtml#n2`, with
+    a link back), and one in a non-linear file whose name has a space (`Notes%20B.xhtml#n3`)."""
+    def paras(n, tag):
+        return "".join(f"<p>{tag} paragraph {i}. " + " ".join(WORDS[(i * 7 + j) % len(WORDS)] for j in range(50)) + ".</p>" for i in range(1, n + 1))
+    ch1 = ('<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Chapter One</title></head><body><h1>Chapter One</h1>'
+           # The number inside the link, as many books have it (a click lands on the <sup>).
+           '<p>The first claim<a class="footnote" epub:type="noteref" href="#footnote-1" id="return-footnote-1"><sup class="footnote">[1]</sup></a>, the second<a href="notes.xhtml#n2" id="ref2"><sup>2</sup></a>, and the third<a href="Notes%20B.xhtml#n3" id="ref3">3</a>.</p>'
+           + paras(60, "Body") +
+           '<div class="footnotes"><aside epub:type="footnote" id="footnote-1"><p>1. A note at the end of the chapter. <a href="#return-footnote-1">Back</a></p></aside></div></body></html>')
+    notes = ('<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Notes</title></head><body><h1>Notes</h1>'
+             + paras(40, "Notes") + '<p id="n2">2. The note in the notes file. <a href="ch1.xhtml#ref2">Back</a></p></body></html>')
+    notes_b = ('<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>More notes</title></head><body><h1>More notes</h1>'
+               + paras(30, "More") + '<p id="n3">3. The note in a file with a space in its name.</p></body></html>')
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml", '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')
+        z.writestr("OEBPS/content.opf", '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">footnotes-book</dc:identifier><dc:title>Footnotes</dc:title><dc:language>en</dc:language><meta property="dcterms:modified">2026-10-05T00:00:00Z</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="ch1" href="Text/ch1.xhtml" media-type="application/xhtml+xml"/><item id="notes" href="Text/notes.xhtml" media-type="application/xhtml+xml"/><item id="notesb" href="Text/Notes%20B.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="ch1"/><itemref idref="notes"/><itemref idref="notesb" linear="no"/></spine></package>')
+        z.writestr("OEBPS/nav.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol><li><a href="Text/ch1.xhtml">Chapter One</a></li><li><a href="Text/notes.xhtml">Notes</a></li><li><a href="Text/Notes%20B.xhtml">More notes</a></li></ol></nav></body></html>')
+        z.writestr("OEBPS/Text/ch1.xhtml", ch1)
+        z.writestr("OEBPS/Text/notes.xhtml", notes)
+        z.writestr("OEBPS/Text/Notes B.xhtml", notes_b)
+
+footnotes_epub(OUT / "footnotes.epub")
 styled_epub(OUT / "styled.epub")
 fixed_epub(OUT / "fixed.epub")
 long_epub(OUT / "long.epub")
