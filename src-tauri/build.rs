@@ -6,6 +6,7 @@ fn main() {
         "rpc",
         "subscribe",
         "bytes",
+        "restart",
     ]));
     tauri_build::try_build(attrs).expect("tauri build script");
 }

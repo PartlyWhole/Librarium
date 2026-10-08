@@ -709,7 +709,7 @@ Do not build these unless the user asks:
   window.
 - **Window size and position** are restored.
 - **Packaging:** an ad-hoc signed `.app` for personal use; notarisation only if it is ever
-  distributed.
+  distributed. (Now distributed: GitHub releases with Tauri's updater, decision 0072.)
 - **A missing library folder** (for example, an unmounted drive) is reported calmly, with a choice
   to locate it or choose another.
 

@@ -48,6 +48,10 @@ const state = {
   confirmations: new Map<string, [string, string][]>(),
   /** Files deleted permanently (paths), for tests. */
   deleted: [] as string[],
+  /** The newer version published, if any (null: up to date). */
+  update: null as { version: string; current: string; notes: string } | null,
+  /** A failure to report when checking for updates. */
+  updateFails: null as string | null,
   /** Pending snapshot removals: token → [item, snapshots]. */
   snapshotRemovals: new Map<string, [string, string[]][]>(),
   /** Each kind's folders that exist on disk (empty ones too), as "kind:path"; records'
@@ -605,6 +609,30 @@ export async function pickFolder(): Promise<string | null> {
   return state.pick;
 }
 
+/** An update the tests publish: `mock.state.update`, its installs counted. */
+export async function checkForUpdate(): Promise<{ version: string; current: string; notes: string; install(p: (f: number | null) => void): Promise<void> } | null> {
+  state.calls.push({ method: "updates.check", params: null });
+  if (state.updateFails) throw new Error(state.updateFails);
+  const u = state.update;
+  if (!u) return null;
+  return {
+    ...u,
+    async install(progress) {
+      progress(0.5);
+      progress(1);
+      state.calls.push({ method: "updates.install", params: u.version });
+    },
+  };
+}
+
+export async function appVersion(): Promise<string> {
+  return "0.1.0";
+}
+
+export async function restartApp(): Promise<void> {
+  state.calls.push({ method: "app.restart", params: null });
+}
+
 /** Test controls. */
 export const mock = {
   state,
@@ -630,6 +658,8 @@ export const mock = {
     state.history.clear();
     state.nextOrigin.clear();
     state.deleted = [];
+    state.update = null;
+    state.updateFails = null;
     state.inspect = { exists: true, empty: true, is_library: false, markdown_files: 0, in_icloud: false };
   },
   /** A sample library for the browser preview. */

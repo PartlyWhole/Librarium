@@ -26,7 +26,8 @@
     "tauri": "tauri",
     "dev:mock": "npm run -s assets && vite --mode mock",
     "assets": "node scripts/copy-pdfjs.mjs",
-    "test:webkit": "node scripts/webkit-check.mjs"
+    "test:webkit": "node scripts/webkit-check.mjs",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",
@@ -52,6 +53,7 @@
     "@readium/shared": "2.6.0",
     "@tauri-apps/api": "2.12.1",
     "@tauri-apps/plugin-dialog": "2.8.1",
+    "@tauri-apps/plugin-updater": "2.13.2",
     "approx-string-match": "2.0.0",
     "fflate": "0.8.3",
     "lucide": "1.50.0",

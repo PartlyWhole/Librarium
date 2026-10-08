@@ -38,7 +38,8 @@
   "bundle": {
     "active": true,
     "targets": [
-      "app"
+      "app",
+      "dmg"
     ],
     "icon": [
       "icons/32x32.png",
@@ -49,6 +50,14 @@
     "macOS": {
       "minimumSystemVersion": "15.0",
       "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk4ODMyMDYzMjM4QkNCNDcKUldSSHk0c2pZeUNEbU9ONGVHMHFjZ29OdTdpYSsrUDFmMFQzYVBNeG13OVNaTkFUVHp6OW5vbjkK",
+      "endpoints": [
+        "https://github.com/PartlyWhole/Librarium/releases/latest/download/latest.json"
+      ]
     }
   }
 }

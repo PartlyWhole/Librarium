@@ -35,6 +35,8 @@ See the README's command table. In short:
 - `npm test` = `test:web` (Vitest in jsdom; the timing-sensitive `perf` and `shell` tests run
   in a second, sequential pass), `test:webkit` (real WebKit checks of the reader,
   `tests/webkit/`), and `cargo test --workspace`.
+- `npm run release -- X "notes"` publishes version X (`docs/RELEASING.md`, 0072). Updates
+  live in `src/features/updates/`; the backend's `checkForUpdate`/`restartApp` are the doors.
 - `npm run lint` = ESLint + dependency-cruiser (direction rules) + clippy `-D warnings` +
   rustfmt.
 - `npm run gen:types` after changing any type in `crates/contracts` that is exported to

@@ -200,6 +200,8 @@ export interface ShellApi {
   undo: Undo;
   /** Work to finish before the window closes (e.g. a last save). */
   beforeClose(fn: () => Promise<void>): () => void;
+  /** Does what closing the window does first (saves notes, drafts, preferences): before a restart. */
+  saveAll(): Promise<void>;
 }
 
 /** Feature-hosted slot, offered by Library: what an item holds, shown under it (captures). */

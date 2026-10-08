@@ -44,7 +44,17 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Waiting for you
 
-(Nothing waiting.)
+### Publishing Librarium on GitHub (R-069)
+Everything is ready to publish; nothing is published yet. Publishing makes a **public**
+repository `PartlyWhole/Librarium` with the code and its whole history (113 commits, one
+author: PartlyWhole), including `docs/REQUESTS.md` with your requests in your words and the
+titles of books you mentioned. Then `npm run release -- 0.1.0 "First release."` makes the first
+release that people install from.
+
+- **A (recommended):** publish as is.
+- **B:** publish without `docs/REQUESTS.md`'s history of your words (it stays local).
+- There is no licence file: without one, others may read the code but not reuse it. Say if you
+  want one (e.g. MIT).
 
 ---
 
@@ -55,6 +65,49 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 ---
 
 ## Done
+
+### R-069 · Let others install Librarium, and keep it updated
+> "How can this be a desktop app I can let others install?" · "I want something that is
+> automatically updated (or can be updated very easily)"
+
+- **You chose:** no Apple Developer Program for now; everything public on GitHub; updates
+  that ask first.
+- **Changed:**
+  - **Updates:** the app looks for a new version 20 seconds after it starts and once a day.
+    When there is one it says *Librarium X is available* with **Update…** (what's new,
+    **Install** or **Later**). Installed, it offers **Restart now** (work saved first) or
+    **Later** (the new version starts next time).
+  - **Librarium ▸ Check for Updates…** and **Settings ▸ Version** look at any time.
+  - **Releasing is one command:** `npm run release -- 0.2.0 "What's new"`. It checks, sets
+    the version, tests, builds, signs, tags, pushes and publishes the GitHub release.
+  - **First installs:** a `.dmg`. [`docs/INSTALL.md`](INSTALL.md) is the guide for the people
+    you share with (including the one-time *Open Anyway* step).
+- **Use:** see [`docs/RELEASING.md`](RELEASING.md). **Keep a safe copy of
+  `.secrets/updater.key`** (e.g. in a password manager): updates must be signed with it.
+- **Code:** `src/features/updates/index.ts`, `src/backend.ts` (`checkForUpdate`, `restartApp`,
+  `appVersion`), `src-tauri/src/lib.rs` (the updater plugin, the `restart` command),
+  `src-tauri/tauri.conf.json` (the update key's public half, the address),
+  `scripts/release.mjs`.
+- **Decision:** 0072 (amends the brief's packaging line).
+- **Tested:**
+  - 3 interface tests (offered, installed and restarted only when asked; Later; nothing new;
+    can't reach the page);
+  - a signed build checked: the `.dmg` (27 MB), the update and its signature, which verifies
+    against the app's key;
+  - end to end with a test copy under its own app ID: it found a locally served 0.1.1 by
+    itself, and you clicked Install and Restart now. It downloaded, restarted through the
+    app's own restart (work saved first) and is now 0.1.1, still validly signed, with no
+    quarantine flag.
+
+  The test copy opened your library (same code as your app). It changed only the library's
+  lock file, which your app replaces when it next opens (after a full check, as after a
+  crash). The test copy and its folders are deleted.
+
+  All interface tests, WebKit checks and Rust tests pass; lint is clean.
+- **Left:**
+  - publishing (the question under Waiting for you);
+  - Intel Macs (a universal build) and macOS older than 15 aren't covered;
+  - Apple's Developer ID later removes the *Open Anyway* step (`docs/RELEASING.md`).
 
 ### R-068 · ⌘-click on an item shown in a note should open a new tab
 > "Cmd-clicking a link should open up a new tab (this one doesn't, but captures do)"

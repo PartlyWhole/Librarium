@@ -1,5 +1,8 @@
 {
   "bundle": {
-    "externalBin": ["binaries/librarium-worker"]
+    "externalBin": [
+      "binaries/librarium-worker"
+    ],
+    "createUpdaterArtifacts": true
   }
 }

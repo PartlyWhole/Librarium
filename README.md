@@ -4,6 +4,9 @@ A personal notebook and library for slow, careful intellectual work: read thinke
 quote them exactly, and let your own ideas grow on top of what you read. One person, one Mac,
 plain files in a folder you choose. See [`BRIEF.md`](BRIEF.md) for the full brief.
 
+**To install it:** download [Librarium.dmg](https://github.com/PartlyWhole/Librarium/releases/latest/download/Librarium.dmg)
+and follow [`docs/INSTALL.md`](docs/INSTALL.md) (Apple silicon, macOS 15+). It updates itself.
+
 ## Run it
 
 Requirements: macOS 15+, Rust 1.77+, Node 20.11+, Apple's command-line tools.
@@ -16,7 +19,8 @@ npm run dev            # builds the worker, starts Vite and opens the app
 | Command | What it does |
 |---|---|
 | `npm run dev` | Run the app in development |
-| `npm run build` | Build an ad-hoc signed `Librarium.app` (with the worker bundled) in `target/release/bundle/macos/`; not notarized |
+| `npm run build` | Build an ad-hoc signed `Librarium.app` and `.dmg` (with the worker bundled) in `target/release/bundle/`; not notarized |
+| `npm run release -- X "notes"` | Publish version X as a GitHub release that installed copies update to ([`docs/RELEASING.md`](docs/RELEASING.md)) |
 | `npm test` | All tests: Vitest, the WebKit reader checks, then `cargo test --workspace` |
 | `npm run test:webkit` | End-to-end reader checks in WebKit (the app's engine) |
 | `npm run lint` | ESLint, dependency-cruiser direction rules, clippy and rustfmt |
@@ -136,3 +140,4 @@ Interface: `.dependency-cruiser.cjs`, run by `npm run lint:deps` and `tests/dire
 | 2026-10-06 | EPUB footnotes open in a popover over the page (note references by `noteref` or a short mark), with Go to note; other links go to their place. | [0069](docs/decisions/0069-epub-footnotes-in-popovers.md) |
 | 2026-10-06 | A book's layout is one choice, Single page / Two pages / Scroll, at the top of the Aa panel and in the View menu (⌃⌘1–3); two pages says when there's no room; switching keeps the place; scrolling has margins. | [0070](docs/decisions/0070-epub-layouts-like-books.md) |
 | 2026-10-06 | A picture's width in a note is written after its embed, `![[label\|id]]{width=320}` (Pandoc's attribute form), set by dragging its corner; images and boards. | [0071](docs/decisions/0071-picture-widths-in-notes.md) |
+| 2026-10-08 | Distributed as GitHub releases (`npm run release`); Tauri's updater with our own signing key; updates ask first; no Apple Developer ID for now. | [0072](docs/decisions/0072-releases-and-updates.md) |

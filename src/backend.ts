@@ -9,6 +9,8 @@ import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/men
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { check } from "@tauri-apps/plugin-updater";
+import { getVersion } from "@tauri-apps/api/app";
 import type { BackendError } from "./generated/BackendError";
 import type { RpcNotification } from "./generated/RpcNotification";
 import type { RpcRequest } from "./generated/RpcRequest";
@@ -165,4 +167,53 @@ export function onFileDrop(handler: (paths: string[], at: { x: number; y: number
 export async function pickSavePath(defaultName: string, title: string): Promise<string | null> {
   if (!inTauri()) return null;
   return (await saveDialog({ title, defaultPath: defaultName })) ?? null;
+}
+
+// ---- Updates (R-069, 0072) ---------------------------------------------------------------------
+
+/** A newer version of the app, published with `npm run release`. */
+export interface AppUpdate {
+  version: string;
+  current: string;
+  /** What is new, as written when it was published. */
+  notes: string;
+  /** Downloads and installs it (`progress` gets 0–1, or null when the size isn't known). */
+  install(progress: (fraction: number | null) => void): Promise<void>;
+}
+
+/**
+ * Asks the release page whether a newer version is published. Never in development: the app
+ * running from the working tree is not an installed copy to replace.
+ */
+export async function checkForUpdate(): Promise<AppUpdate | null> {
+  if (!inTauri() || import.meta.env.DEV) return null;
+  const u = await check();
+  if (!u) return null;
+  return {
+    version: u.version,
+    current: u.currentVersion,
+    notes: u.body ?? "",
+    async install(progress) {
+      let total = 0;
+      let got = 0;
+      await u.downloadAndInstall((e) => {
+        if (e.event === "Started") total = e.data.contentLength ?? 0;
+        else if (e.event === "Progress") {
+          got += e.data.chunkLength;
+          progress(total ? Math.min(1, got / total) : null);
+        }
+      });
+    },
+  };
+}
+
+/** The app's version ("0.2.0"). */
+export async function appVersion(): Promise<string> {
+  return inTauri() ? getVersion() : "development";
+}
+
+/** Restarts the app (after an update), finishing as closing the window does. */
+export async function restartApp(): Promise<void> {
+  if (inTauri()) await invoke("restart");
+  else location.reload();
 }

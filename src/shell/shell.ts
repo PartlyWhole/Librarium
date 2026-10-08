@@ -62,10 +62,11 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
   const embeds = new Registry<EmbedRenderer>("shell.embeds");
   const undo = new Undo();
   const closing = new Set<() => Promise<void>>();
-  onCloseRequested(async () => {
+  const saveAll = async () => {
     await Promise.allSettled([...closing].map((f) => f()));
     await prefs.flush();
-  });
+  };
+  onCloseRequested(saveAll);
   const slots = new Map<string, Registry<unknown>>();
   const router = new Router();
   const text = textUndo(undo, () => router.current());
@@ -161,6 +162,7 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
       closing.add(fn);
       return () => closing.delete(fn);
     },
+    saveAll,
     timings: {},
     destroy: () => {
       document.removeEventListener("keydown", onKey, true);

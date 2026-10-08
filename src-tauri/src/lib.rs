@@ -49,6 +49,27 @@ fn stays_in_app(url: &tauri::Url) -> bool {
 /// The settings key for the main window's frame.
 const WINDOW_KEY: &str = "window.main";
 
+/// What closing the main window does: remember its frame, and close the library.
+fn finish(window: &tauri::Window) {
+    let app = window.state::<App>();
+    if let (Ok(pos), Ok(size), Ok(max)) = (window.outer_position(), window.inner_size(), window.is_maximized()) {
+        let frame = json!({ "x": pos.x, "y": pos.y, "width": size.width, "height": size.height, "maximized": max });
+        if let Err(e) = app.api.settings_set_internal(WINDOW_KEY, frame) {
+            log::warn!("could not save the window frame: {e}");
+        }
+    }
+    app.api.close_library();
+}
+
+/// Restarts the app after an update was installed (the interface has saved its work first),
+/// finishing as closing the window does.
+#[tauri::command]
+fn restart(app: tauri::AppHandle, window: tauri::Window) {
+    log::info!("restarting to use the update");
+    finish(&window);
+    app.restart();
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -69,6 +90,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        // Updates (R-069, 0072): the interface asks before downloading one, then restarts.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // The main window never leaves the app: a link to the web is stopped, and the interface
         // asks whether to open it in the browser. (The page saver's hidden window is its own.)
         .plugin(
@@ -122,20 +145,10 @@ pub fn run() {
                 return;
             }
             if let WindowEvent::CloseRequested { .. } = event {
-                if let (Ok(pos), Ok(size), Ok(max)) =
-                    (window.outer_position(), window.inner_size(), window.is_maximized())
-                {
-                    let app = window.state::<App>();
-                    let frame =
-                        json!({ "x": pos.x, "y": pos.y, "width": size.width, "height": size.height, "maximized": max });
-                    if let Err(e) = app.api.settings_set_internal(WINDOW_KEY, frame) {
-                        log::warn!("could not save the window frame: {e}");
-                    }
-                    app.api.close_library();
-                }
+                finish(window);
             }
         })
-        .invoke_handler(tauri::generate_handler![rpc, subscribe, bytes])
+        .invoke_handler(tauri::generate_handler![rpc, subscribe, bytes, restart])
         .run(tauri::generate_context!())
         .expect("error while running Librarium");
 }
