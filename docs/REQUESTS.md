@@ -60,11 +60,36 @@ release that people install from.
 
 ## In progress
 
-(Nothing in progress.)
+### R-071 · Closing or quitting leaves the app running without a window
+> "When I close/quit the app, it stays open but window just closes."
+
+- A built copy (test app ID, scratch library) quits properly with ⌘Q and by closing; your
+  test of it "looks good". Found while looking: closing the window closes the library at once,
+  while the interface is still saving its last changes. Next: close the library only after
+  saving, and quit when the window closes.
+
+### R-072 · The library folder must be chosen again at each start
+> "When I open the app, I need to pick my folder again. I want it to remember"
+
+- Your folder is remembered (`store.path` is saved) and the test copy opened its library at
+  start. Likely the copy you use (the development app, or a build that was replaced while
+  testing). Next: make start-up report "opening" at once, never "missing", while the saved
+  folder opens.
 
 ---
 
 ## Done
+
+### R-070 · A new icon (the optically centred kit)
+> "I want to update the icon/logo" (with `librarium-optically-centered-icon-kit.zip`)
+
+- **Changed:** the app icon and the mark in the app use the new kit's Evergreen & gold
+  design. The mark sits slightly lower, so it looks centred (the kit's `centering.json`).
+- **Code:** `assets/brand/librarium-icon-kit/` (the kit, without Android and iOS),
+  `assets/brand/app-icon-macos.svg`, `src-tauri/icons/`, `src/kit/logo.ts`.
+- **Tested:** looked at the generated icon; you saw it in the test copy's Dock.
+- **Left:** your development app shows it after its next rebuild. If the Dock keeps the old
+  one, remove Librarium from the Dock and add it again.
 
 ### R-069 · Let others install Librarium, and keep it updated
 > "How can this be a desktop app I can let others install?" · "I want something that is

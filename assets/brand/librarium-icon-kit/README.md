@@ -1,6 +1,6 @@
 # Librarium icon kit
 
-The supplied book-and-library design has been redrawn as real SVG paths. Bold, centered edition: thicker 54-unit strokes and a corrected vertical placement. house walls terminate at the page edges, the roof has more clearance, and gently softened corners and more balanced proportions improve clarity. The geometry is symmetrical and flat, with clean edges and no embedded bitmap. The SVGs remain editable. The four-pane window and intersecting house/book outlines are retained.
+The supplied book-and-library design has been redrawn as real SVG paths. Bold, centered edition: thicker 54-unit strokes and alpha-area centroid alignment measured at 2000 pixels, with independent correction for the small-size mark. house walls terminate at the page edges, the roof has more clearance, and gently softened corners and more balanced proportions improve clarity. The geometry is symmetrical and flat, with clean edges and no embedded bitmap. The SVGs remain editable. The four-pane window and intersecting house/book outlines are retained.
 
 ## Colorways
 
