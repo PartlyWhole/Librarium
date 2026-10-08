@@ -73,7 +73,8 @@ writeFileSync(join(dir, "latest.json"), `${JSON.stringify(latest, null, 2)}\n`);
 // The same .dmg under a name that never changes, for one lasting download link.
 copyFileSync(dmg, join(dir, "Librarium.dmg"));
 
-run(`git commit -q -am "Release ${version}"`);
+// Nothing to commit when the version was already this one (the first release, 0.1.0).
+if (out("git status --porcelain")) run(`git commit -q -am "Release ${version}"`);
 run(`git tag ${tag}`);
 run(`git push -q origin main ${tag}`);
 execFileSync("gh", ["release", "create", tag, "--repo", REPO, "--title", `Librarium ${version}`, "--notes", notes || `Librarium ${version}.`, dmg, join(dir, "Librarium.dmg"), update, `${update}.sig`, join(dir, "latest.json")], { stdio: "inherit" });
