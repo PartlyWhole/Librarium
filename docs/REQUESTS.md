@@ -53,8 +53,8 @@ release that people install from.
 
 - **A (recommended):** publish as is.
 - **B:** publish without `docs/REQUESTS.md`'s history of your words (it stays local).
-- There is no licence file: without one, others may read the code but not reuse it. Say if you
-  want one (e.g. MIT).
+- **Your answer (2026-10-08): not yet;** no licence (all rights reserved). Say "publish" when
+  you're ready, and whether with or without `docs/REQUESTS.md`.
 
 ---
 
