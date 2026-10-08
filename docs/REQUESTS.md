@@ -60,25 +60,44 @@ release that people install from.
 
 ## In progress
 
-### R-071 · Closing or quitting leaves the app running without a window
-> "When I close/quit the app, it stays open but window just closes."
-
-- A built copy (test app ID, scratch library) quits properly with ⌘Q and by closing; your
-  test of it "looks good". Found while looking: closing the window closes the library at once,
-  while the interface is still saving its last changes. Next: close the library only after
-  saving, and quit when the window closes.
-
-### R-072 · The library folder must be chosen again at each start
-> "When I open the app, I need to pick my folder again. I want it to remember"
-
-- Your folder is remembered (`store.path` is saved) and the test copy opened its library at
-  start. Likely the copy you use (the development app, or a build that was replaced while
-  testing). Next: make start-up report "opening" at once, never "missing", while the saved
-  folder opens.
+(Nothing in progress.)
 
 ---
 
 ## Done
+
+### R-072 · The library folder must be chosen again at each start
+> "When I open the app, I need to pick my folder again. I want it to remember"
+
+- **Diagnosis:** the folder was remembered. At start-up, though, its status could read
+  "missing" for a moment, before it began opening, and the interface then asks for the
+  folder. Closing the app also left it running with the library closed (R-071).
+- **Changed:** the saved folder is "opening" from the first moment, and opens by itself.
+- **Code:** `crates/api/src/lib.rs` (`open_saved_library_soon`, `open_library`),
+  `src-tauri/src/lib.rs`.
+- **Decision:** 0073.
+- **Tested:** an API test; a built test copy opened its saved library at start.
+- **Left:** if it still asks, tell me which copy you opened (the development app or a built
+  one).
+
+### R-071 · Closing or quitting leaves the app running without a window
+> "When I close/quit the app, it stays open but window just closes."
+
+- **Changed:**
+  - closing the window quits Librarium, after your work is saved and the library closed;
+  - ⌘Q is Librarium's own Quit and saves first;
+  - quitting from the Dock closes the library properly (typing not yet saved is kept as a
+    draft).
+- **Code:** `src-tauri/src/lib.rs` (window events, `quit`, run events), `src/shell/shell.ts`
+  (`shell.quit`), `src/shell/menu.ts`, `src/backend.ts` (`quitApp`).
+- **Decision:** 0073.
+- **Tested:**
+  - interface tests (Quit saves first; the menu's Quit is the app's own, a deliberate change);
+  - in a built test copy: a Dock-style quit closed the library and released its lock.
+
+  All interface tests, WebKit checks and Rust tests pass; lint is clean.
+- **Left:** the red close button wasn't confirmed by a click in the built copy (its log showed
+  a Quit instead). Tell me if Librarium stays in the Dock after closing.
 
 ### R-070 · A new icon (the optically centred kit)
 > "I want to update the icon/logo" (with `librarium-optically-centered-icon-kit.zip`)

@@ -2,7 +2,7 @@
  * The shell: layout, router, action and key registry, native menu, prefs, settings, first run.
  * Features contribute through the registries; the shell never imports a feature.
  */
-import { call, closeWindow, on, onCloseRequested, pickFolder } from "../backend";
+import { call, closeWindow, on, onCloseRequested, pickFolder, quitApp } from "../backend";
 import { Undo } from "./undo";
 import { textUndo } from "./text-undo";
 import { jobsUi } from "./jobs";
@@ -211,6 +211,8 @@ export function createShell(root: HTMLElement, features: Feature[]): Shell {
     { id: "shell.toggleSidePanel", title: "Toggle side panel", keys: ["Mod+Alt+\\"], reserved: true, run: () => panelOpen.update((v) => !v), menu: { name: "view", group: 1 }, icon: PanelRight },
     { id: "tabs.new", title: "New tab", keys: ["Mod+T"], reserved: true, run: () => router.newTab(), menu: { name: "file", group: 0 }, icon: Plus },
     { id: "tabs.close", title: "Close tab", keys: ["Mod+W"], reserved: true, run: () => router.close(), menu: { name: "file", group: 9 } },
+    // Saves first, then quits (R-071).
+    { id: "shell.quit", title: "Quit Librarium", keys: ["Mod+Q"], reserved: true, palette: false, run: async () => (await saveAll(), await quitApp()), menu: { name: "app", group: 100 } },
     { id: "tabs.closeWindow", title: "Close window", keys: ["Mod+Shift+W"], reserved: true, run: () => void closeWindow(), menu: { name: "file", group: 9 } },
     { id: "tabs.reopen", title: "Reopen closed tab", keys: ["Mod+Shift+T"], reserved: true, when: () => (router.tabs(), router.canReopen), run: () => void router.reopen(), menu: { name: "file", group: 0 } },
     { id: "tabs.next", title: "Next tab", keys: ["Ctrl+Tab", "Mod+Shift+]"], reserved: true, when: () => router.tabs().length > 1, run: () => router.cycle(1), menu: { name: "window", group: 2 } },

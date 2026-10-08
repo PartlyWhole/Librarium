@@ -314,6 +314,19 @@ impl Api {
         }
     }
 
+    /// Opens the saved library on another thread (at start-up). From now on its status is
+    /// "opening", so the interface never sees it as missing while it opens (R-072).
+    pub fn open_saved_library_soon(self: &Arc<Self>) {
+        if let Some(Value::String(p)) = self.settings.get(LIBRARY_PATH) {
+            let path = PathBuf::from(p);
+            *self.library.write().unwrap() = Lib::Opening(path.clone());
+            let api = self.clone();
+            std::thread::spawn(move || {
+                let _ = api.open_library(&path);
+            });
+        }
+    }
+
     pub fn app_info(&self) -> AppInfo {
         AppInfo {
             name: "Librarium".into(),
@@ -393,8 +406,15 @@ impl Api {
     /// Opens a library folder (closing any open one) and remembers the choice.
     pub fn open_library(self: &Arc<Self>, path: &Path) -> Result<LibraryStatus> {
         let _guard = self.open_lock.lock().unwrap();
-        self.close_library();
-        *self.library.write().unwrap() = Lib::Opening(path.to_path_buf());
+        // Closes any open library and says "opening" in one step: never "none" in between,
+        // which the interface would show as a missing folder.
+        if let Some(h) = self.hosts.write().unwrap().take() {
+            h.stop();
+        }
+        let old = std::mem::replace(&mut *self.library.write().unwrap(), Lib::Opening(path.to_path_buf()));
+        if let Lib::Open(l) = old {
+            l.close();
+        }
         self.notify(events::STATUS, to_json(self.library_status())?);
         let ports = LibraryPorts {
             fs: self.deps.fs.clone(),

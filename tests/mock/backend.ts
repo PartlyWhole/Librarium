@@ -629,6 +629,10 @@ export async function appVersion(): Promise<string> {
   return "0.1.0";
 }
 
+export async function quitApp(): Promise<void> {
+  state.calls.push({ method: "app.quit", params: null });
+}
+
 export async function restartApp(): Promise<void> {
   state.calls.push({ method: "app.restart", params: null });
 }

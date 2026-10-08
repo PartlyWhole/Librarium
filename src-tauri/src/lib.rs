@@ -49,8 +49,8 @@ fn stays_in_app(url: &tauri::Url) -> bool {
 /// The settings key for the main window's frame.
 const WINDOW_KEY: &str = "window.main";
 
-/// What closing the main window does: remember its frame, and close the library.
-fn finish(window: &tauri::Window) {
+/// Remembers the main window's frame (size, place, maximised) for the next start.
+fn remember_frame(window: &tauri::Window) {
     let app = window.state::<App>();
     if let (Ok(pos), Ok(size), Ok(max)) = (window.outer_position(), window.inner_size(), window.is_maximized()) {
         let frame = json!({ "x": pos.x, "y": pos.y, "width": size.width, "height": size.height, "maximized": max });
@@ -58,16 +58,24 @@ fn finish(window: &tauri::Window) {
             log::warn!("could not save the window frame: {e}");
         }
     }
-    app.api.close_library();
 }
 
-/// Restarts the app after an update was installed (the interface has saved its work first),
-/// finishing as closing the window does.
+/// Restarts the app after an update was installed (the interface has saved its work first).
 #[tauri::command]
 fn restart(app: tauri::AppHandle, window: tauri::Window) {
     log::info!("restarting to use the update");
-    finish(&window);
+    remember_frame(&window);
+    app.state::<App>().api.close_library();
     app.restart();
+}
+
+/// Quits (⌘Q, Librarium ▸ Quit Librarium: the interface has saved its work first).
+#[tauri::command]
+fn quit(app: tauri::AppHandle, window: tauri::Window) {
+    log::info!("quitting");
+    remember_frame(&window);
+    app.state::<App>().api.close_library();
+    app.exit(0);
 }
 
 pub fn run() {
@@ -135,22 +143,51 @@ pub fn run() {
                     let _ = w.maximize();
                 }
             }
-            let api = composed.api.clone();
-            std::thread::spawn(move || api.open_saved_library());
+            // The saved library opens on another thread, "opening" from now on (R-072).
+            composed.api.open_saved_library_soon();
             app.manage(composed);
             Ok(())
         })
+        // Closing the window quits the app (R-071), in order: the frame is remembered when
+        // asked; the interface saves its work and then destroys the window; only then is the
+        // library closed, and the app exits (the page saver's hidden window would keep it
+        // running otherwise).
         .on_window_event(|window, event| {
             if window.label() != "main" {
                 return;
             }
-            if let WindowEvent::CloseRequested { .. } = event {
-                finish(window);
+            match event {
+                WindowEvent::CloseRequested { .. } => remember_frame(window),
+                WindowEvent::Destroyed => {
+                    log::info!("the window closed; quitting");
+                    window.state::<App>().api.close_library();
+                    window.app_handle().exit(0);
+                }
+                _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![rpc, subscribe, bytes, restart])
-        .run(tauri::generate_context!())
-        .expect("error while running Librarium");
+        .invoke_handler(tauri::generate_handler![rpc, subscribe, bytes, restart, quit])
+        .build(tauri::generate_context!())
+        .expect("error while starting Librarium")
+        .run(|app, event| match event {
+            // Asked to exit while the window is open (an exit the app asks for itself has a
+            // code): close the window as its close button does, so the interface saves first.
+            tauri::RunEvent::ExitRequested { code: None, api, .. } => {
+                if let Some(w) = app.get_webview_window("main") {
+                    log::info!("asked to quit; closing the window first, to save");
+                    api.prevent_exit();
+                    let _ = w.close();
+                }
+            }
+            // Quit from the Dock or at log-out ends the app at once, without asking: the library
+            // is still closed properly (queued writes finished, the lock released). Typing not
+            // yet saved is in its draft, offered at the next start.
+            tauri::RunEvent::Exit => {
+                log::info!("exiting; closing the library");
+                app.state::<App>().api.close_library();
+            }
+            _ => {}
+        });
 }
 
 #[cfg(test)]

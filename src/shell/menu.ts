@@ -38,7 +38,9 @@ export function menuSpec(actions: Actions): MenuSection[] {
   const sep: MenuEntry = { kind: "separator" };
   const withSep = (xs: MenuEntry[]) => (xs.length ? [...xs, sep] : []);
   const sections: Record<MenuName, MenuEntry[]> = {
-    app: [{ kind: "predefined", item: "About", text: "About Librarium" }, sep, ...withSep(custom("app")), { kind: "predefined", item: "Services" }, sep, { kind: "predefined", item: "Hide" }, { kind: "predefined", item: "HideOthers" }, { kind: "predefined", item: "ShowAll" }, sep, { kind: "predefined", item: "Quit" }],
+    // Quit is the app's own (group 100, last): the system's would end the app before the
+    // interface saves (R-071).
+    app: [{ kind: "predefined", item: "About", text: "About Librarium" }, sep, ...withSep(custom("app", (g) => g < 100)), { kind: "predefined", item: "Services" }, sep, { kind: "predefined", item: "Hide" }, { kind: "predefined", item: "HideOthers" }, { kind: "predefined", item: "ShowAll" }, sep, ...custom("app", (g) => g >= 100)],
     // "Close window" is the app's own (⇧⌘W): ⌘W closes a tab.
     file: custom("file"),
     // Without these, ⌘C and ⌘V stop working in a Tauri app. Undo and Redo are the app's own

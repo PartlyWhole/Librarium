@@ -7,6 +7,7 @@ fn main() {
         "subscribe",
         "bytes",
         "restart",
+        "quit",
     ]));
     tauri_build::try_build(attrs).expect("tauri build script");
 }

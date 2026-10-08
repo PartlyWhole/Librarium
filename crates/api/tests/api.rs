@@ -134,11 +134,25 @@ fn first_run_then_open_create_save_and_events() {
     );
 
     // The choice is remembered.
-    let a2 = api_with(fs);
+    let a2 = api_with(fs.clone());
+    let fs2 = fs;
     a.close_library();
     a2.open_saved_library();
     assert_eq!(a2.library_status().state, LibraryState::Open);
     assert_eq!(a2.records_list(Default::default()).unwrap().len(), 1);
+
+    // At start-up it opens on another thread, and says "opening" from the start, never
+    // "missing" (R-072: the interface then asked for the folder again).
+    a2.close_library();
+    let a3 = api_with(fs2);
+    a3.open_saved_library_soon();
+    assert_ne!(a3.library_status().state, LibraryState::Missing);
+    assert_ne!(a3.library_status().state, LibraryState::None);
+    let t = std::time::Instant::now();
+    while a3.library_status().state != LibraryState::Open && t.elapsed() < std::time::Duration::from_secs(10) {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(a3.library_status().state, LibraryState::Open);
 }
 
 #[test]

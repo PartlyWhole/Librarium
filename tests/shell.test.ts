@@ -124,7 +124,25 @@ describe("actions are reachable", () => {
     expect(items.slice(0, 2).map((e) => [e.text, e.accelerator, e.enabled])).toEqual([["Undo", "CmdOrCtrl+Z", false], ["Redo", "CmdOrCtrl+Shift+Z", false]]);
     const app = spec[0]!.entries;
     expect(app.some((e) => e.kind === "item" && e.text === "Settings…" && e.accelerator === "CmdOrCtrl+,")).toBe(true);
-    expect(app.some((e) => e.kind === "predefined" && e.item === "Quit")).toBe(true);
+    // Quit is the app's own, last, so the interface saves before the app ends (R-071; it was
+    // the system's item, which quit without saving).
+    expect(app.some((e) => e.kind === "predefined" && e.item === "Quit")).toBe(false);
+    const last = app.at(-1)!;
+    expect(last.kind === "item" && [last.text, last.accelerator]).toEqual(["Quit Librarium", "CmdOrCtrl+Q"]);
+  });
+
+  it("Quit saves everything first, then quits (R-071)", async () => {
+    const shell = await boot();
+    const quits = () => mock.state.calls.filter((c) => c.method === "app.quit").length;
+    let quitBeforeSaved: number | null = null;
+    shell.beforeClose(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+      quitBeforeSaved = quits();
+    });
+    shell.actions.run("shell.quit");
+    await new Promise((r) => setTimeout(r, 60));
+    expect(quitBeforeSaved).toBe(0);
+    expect(quits()).toBe(1);
   });
 
   it("the documented shortcuts run their actions", async () => {

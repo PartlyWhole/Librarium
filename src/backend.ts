@@ -212,6 +212,11 @@ export async function appVersion(): Promise<string> {
   return inTauri() ? getVersion() : "development";
 }
 
+/** Quits the app; the caller has saved its work first (R-071). */
+export async function quitApp(): Promise<void> {
+  if (inTauri()) await invoke("quit");
+}
+
 /** Restarts the app (after an update), finishing as closing the window does. */
 export async function restartApp(): Promise<void> {
   if (inTauri()) await invoke("restart");
