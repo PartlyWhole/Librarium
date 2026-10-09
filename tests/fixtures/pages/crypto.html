@@ -1,6 +1,0 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Web Crypto check</title></head>
-<body><article><h1>Web Crypto check</h1><p id="out">checking</p><p>An ordinary paragraph of text, long enough to be an article body for the checks.</p></article>
-<script>
-document.getElementById("out").textContent = "Web Crypto: " + (window.crypto && window.crypto.subtle ? "available" : "hidden") + "; random: " + (window.crypto && typeof window.crypto.getRandomValues === "function" ? "yes" : "no");
-</script></body></html>

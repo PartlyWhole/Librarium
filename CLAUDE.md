@@ -1,35 +1,26 @@
-# Working on Librarium (for AI sessions)
+# Working on Librarium
 
-Read these first: `BRIEF.md` (what the app must be), `docs/DEVELOPING.md` (how the code is
-organised, lessons learned), `docs/REQUESTS.md` (what the user is asking for).
+Read these before changing anything:
+- [SPEC.md](SPEC.md): what the app does
+- [FORMAT.md](FORMAT.md): the files it reads and writes
+- [ARCHITECTURE.md](ARCHITECTURE.md): where the code is
 
-## Requests: the user writes, you answer
+## Rules
 
-At the start of a session, and whenever the user says "check requests", open
-`docs/REQUESTS.md`:
-
-1. **Inbox → In progress.** Give each new item the next number (`R-NNN`, after the highest in
-   the file), keep the user's words as a quote, and move it to **In progress**.
-2. **Only the user can decide?** Put a clear question under **Waiting for you** (options,
-   trade-offs, your recommendation) and work on other items. Never guess at their decisions.
-3. **When done, move it to Done (newest first)** with:
-   - **Changed:** what is different, in plain words.
-   - **Use:** how to use it (keys, menus).
-   - **Code:** where it lives (paths).
-   - **Commits**, **Decision** records, **Tested** (and what couldn't be tested, e.g. needs
-     the real app).
-   - **Left:** what wasn't done, or follow-ups (make new Waiting/Inbox items if needed).
-4. Keep `docs/DEVELOPING.md`, the README decision table and `docs/decisions/` current, as
-   for any change.
-
-## Rules that always hold
-
-- Ask the user only where the brief says to; otherwise decide and record the decision.
-- Never weaken tests; when behaviour changes on purpose, update tests and say so.
-- Never touch files outside the project folder, the user's library folder and the app's own
-  folders. Never delete user data without the two-step confirmation.
-- Commit messages are plain, explain why, and end with the co-author line given in the
-  session.
-- The user's app often runs from this working tree (`npm run dev`): Rust edits restart it.
-- Verify interface changes in the preview (`npm run dev:mock`, port 1421); say plainly what
-  only the real app can show.
+- **Requests are GitHub issues** (`gh issue list`). Commits that finish one say `Fixes #N`.
+- **Keep the three docs true.** When behaviour, the format or the layout changes, update
+  SPEC.md, FORMAT.md or ARCHITECTURE.md in the same commit.
+  - The docs describe the app as it is now. They never record history or progress; git does
+    that.
+- **The file format is a promise.** Existing libraries must keep working. Change FORMAT.md only by
+  addition, and only with the user's agreement.
+- **Keep the code small.**
+  - No layers, registries or abstractions without a second use.
+  - No tests for things you can see by running the app.
+  - Delete code that stops being used.
+- **Ask the user** about the data format, about deleting anything, and when the spec is silent on
+  something they would notice. Otherwise decide, and say what you decided in the commit message.
+- **Never delete user data** without the two-step confirmation (archive, then confirm).
+- **Never touch files** outside the project folder, the user's library folder and the app's own
+  folders.
+- **Commit messages** are plain and explain why.
