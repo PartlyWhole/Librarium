@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000" role="img" aria-labelledby="title">
+<title id="title">Librarium</title>
+<rect width="1000" height="1000" rx="210" fill="#202D46"/>
+<g transform="translate(50 62.097724) scale(.9)" fill="none" stroke="#EBE7DA" stroke-width="54">
+<path d="M160 210 C310 204 431 232 500 310 C569 232 690 204 840 210 L840 690 C785 688 740 694 700 707 C617 733 548 760 500 800 C452 760 383 733 300 707 C260 694 215 688 160 690 Z" stroke-linejoin="round"/>
+<path d="M300 707 L300 514 L500 402 L700 514 L700 707" stroke-linejoin="round" stroke-linecap="butt"/>
+<g fill="#EBE7DA" stroke="none"><rect x="443.0" y="551" width="48" height="48"/><rect x="509.0" y="551" width="48" height="48"/><rect x="443.0" y="617" width="48" height="48"/><rect x="509.0" y="617" width="48" height="48"/></g>
+</g></svg>
