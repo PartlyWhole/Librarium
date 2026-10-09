@@ -107,6 +107,7 @@ export function renderItem(host: HTMLElement, params: Record<string, string>, ct
     title: r.title,
     bytes: () => readBytes(id, web ? `snapshots/${snap}/page.pdf` : undefined),
     text: () => (web ? Promise.resolve(null) : call<Extracted | null>("library.text", { id }).catch(() => null)),
+    storedText: () => storedText().then((t) => t?.text ?? null),
   };
   void load()
     .then((engine) => engine(stage, src, {

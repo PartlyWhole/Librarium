@@ -334,6 +334,8 @@ One window. Only regions scroll, never the window.
 - **Text layer.**
   - The selectable text lies exactly over the page, placed per word with the PDF's own letter
     widths. Drags snap to whole words.
+  - Words whose ligatures PDF.js misreads ("diSerent", common in saved web pages) are corrected
+    from the stored text, so find, selection and copying see "different".
   - Multi-line highlights are one band per line.
   - Before going to a place, the reader measures the pages up to it, so mixed page sizes never
     shift the target.
