@@ -8,31 +8,38 @@ framework, except React inside boards, because Excalidraw needs it. What the app
 
 ```
 src-tauri/src/            the backend: one crate, one module per concern
-  main.rs                 app setup: plugins, window, menu, commands
-  commands.rs             every Tauri command, thin: parse → call a module → return
+  lib.rs                  app setup: plugins, the window, quitting, blocked navigation
+  app.rs                  the app's state: settings, the open library, opening and closing
+  commands.rs             the `call` command: one match from method name to module function
+  types.rs  error.rs      what crosses to the interface (exported to src/types.ts), errors
   store/                  the library folder: the only code that writes to it
-    write.rs              safe writes, and the write lock that orders them
+    write.rs              safe writes, intents, and the write lock that orders them
     frontmatter.rs        byte-preserving YAML frontmatter edits
-    record.rs             read and write records, rename and move, sidecars
-    scan.rs               walk the folder; spot outside changes (startup scan + live watch)
-    repair.rs             duplicate IDs, missing IDs, unfinished operations
+    record.rs             read, create and save records; rename and move; merging
+    files.rs              sidecars, item folders, staged imports
+    folders.rs            user folders and order.json
+    scan.rs               walk the folder; outside changes (startup scan + live watch)
+    repair.rs             duplicate IDs, missing IDs
   index.rs                one SQLite file: records, links, full-text search
   links.rs                the [[label|id]] parser
-  notes.rs  daily.rs  boards.rs  captures.rs  archive.rs  history.rs
-  library/                import, text extraction (PDFKit, EPUB), text recognition (Vision)
-  websave.rs              saving pages with WKWebView
+  notes.rs  daily.rs  archive.rs  history.rs  captures.rs  boards.rs
+  library/                import, text extraction (PDFKit, EPUB), recognition (Vision), snapshots
+  websave/                saving pages with a hidden WKWebView, and the page checks
+  reader.rs               files for the reader: the `bytes` command and the asset: protocol
   jobs.rs                 background work that resumes after a restart
   settings.rs             settings.json and drafts in app data
+  devbridge.rs            development only: a browser can drive the backend (see below)
 
 src/                      the interface
-  main.ts                 start-up: builds the layout and opens the library
-  backend.ts              the only file that calls Tauri; typed wrappers for every command
-  types.ts                generated from the backend's types (ts-rs); never edited by hand
-  ui/                     small DOM kit: h(), signals, dialog, menu, toast, tree, picker, icons
-  app/                    layout, tabs, actions (menu + palette + keys), undo, settings page
-  notes/                  note page and the CodeMirror editor
-  reader/                 the reader, with pdf/, epub/ and image/
-  captures/  library/  boards/  search/  archive/  history/  websave/
+  main.ts                 start-up: imports the features and starts the shell
+  backend.ts              the only file that calls Tauri
+  types.ts                generated from types.rs (ts-rs); never edited by hand
+  ui/                     a small DOM kit: h(), signals, dialogs, menus, toasts, tree, pickers
+  app/                    the shell: layout, tabs, router, actions (menu bar, palette, keys),
+                          undo, side panel, jobs, settings, the Notes and Library folder pages
+  notes/                  the note page, embeds, history; editor/ is CodeMirror
+  reader/                 the item page: pdf/, image/, epub/, and what captures draw with
+  captures/  boards/  library/  websave/  search/  archive/  updates/
 ```
 
 ## Rules
@@ -65,6 +72,14 @@ Tests guard what can't be seen by looking at the app: the user's data.
 - `src/captures/anchor.test.ts`: finding a capture's place again after edits.
 
 Interface behaviour is checked by running the app (`npm run dev`), not by unit tests.
+
+## Trying it without your library
+
+`LIBRARIUM_DATA=<dir>` gives a run its own app data (settings, index, drafts), so it opens
+whatever library that `settings.json` names, never yours. In a debug build,
+`LIBRARIUM_BRIDGE=<port>` also lets a browser at `http://localhost:1420/?bridge=<port>` drive
+the real backend, which is how the interface is clicked through and checked from outside the
+window. Native menus, file dialogs and window drops only work in the app itself.
 
 ## Commands
 
