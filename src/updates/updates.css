@@ -1,0 +1,4 @@
+/* What's new in an update, in its dialog. */
+.update-notes { max-height: 40vh; overflow: auto; }
+.update-notes h3 { font-size: var(--small); margin: 12px 0 4px; }
+.update-notes p { white-space: pre-wrap; margin: 0; }

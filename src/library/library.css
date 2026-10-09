@@ -1,0 +1,2 @@
+/* Files dragged over the window: a frame around the page, where they will be added. */
+body.dropping .workspace { outline: 2px dashed var(--accent); outline-offset: -6px; }

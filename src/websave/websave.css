@@ -1,0 +1,4 @@
+/* The Save web pages dialog: a list of addresses, what will be saved, and the snapshot choice. */
+.links-input { display: block; width: 100%; min-height: 96px; max-height: 50vh; resize: vertical; margin: 8px 0 4px; padding: 8px; border: 1px solid var(--border-strong); border-radius: var(--r1); background: var(--bg); font-family: var(--font-mono); font-size: var(--small); }
+.check-row { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; color: var(--ink); }
+.check-row[hidden] { display: none; }

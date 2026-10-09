@@ -10,7 +10,7 @@ import { showStatus } from "../app/status";
 import { errorText } from "../ui/dom";
 import { count } from "../ui/format";
 import { toast } from "../ui/toast";
-import type { Written } from "../types";
+import type { ImportResult, Written } from "../types";
 import { insertEmbeds } from "./editor/editor";
 
 const ATTACHMENTS = "Attachments";
@@ -18,11 +18,6 @@ const IMAGES = ["png", "jpg", "jpeg", "gif", "webp", "heic", "tif", "tiff"];
 const DOCUMENTS = ["pdf", "epub"];
 /** Pasted data larger than this is refused (as base64, about 70 MB). */
 const MAX_PASTE = 50 * 1024 * 1024;
-
-interface ImportResult {
-  imported: Written[];
-  failed: { path: string; error: string }[];
-}
 
 const extension = (path: string) => path.split(".").pop()?.toLowerCase() ?? "";
 
