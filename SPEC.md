@@ -608,7 +608,7 @@ Preferences are per device, in app data (`settings.json`), never in WebKit stora
 ## Updates and releases
 
 - **Checking.** The app checks 20 s after start, then daily.
-  - Toast: "Librarium X is available" (**Update…**). The dialog shows What's new, with
+  - Toast: "Librarium X is available." (**Update…**). The dialog shows What's new, with
     **Install** / **Later**.
   - Progress shows in the status bar.
   - Then: "Restart to use Librarium X?" (**Restart now**, which saves first, / **Later**).

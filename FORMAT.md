@@ -324,7 +324,7 @@ Stored text is never regenerated if it is present. Anchors point into it.
 
   | Part | Selector | Extra fields |
   |---|---|---|
-  | Text | `[quote, position]`, then `page=N` (PDF) or a CFI (EPUB) | — |
+  | Text | `[quote, position]`, then `page=N` (PDF) or a CFI (EPUB) | `boxes` (PDF, image) |
   | PDF region | `[{page=N, "refinedBy": xywh}]` | `boxes`, `region` |
   | Image region | `[xywh]` | `boxes`, `region` |
   | EPUB picture | `[cfi]` or `[]` | `region` |
