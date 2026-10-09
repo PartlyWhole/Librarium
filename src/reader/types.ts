@@ -11,6 +11,8 @@ interface ReaderSource {
   bytes(): Promise<ArrayBuffer>;
   /** The stored extracted text (`extracted/text-v1.json`), if any. */
   text(): Promise<Extracted | null>;
+  /** The text anchors see (`records.text`), whose words correct what PDF.js misreads. */
+  storedText(): Promise<string | null>;
 }
 
 /** The extracted text as stored (FORMAT.md › Stored text). */

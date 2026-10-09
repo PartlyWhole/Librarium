@@ -14,7 +14,7 @@ import { boxesIn, dragRect, drawMarks, endOf, flashPlace, innerRect, outlineRegi
 import { ocrFind, ocrLayer, type OcrLine } from "../ocr";
 import { boxesPlace, pageAtOffset, pageOf, regionOf, type Box, type EditPart, type Engine, type Mark, type ReaderView } from "../types";
 import { alignToInk, invisibleText } from "./ink";
-import { placeWords } from "./words";
+import { knownWords, placeWords } from "./words";
 
 const BASE = "/pdfjs/";
 pdfjs.GlobalWorkerOptions.workerSrc = `${BASE}pdf.worker.min.mjs`;
@@ -88,8 +88,6 @@ export const openPdf: Engine = async (host, src, events) => {
     const div = pageDiv(n);
     if (div) drawMarks(div, marks, n);
   };
-  // Selectable text placed on the printed words, set up before each page draws its text.
-  eventBus.on("pagerender", (e: { source?: { pdfPage?: unknown } }) => placeWords(e.source?.pdfPage));
   // Scanned pages (text drawn invisibly over a picture): the words are moved onto the ink,
   // after the page and its text are drawn, and again after a zoom.
   const inkTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -137,6 +135,11 @@ export const openPdf: Engine = async (host, src, events) => {
 
   const task = pdfjs.getDocument({ data: new Uint8Array(await src.bytes()), ...DOCUMENT_OPTIONS });
   const doc = await task.promise;
+  // Every page's text mended against the stored text's words and placed on the printed words,
+  // before anything reads it.
+  const known = src.storedText().then(knownWords, () => knownWords(null));
+  const getPage = doc.getPage.bind(doc);
+  doc.getPage = (n) => getPage(n).then((p) => (placeWords(p, known), p));
   viewer.setDocument(doc);
   linkService.setDocument(doc);
 
