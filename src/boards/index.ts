@@ -37,9 +37,9 @@ async function newBoard(): Promise<void> {
 const onBoard = () => !!shownBoard();
 
 defineAction({ id: "boards.new", title: "New board", keys: ["Mod+Alt+N"], reserved: true, when: isOpen, run: newBoard, menu: { name: "file", group: 0.5 }, icon: Shapes });
-defineAction({ id: "boards.linkTo", title: "Link to a note or item…", keys: ["Mod+Alt+K"], reserved: true, when: onBoard, run: () => shownBoard()?.linkTo(), menu: { name: "edit", group: 2.1 } });
-defineAction({ id: "boards.insert", title: "Put a capture, note or item on the board…", keys: ["Mod+Alt+I"], reserved: true, when: onBoard, run: () => shownBoard()?.insert(), menu: { name: "edit", group: 2.2 } });
-for (const [as, title, n] of [["png", "Export board as PNG…", 0.3], ["svg", "Export board as SVG…", 0.4], ["excalidraw", "Export board as Excalidraw file…", 0.5]] as const) {
+defineAction({ id: "boards.linkTo", title: "Link to…", keys: ["Mod+Alt+K"], reserved: true, when: onBoard, run: () => shownBoard()?.linkTo(), menu: { name: "edit", group: 3.1, title: "Link to a note or item…" } });
+defineAction({ id: "boards.insert", title: "Put on the board…", keys: ["Mod+Alt+I"], reserved: true, when: onBoard, run: () => shownBoard()?.insert(), menu: { name: "edit", group: 3.2, title: "Put a capture, note or item on the board…" } });
+for (const [as, title, n] of [["png", "Export board as a picture (PNG)…", 0.3], ["svg", "Export board as a picture (SVG)…", 0.4], ["excalidraw", "Export board as an Excalidraw file…", 0.5]] as const) {
   defineAction({ id: `boards.export.${as}`, title, when: onBoard, run: () => void shownBoard()?.exportAs(as), menu: { name: "file", group: 3 + n } });
 }
 

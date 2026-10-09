@@ -74,9 +74,7 @@
 .ws-page[hidden] { display: none !important; }
 .status-link { border: 0; background: none; padding: 0 4px; font: inherit; color: inherit; cursor: pointer; border-radius: var(--r1); }
 .status-link:hover { background: var(--hover); }
-.status-link.failed { color: #b42318; }
-:root[data-theme="dark"] .status-link.failed { color: #ff8a80; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .status-link.failed { color: #ff8a80; } }
+.status-link.failed { color: var(--destructive); }
 .job-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .jobs-head { align-items: baseline; gap: 10px; }
 .panel-section:focus { outline: none; }

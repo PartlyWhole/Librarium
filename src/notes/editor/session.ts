@@ -21,7 +21,7 @@ export interface Resolution {
   baseBody: string;
 }
 
-export interface SessionHooks {
+interface SessionHooks {
   /** The text the editor shows now. */
   current(): string;
   /** Show this text (a merge's result, or the version chosen). */

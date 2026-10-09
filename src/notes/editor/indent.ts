@@ -16,7 +16,7 @@ const LIST = /^\s*([-*+]|\d+[.)])(\s|$)/;
 const VERBATIM = new Set(["FencedCode", "HTMLBlock", "CommentBlock", "Table"]);
 
 /** The columns that leading whitespace takes, tabs stopping every four. */
-export function indentColumns(ws: string): number {
+function indentColumns(ws: string): number {
   let col = 0;
   for (const c of ws) col = c === "\t" ? (Math.floor(col / TAB) + 1) * TAB : col + 1;
   return col;

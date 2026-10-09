@@ -11,15 +11,8 @@ import { errorText } from "../ui/dom";
 import { count } from "../ui/format";
 import { toast } from "../ui/toast";
 import type { ImportResult, Written } from "../types";
+import { ATTACHMENTS, base64, DOCUMENT_EXTENSIONS, extension, isImagePath, MAX_PASTE, pastedName } from "../library/files";
 import { insertEmbeds } from "./editor/editor";
-
-const ATTACHMENTS = "Attachments";
-const IMAGES = ["png", "jpg", "jpeg", "gif", "webp", "heic", "tif", "tiff"];
-const DOCUMENTS = ["pdf", "epub"];
-/** Pasted data larger than this is refused (as base64, about 70 MB). */
-const MAX_PASTE = 50 * 1024 * 1024;
-
-const extension = (path: string) => path.split(".").pop()?.toLowerCase() ?? "";
 
 /** The editor at a point in the window, if a note's editor is shown there. */
 export function editorAt(at: { x: number; y: number }): EditorView | null {
@@ -41,12 +34,12 @@ function embed(view: EditorView, written: Written[], at?: { x: number; y: number
 
 /** Files dropped on a note: pictures go to Attachments, documents to the Library's top. */
 async function dropped(view: EditorView, paths: string[], at: { x: number; y: number }): Promise<void> {
-  const refused = paths.filter((p) => ![...IMAGES, ...DOCUMENTS].includes(extension(p)));
+  const refused = paths.filter((p) => !isImagePath(p) && !DOCUMENT_EXTENSIONS.includes(extension(p)));
   for (const p of refused) toast(`“${p.split("/").pop()}” isn’t a picture, a PDF or an EPUB.`);
   const written: Written[] = [];
   const groups: [string[], string | null][] = [
-    [paths.filter((p) => IMAGES.includes(extension(p))), ATTACHMENTS],
-    [paths.filter((p) => DOCUMENTS.includes(extension(p))), null],
+    [paths.filter(isImagePath), ATTACHMENTS],
+    [paths.filter((p) => DOCUMENT_EXTENSIONS.includes(extension(p))), null],
   ];
   try {
     for (const [list, folder] of groups) {
@@ -59,13 +52,6 @@ async function dropped(view: EditorView, paths: string[], at: { x: number; y: nu
     toast(errorText(e));
   }
   embed(view, written, at);
-}
-
-async function base64(f: Blob): Promise<string> {
-  const bytes = new Uint8Array(await f.arrayBuffer());
-  let bin = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
 }
 
 /** Files pasted into a note (a picture copied in another app). */
@@ -81,11 +67,9 @@ export async function pasted(view: EditorView, files: File[]): Promise<void> {
       toast(`“${f.name || "That"}” is too large to paste (over 50 MB); add it as a file.`);
       continue;
     }
-    const ext = (f.type.split("/")[1] ?? "png").replace("jpeg", "jpg").replace("+xml", "");
-    const stamp = new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }).replace(/[/:]/g, ".");
-    const name = f.name && f.name !== "image.png" ? f.name : `Pasted image ${stamp}.${ext}`;
     try {
-      written.push(await call<Written>("library.importData", { name, data: await base64(f), ...(picture ? { folder: ATTACHMENTS } : {}) }));
+      const data = base64(new Uint8Array(await f.arrayBuffer()));
+      written.push(await call<Written>("library.importData", { name: pastedName(f), data, ...(picture ? { folder: ATTACHMENTS } : {}) }));
     } catch (e) {
       toast(errorText(e));
     }

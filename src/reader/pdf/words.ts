@@ -11,7 +11,7 @@
  */
 
 /** A text item as PDF.js gives it (the parts used here). */
-export interface TextItem {
+interface TextItem {
   str: string;
   dir?: string;
   width: number;
@@ -22,10 +22,10 @@ export interface TextItem {
 }
 
 /** What is needed of a PDF font: each character's advance, in glyph units (1000 to the em). */
-export type Advance = (ch: string) => number | null;
+type Advance = (ch: string) => number | null;
 
 /** Splits runs into words placed by their font's advances; items it can't place stay whole. */
-export function splitIntoWords<T>(items: (T | TextItem)[], advanceFor: (fontName: string) => Advance | null): (T | TextItem)[] {
+function splitIntoWords<T>(items: (T | TextItem)[], advanceFor: (fontName: string) => Advance | null): (T | TextItem)[] {
   const out: (T | TextItem)[] = [];
   for (const it of items) {
     if (!isText(it)) {
@@ -71,7 +71,7 @@ function splitItem(it: TextItem, advance: Advance | null): TextItem[] {
 }
 
 /** A PDF.js font's data (with `fontExtraProperties`), as far as advances go. */
-export interface FontData {
+interface FontData {
   widths?: Record<number, number> | number[];
   defaultWidth?: number;
   toUnicode?: { _map?: (string | undefined)[]; firstChar?: number; lastChar?: number };
@@ -80,7 +80,7 @@ export interface FontData {
 }
 
 /** Advances from a font's widths, found through its character-to-text map. */
-export function advancesOf(font: FontData | null | undefined): Advance | null {
+function advancesOf(font: FontData | null | undefined): Advance | null {
   if (!font || font.vertical || font.isType3Font || !font.widths) return null;
   const widths = font.widths as Record<number, number>;
   const map = font.toUnicode?._map;

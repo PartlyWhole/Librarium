@@ -25,7 +25,7 @@ import { deleteCapture } from "./delete";
 import { Crop, Highlighter, Pencil, Quote, Trash2, X } from "lucide";
 
 /** A part of the capture being made. */
-export interface DraftPart extends CapturePart {
+interface DraftPart extends CapturePart {
   key: string;
   /** A region's picture, shown while the capture is made. */
   preview?: string;
@@ -185,7 +185,7 @@ onReaderOpen((r) => {
     const { part, found } = partFromSelection(sel, await r.text());
     add(part);
     view.clearSelection?.();
-    if (!found) showStatus("The stored text doesn’t contain that passage exactly, so it was kept with its page only.", 6000);
+    if (!found) showStatus("The stored text doesn’t contain that passage exactly; it was kept with its page only.", 6000);
   };
   const addRegion = async () => {
     if (!view.pickRegion) return showStatus("Regions can’t be captured in this kind of item.");
@@ -199,6 +199,8 @@ onReaderOpen((r) => {
     try {
       if (d.editing) {
         let w = await call<Written>("captures.update", { id: d.editing.id, parts: d.parts.map(toPart) });
+        // Recorded now, so a failed rename below doesn't hide the new parts.
+        putRecord(w.info);
         const title = d.editing.title.replace(/\s+/g, " ").trim();
         if (title && title !== d.editing.original && title !== w.info.title) w = await call<Written>("records.relocate", { id: d.editing.id, title });
         putRecord(w.info);

@@ -30,7 +30,7 @@ export function modal(content: Child, opts: { label: string; className?: string;
   return { el, close };
 }
 
-export interface ChoiceButton<T> {
+interface ChoiceButton<T> {
   label: string;
   value: T;
   primary?: boolean;

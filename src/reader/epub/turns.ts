@@ -5,7 +5,7 @@
  */
 export type Side = "left" | "right";
 
-export interface Turner {
+interface Turner {
   flip(side: Side): Promise<void>;
   /** For `wheel` events on the book and its pages (not passive). */
   onWheel(e: WheelEvent): void;

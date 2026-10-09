@@ -85,7 +85,7 @@ export async function findReferences(id: string): Promise<Reference[]> {
  * in a sentence it becomes “quote” (cite). A link kept as text becomes its words. Removing
  * takes the line with it when nothing else is on it.
  */
-export function rewrite(body: string, link: Link, choice: Choice, asText: AsText): string {
+function rewrite(body: string, link: Link, choice: Choice, asText: AsText): string {
   if (choice === "leave") return body;
   const ln = lineAt(body, link.from);
   const prefix = body.slice(ln.from, link.from);

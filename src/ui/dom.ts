@@ -1,7 +1,7 @@
 /** A tiny element builder: `h("button", { class: "x", "aria-label": "Close", onclick }, "Text")`. */
 
 export type Child = Node | string | number | null | undefined | false | Child[];
-export type Props = Record<string, unknown> & { class?: string; style?: Partial<CSSStyleDeclaration> | string };
+type Props = Record<string, unknown> & { class?: string; style?: Partial<CSSStyleDeclaration> | string };
 
 export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props | null = null, ...children: Child[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);

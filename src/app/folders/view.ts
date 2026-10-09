@@ -87,7 +87,7 @@ export function renderFolder(sp: Space, host: HTMLElement, params: Record<string
   const body = h("div", { class: "files-body", role: "listbox", "aria-multiselectable": "true", "aria-label": "Contents", tabindex: "-1" });
   const empty = h("div", { class: "files-empty" });
   // Below: how much is here, and what can be done with what is selected.
-  const footText = h("span", { class: "files-count", role: "status", "aria-live": "polite" });
+  const footText = h("span", { role: "status", "aria-live": "polite" });
   const footActions = h("span", { class: "files-actions", role: "toolbar", "aria-label": "Selected items" });
   replace(host, bar, head, body, empty, h("div", { class: "files-foot" }, footText, footActions));
   host.classList.add("files-page");

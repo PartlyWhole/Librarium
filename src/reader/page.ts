@@ -80,6 +80,9 @@ export function renderItem(host: HTMLElement, params: Record<string, string>, ct
 
   let alive = true;
   const cleanup: (() => void)[] = [];
+  // The stored text anchors and search offsets point into, fetched once.
+  let stored: Promise<StoredText | null> | null = null;
+  const storedText = () => (stored ??= call<StoredText | null>("records.text", { id, part: snap ?? null }).catch(() => null));
   // A place asked for before the document opened.
   let pending: Record<string, string> | null = params;
   const goTo = (v: ReaderView, p: Record<string, string>) => {
@@ -89,6 +92,14 @@ export function renderItem(host: HTMLElement, params: Record<string, string>, ct
       } catch {
         /* not a place */
       }
+    } else if (p.at && web) {
+      // A saved page's text isn't split into the PDF's pages: its first words there are found.
+      void storedText().then((t) => {
+        const words = t ? [...t.text].slice(Number(p.at), Number(p.at) + 400).join("").trim().split(/\s+/).slice(0, 8).join(" ") : "";
+        if (!words || !alive) return;
+        findInput.value = words;
+        void find(true);
+      });
     } else if (p.at) v.goToTextOffset?.(Number(p.at));
   };
   const src = {
@@ -100,7 +111,7 @@ export function renderItem(host: HTMLElement, params: Record<string, string>, ct
   void load()
     .then((engine) => engine(stage, src, {
       moved: () => (pos.textContent = view?.position() ?? ""),
-      firstPaint: (ms) => console.info(`reader: first page of ${formatOf(r)} in ${Math.round(ms)} ms`),
+      firstPaint: (ms) => void call("app.log", { level: "info", message: `reader: first page of ${formatOf(r)} in ${Math.round(ms)} ms` }).catch(() => {}),
     }))
     .then((v) => {
       if (!alive) return v.destroy();
@@ -109,8 +120,7 @@ export function renderItem(host: HTMLElement, params: Record<string, string>, ct
       if (v.controls?.start) toolbar.prepend(...v.controls.start);
       if (v.controls?.end) findInput.before(...v.controls.end);
       if (v.immersive) cleanup.push(immersiveChrome(host, toolbar, findInput, v));
-      let stored: Promise<StoredText | null> | null = null;
-      cleanup.push(announce({ source: r, snapshot: snap, view: v, tools, body, text: () => (stored ??= call<StoredText | null>("records.text", { id, part: snap ?? null }).catch(() => null)) }));
+      cleanup.push(announce({ source: r, snapshot: snap, view: v, tools, body, text: storedText }));
       if (pending) goTo(v, pending);
       pending = null;
     }, (e) => alive && replace(stage, h("p", { class: "empty" }, `This item couldn’t be opened: ${errorText(e)}`)));

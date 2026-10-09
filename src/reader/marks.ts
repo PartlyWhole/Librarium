@@ -47,7 +47,7 @@ function grow(prev: Edges, r: Edges): void {
  * Boxes (percent of an element `width` × `height` pixels) joined into one per line, as a
  * selection is drawn. Older captures have one box per word.
  */
-export function joinLines(boxes: Box[], width: number, height: number): Box[] {
+function joinLines(boxes: Box[], width: number, height: number): Box[] {
   if (!width || !height) return boxes;
   const out: (Edges & { page?: number })[] = [];
   for (const x of boxes) {

@@ -10,7 +10,7 @@ import { errorText, h } from "../ui/dom";
 import { toast } from "../ui/toast";
 
 /** An address to ask about (web, mail), or null for the app's own. */
-export function externalUrl(href: string | null | undefined): URL | null {
+function externalUrl(href: string | null | undefined): URL | null {
   if (!href) return null;
   try {
     const u = new URL(href, location.href);

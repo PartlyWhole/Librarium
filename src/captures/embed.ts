@@ -15,7 +15,7 @@ import "./captures.css";
 export function captureEmbed(r: RecordInfo, open: (id: string, e: MouseEvent) => void): HTMLElement {
   const quote = quoteOf(r);
   const cite = h("a", { href: "#", class: "embed-cite", title: "Show it in the source", onclick: (e: MouseEvent) => (e.preventDefault(), showInSource(r, { newTab: e.metaKey })) }, `— ${citation(r)}`);
-  const edit = h("button", { type: "button", class: "embed-edit icon-button", "aria-label": "Open the capture", title: "Open the capture", onclick: (e: MouseEvent) => (e.preventDefault(), open(r.id, e)) }, icon(Pencil, 14));
+  const edit = h("button", { type: "button", class: "embed-edit icon-button", "aria-label": "Edit the capture", title: "Open the capture to edit it", onclick: (e: MouseEvent) => (e.preventDefault(), open(r.id, e)) }, icon(Pencil, 14));
   const block = h("figure", { class: "embed embed-capture", title: "Open the capture" }, quote ? h("blockquote", { class: "embed-quote" }, quote) : null, h("figcaption", null, cite, edit));
   block.addEventListener("click", (e) => {
     if ((e.target as Element).closest("a, button")) return;

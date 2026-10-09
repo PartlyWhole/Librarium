@@ -35,7 +35,6 @@ defineAction({
   id: "captures.save",
   title: "Save the capture",
   keys: ["Mod+Enter"],
-  reserved: true,
   when: () => {
     const r = currentReader();
     return !!r && !!drafts().get(draftKey(r.source.id, r.snapshot))?.parts.length;

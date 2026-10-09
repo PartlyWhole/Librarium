@@ -8,7 +8,7 @@ import type { Layout } from "../types";
 
 
 export type Theme = "white" | "sepia" | "gray" | "night";
-export type Font = keyof typeof FONTS;
+type Font = keyof typeof FONTS;
 /** How pages are laid out, as in Apple Books' View menu. "two" shows one when there isn't room. */
 export const LAYOUTS: [Layout, string][] = [["single", "Single page"], ["two", "Two pages"], ["scroll", "Scroll"]];
 
@@ -25,10 +25,10 @@ export interface ReadingSettings {
   justify: boolean;
 }
 
-export const DEFAULT_SETTINGS: ReadingSettings = { fontSize: 1, font: "original", matchApp: true, theme: "white", layout: "two", spacing: "book", width: "medium", justify: false };
+const DEFAULT_SETTINGS: ReadingSettings = { fontSize: 1, font: "original", matchApp: true, theme: "white", layout: "two", spacing: "book", width: "medium", justify: false };
 
 /** The fonts offered, as Apple Books offers them (all ship with macOS). */
-export const FONTS = {
+const FONTS = {
   original: { name: "Original", stack: null },
   athelas: { name: "Athelas", stack: "Athelas, Georgia, serif" },
   charter: { name: "Charter", stack: "Charter, Georgia, serif" },

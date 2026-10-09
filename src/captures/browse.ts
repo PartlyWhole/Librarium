@@ -33,7 +33,7 @@ export function renderCaptures(host: HTMLElement, _params: Record<string, string
   const groupSeg = seg("Arrange", group, [["source", "By source"], ["newest", "Newest first"]]);
   const showSeg = seg("Show", show, [["all", "All"], ["passages", "Passages"], ["pictures", "Pictures"]]);
   const count = h("span", { class: "muted small", role: "status" });
-  const list = h("div", { class: "captures-page-list" });
+  const list = h("div");
   replace(host, h("div", { class: "captures-page" },
     h("div", { class: "captures-page-head" }, h("h1", { class: "page-title" }, "Captures"), count),
     h("div", { class: "captures-page-tools" }, search, groupSeg, showSeg),
@@ -44,7 +44,7 @@ export function renderCaptures(host: HTMLElement, _params: Record<string, string
     const quote = quoteOf(c);
     // A name the user gave (not the quote's first words) is shown.
     const named = quote && !quote.startsWith(c.title.replace(/…$/, ""));
-    const body = isPicture(c) ? (thumbs.get(c.id) ?? thumbs.set(c.id, regionImage(c.id, 1, "capture-thumb")).get(c.id)!) : h("blockquote", { class: "capture-card-quote" }, quote);
+    const body = isPicture(c) ? (thumbs.get(c.id) ?? thumbs.set(c.id, regionImage(c.id, 1, "capture-thumb", c.title || "A captured picture")).get(c.id)!) : h("blockquote", { class: "capture-card-quote" }, quote);
     const meta = [named ? c.title : null, withSource ? getRecord(sourceOf(c))?.title : null, c.fields[F.locator] as string | undefined, c.created ? shortDate(c.created) : null].filter(Boolean).join(" · ");
     const el = h("article", { class: "capture-card", tabindex: "0", "aria-label": c.title || "Capture" },
       h("div", { class: "capture-card-body" }, body, h("div", { class: "muted small" }, meta)),

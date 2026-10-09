@@ -9,12 +9,12 @@ import { h } from "../ui/dom";
 import { toast } from "../ui/toast";
 import type { RecordInfo } from "../types";
 
-export type Snapshot = { at: string; checks?: { kind: string; reason: string }[]; "final-url"?: string };
+type Snapshot = { at: string; checks?: { kind: string; reason: string }[]; "final-url"?: string };
 
-export const snapshotsOf = (r: RecordInfo): Snapshot[] => (Array.isArray(r.fields["library.snapshots"]) ? (r.fields["library.snapshots"] as Snapshot[]) : []);
+const snapshotsOf = (r: RecordInfo): Snapshot[] => (Array.isArray(r.fields["library.snapshots"]) ? (r.fields["library.snapshots"] as Snapshot[]) : []);
 
 /** "2026-10-02T091400Z" → a short local date and time. */
-export function snapshotLabel(at: string): string {
+function snapshotLabel(at: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(at);
   if (!m) return at;
   return new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!, +m[6]!)).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });

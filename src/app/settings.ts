@@ -11,9 +11,9 @@ import { rebuildIndex } from "./jobs";
 import { pref } from "./prefs";
 
 export const theme = pref<"system" | "light" | "dark">("ui.theme", "system");
-export const textSize = pref("ui.textSize", 16);
+const textSize = pref("ui.textSize", 16);
 /** The hour the day starts (a daily note written after midnight belongs to the day before). */
-export const dayStart = pref("daily.dayStart", 4);
+const dayStart = pref("daily.dayStart", 4);
 
 effect(() => {
   const t = theme();

@@ -12,6 +12,7 @@ import type { PageContext, PageHandle } from "../app/pages";
 import { beforeQuit } from "../app/quit";
 import { canOpen, getRecord, isArchived, kindName, listRecords, openRecord, putRecord, recordIcon, records } from "../app/records";
 import { router } from "../app/router";
+import { ATTACHMENTS, base64, isImagePath, MAX_PASTE, OWN_DROPS, pastedName } from "../library/files";
 import { showStatus } from "../app/status";
 import { attachEditor, done, recordScope, takeText, typed, within } from "../app/undo";
 import { comboboxDialog } from "../ui/combobox";
@@ -25,19 +26,17 @@ import type { BoardEngine, BoardInsert } from "./engine";
 import { boardOutline, boardPage } from "./mirror";
 import { recordOf, type BoardElement, type BoardLink } from "./links";
 import { renderCard } from "./cards";
-import { appTheme, base64, isPicture, loadEngine, pictureData, portable } from "./shared";
+import { appTheme, isPicture, loadEngine, pictureData, portable } from "./shared";
 import { FolderInput } from "lucide";
 
 const SAVE_MS = 1000;
 const DRAFT_MS = 300;
 const RETRY_MS = 5000;
-const ATTACHMENTS = "Attachments";
-const MAX_PASTE = 50 * 1024 * 1024;
 
-export type ExportAs = "png" | "svg" | "excalidraw";
+type ExportAs = "png" | "svg" | "excalidraw";
 
 /** What the board's commands act on, for each board on screen. */
-export const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void> }>();
+const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void> }>();
 
 /** The board in the tab shown, if it is one. */
 export function shownBoard() {
@@ -98,7 +97,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   const titleInput = h("input", { class: "title-input", value: info.title, "aria-label": "Title", spellcheck: true, readOnly, placeholder: "Untitled board" });
   const notices = h("div", { class: "notices" });
   const outline = h("ul", { class: "board-outline", "aria-label": "What is on the board" });
-  const canvasHost = h("div", { class: "board-host", role: "region", "aria-label": `Drawing: ${info.title || "Untitled board"}`, "data-own-drops": "" });
+  const canvasHost = h("div", { class: "board-host", role: "region", "aria-label": `Drawing: ${info.title || "Untitled board"}`, [OWN_DROPS]: "" });
   replace(host, h("div", { class: "board-head" }, titleInput, notices), canvasHost, outline);
   const status = (text: string, persistent = false) => showStatus(text, persistent ? 0 : 4000);
   let engine: BoardEngine | null = null;
@@ -266,11 +265,8 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
         toast(`“${f.name || "That picture"}” is too large to paste (over 50 MB); add it as a file.`);
         continue;
       }
-      const ext = (f.type.split("/")[1] ?? "png").replace("jpeg", "jpg").replace("+xml", "");
-      const stamp = new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }).replace(/[/:]/g, ".");
-      const name = f.name && f.name !== "image.png" ? f.name : `Pasted image ${stamp}.${ext}`;
       try {
-        const w = await call<Written>("library.importData", { name, data: base64(new Uint8Array(await f.arrayBuffer())), folder: ATTACHMENTS });
+        const w = await call<Written>("library.importData", { name: pastedName(f), data: base64(new Uint8Array(await f.arrayBuffer())), folder: ATTACHMENTS });
         putRecord(w.info);
         ids.push(w.info.id);
       } catch (e) {
@@ -281,9 +277,8 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   };
   /** Files dropped from Finder: pictures go to Attachments, documents to the Library's top. */
   const dropped = async (paths: string[], at: { x: number; y: number }) => {
-    const picture = (p: string) => /\.(png|jpe?g|gif|webp|heic|tiff?)$/i.test(p);
     const ids: string[] = [];
-    for (const [list, folder] of [[paths.filter(picture), ATTACHMENTS], [paths.filter((p) => !picture(p)), null]] as const) {
+    for (const [list, folder] of [[paths.filter(isImagePath), ATTACHMENTS], [paths.filter((p) => !isImagePath(p)), null]] as const) {
       if (!list.length) continue;
       try {
         const r = await call<ImportResult>("library.import", { paths: list, ...(folder ? { folder } : {}) });
@@ -297,7 +292,9 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   };
   cleanup.push(onFileDrop((paths, at) => {
     const over = document.elementFromPoint(at.x, at.y);
-    if (!readOnly && over && canvasHost.contains(over)) void dropped(paths, at);
+    if (!over || !canvasHost.contains(over)) return;
+    if (readOnly) toast("This board is read-only, so nothing can be put on it.");
+    else void dropped(paths, at);
   }));
   // Records dragged from the sidebar or a folder page.
   let dropAt: { x: number; y: number } | undefined;
@@ -374,7 +371,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     if (!title || title === before) return void (titleInput.value = before);
     try {
       await retitle(title);
-      done(`Renamed to “${title}”.`, { label: `rename to “${title}”`, undo: () => retitle(before), redo: () => retitle(title) }, scope);
+      done(`Renamed to “${title}”`, { label: `rename to “${title}”`, undo: () => retitle(before), redo: () => retitle(title) }, scope);
     } catch (e) {
       titleInput.value = info.title;
       toast(errorText(e));

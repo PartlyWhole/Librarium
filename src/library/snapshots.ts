@@ -35,7 +35,7 @@ export async function removeSnapshots(items: SnapshotRequest[]): Promise<boolean
   const title = pages.length === 1 ? `Remove ${count(p.count, "snapshot")} of “${pages[0]!.title || "Untitled"}”?` : `Remove ${count(p.count, "snapshot")} from ${count(pages.length, "page")}?`;
   const ok = await ask(title,
     h("div", null,
-      h("p", null, "Their PDFs and text are deleted from the library folder. This can’t be undone. Each page keeps at least one snapshot."),
+      h("p", null, "Their PDFs and text are deleted from the library folder. It can’t be undone. Each page keeps at least one snapshot."),
       h("ul", { class: "delete-list" }, pages.map((i) => h("li", null, `${i.title || "Untitled"}: ${count(i.remove.length, "snapshot")} (keeps ${i.kept})`))),
       keptNote),
     [{ label: "Cancel", value: false }, { label: p.count === 1 ? "Remove snapshot" : "Remove snapshots", value: true, destructive: true }]);

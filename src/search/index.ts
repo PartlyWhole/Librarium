@@ -39,7 +39,7 @@ pages.search = {
       const q = input.value.trim();
       if (!q) return;
       try {
-        const hits = await call<SearchHit[]>("search.query", { text: q, kinds: kind ? [kind] : [], limit: 50, hide: ["archive.at"] });
+        const hits = await call<SearchHit[]>("search.query", { text: q, kinds: kind ? [kind] : [], limit: 50 });
         if (!alive) return;
         replace(results, hits.length === 0
           ? h("p", { class: "empty" }, "Nothing matches.")

@@ -11,7 +11,9 @@ import { recordScope } from "../app/undo";
 import { h, replace } from "../ui/dom";
 import { icon, iconButton } from "../ui/icon";
 import { effect } from "../ui/signal";
-import { anchorOf, capturesOf, copyEmbed, showInSource, sourceOf, statuses, worst } from "./common";
+import { anchorOf, capturesOf, copyEmbed, showInSource, sourceOf, statuses, storedText, worst } from "./common";
+import type { Anchor } from "./anchor";
+import type { StoredText } from "../types";
 import { captureMenu, deleteCapture } from "./delete";
 import { drafts, draftShown, saveDraft, setDraft, type Draft } from "./draft";
 import { Copy, LocateFixed, Pencil, Quote, Trash2, X } from "lucide";
@@ -26,8 +28,17 @@ addPanelView({
     const src = open ? sourceOf(getRecord(open)) : route.params.id!;
     const scope = recordScope(route.params.id!);
     const statusOf = new Map<string, string>();
+    // The source's stored text, fetched once per snapshot while the source is unchanged.
+    const texts = new Map<string, { version: string | undefined; text: Promise<StoredText | null> }>();
+    const textOf = (a: Anchor) => {
+      const key = a.snapshot ?? "";
+      const version = getRecord(src)?.version;
+      let t = texts.get(key);
+      if (!t || t.version !== version) texts.set(key, (t = { version, text: storedText(a) }));
+      return t.text;
+    };
     let alive = true;
-    const draftHost = h("div", { class: "capture-draft-host" });
+    const draftHost = h("div");
     const listHost = h("div");
     replace(host, draftHost, listHost);
     const stopDraft = effect(() => {
@@ -39,10 +50,10 @@ addPanelView({
       const list = capturesOf(src);
       const editing = [...drafts()].find(([, d]) => d.editing && list.some((c) => c.id === d.editing!.id));
       if (!list.length) return replace(listHost, draftShown()?.source === src ? null : h("p", { class: "muted small" }, "Nothing captured here yet. Select a passage and choose Capture."));
-      const ul = h("ul", { class: "backlinks capture-list" });
+      const ul = h("ul", { class: "backlinks" });
       replace(listHost, ul);
       for (const c of list) {
-        const status = h("span", { class: `badge ${statusOf.get(c.id) ?? ""}` }, statusOf.get(c.id) === "moved" ? "moved — check it" : (statusOf.get(c.id) ?? ""));
+        const status = h("span", { class: `badge ${statusOf.get(c.id) ?? ""}` }, statusOf.get(c.id) ?? "");
         const mine = editing?.[1].editing?.id === c.id ? editing : null;
         const li = h("li", { class: `capture-row${c.id === open ? " current" : ""}${mine ? " editing" : ""}`, "aria-current": c.id === open ? "true" : undefined },
           mine ? titleField(mine[0], mine[1]) : h("a", { href: "#", class: "list-link", onclick: (e: MouseEvent) => (e.preventDefault(), openRecord(c.id, {}, { newTab: e.metaKey })) }, c.title || "Capture"),
@@ -55,11 +66,11 @@ addPanelView({
         li.addEventListener("contextmenu", (e) => (e.preventDefault(), captureMenu(c, { x: e.clientX, y: e.clientY }, scope)));
         ul.appendChild(li);
         // Found again each time (a confirmed place changes only the anchor), shown as last known meanwhile.
-        void anchorOf(c.id).then(statuses).then((st) => {
+        void anchorOf(c.id).then((a) => statuses(a, textOf)).then((st) => {
           if (!alive) return;
           const w = worst(st);
           statusOf.set(c.id, w);
-          status.textContent = w === "moved" ? "moved — check it" : w;
+          status.textContent = w;
           status.className = `badge ${w}`;
         }, () => {});
       }
@@ -88,7 +99,7 @@ function titleField(k: string, d: Draft): HTMLElement {
 /** The parts of a capture being edited, with Cancel and Save changes. */
 function editingControls(k: string, d: Draft): HTMLElement {
   return h("div", { class: "edit-controls" },
-    h("p", { class: "edit-hint" }, "Drag the handles at a passage’s ends, or a region’s frame. Select more to add a part."),
+    h("p", { class: "edit-hint" }, "Editing: drag the handles at a passage’s ends, or a region’s frame. Select more to add a part."),
     d.parts.map((p, i) => h("div", { class: "edit-part" },
       p.preview ? h("img", { class: "edit-part-img", src: p.preview, alt: "A captured picture" }) : h("span", { class: "edit-part-text" }, p.quote.length > 90 ? `${p.quote.slice(0, 90)}…` : p.quote),
       h("button", { type: "button", class: "icon-button small", "aria-label": `Remove part ${i + 1}`, title: "Remove this part", onclick: () => setDraft(k, { ...d, parts: d.parts.filter((x) => x !== p) }) }, icon(X, 14)))),

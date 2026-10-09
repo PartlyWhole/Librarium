@@ -4,7 +4,7 @@
  */
 
 /** What an engine is given to open. */
-export interface ReaderSource {
+interface ReaderSource {
   id: string;
   title: string;
   /** The file's bytes (the original, or a saved page's snapshot PDF). */
@@ -21,7 +21,7 @@ export interface Extracted {
   chapters?: { href: string; path?: string; title?: string | null; text: string }[];
 }
 
-export interface ReaderEvents {
+interface ReaderEvents {
   /** The position changed (a page turned, a scroll). */
   moved(): void;
   /** The first page is on screen (for the 500 ms budget). */
@@ -32,7 +32,7 @@ export type Engine = (host: HTMLElement, src: ReaderSource, events: ReaderEvents
 
 export type Layout = "single" | "two" | "scroll";
 
-export interface FindResult {
+interface FindResult {
   count: number;
   current: number;
 }

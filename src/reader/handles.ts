@@ -42,8 +42,8 @@ function snapCaret(node: Node, offset: number, toEnd: boolean): number {
   else while (o > 0 && isWordChar(t[o]) && isWordChar(t[o - 1])) o--;
   return o;
 }
-export const snapStart = (node: Node, offset: number) => snapCaret(node, offset, false);
-export const snapEnd = (node: Node, offset: number) => snapCaret(node, offset, true);
+const snapStart = (node: Node, offset: number) => snapCaret(node, offset, false);
+const snapEnd = (node: Node, offset: number) => snapCaret(node, offset, true);
 
 /**
  * The text caret at a point among the text under `root`. The browser's own hit test first;
@@ -116,7 +116,7 @@ export interface Edges {
   armed?(dx: number, dy: number): void;
 }
 
-export interface RangeEditorOptions {
+interface RangeEditorOptions {
   /** Where the handles go: a positioned element in the app's own document. */
   overlay: HTMLElement;
   range: Range;

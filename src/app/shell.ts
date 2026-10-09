@@ -20,7 +20,7 @@ import { renderSettings } from "./settings";
 import { context, message } from "./status";
 import { sidebar } from "./sidebar";
 import { recent, renderNewTab, tabBar } from "./tabs";
-import { ChevronLeft, ChevronRight, Command, Keyboard, PanelLeft, PanelRight, Settings } from "lucide";
+import { ChevronLeft, ChevronRight, Command, PanelLeft, PanelRight, Settings } from "lucide";
 import "./theme.css";
 import "./shell.css";
 import "../ui/ui.css";
@@ -42,9 +42,10 @@ interface Mounted {
   update?: (params: Record<string, string>) => boolean;
 }
 
-const actionButton = (id: string) => {
+/** A button for an action, labelled with its title (or, for the Go pages, the page's name). */
+const actionButton = (id: string, short = false) => {
   const a = actionList().find((x) => x.id === id)!;
-  const b = iconButton(a.icon ?? Command, a.menu?.title ?? a.title, () => runAction(id), a.keys?.[0]);
+  const b = iconButton(a.icon ?? Command, (short && a.menu?.title) || a.title, () => runAction(id), a.keys?.[0]);
   b.dataset.action = id;
   return b;
 };
@@ -53,12 +54,12 @@ export function startApp(root: HTMLElement): void {
   defineGoActions();
   startActions();
 
-  const ribbonButtons = ribbon.map(actionButton);
+  const ribbonButtons = ribbon.map((id) => actionButton(id, true));
   const nav = h("nav", { class: "ribbon", "aria-label": "Pages" },
     h("div", { class: "ribbon-group" }, iconButton(PanelLeft, "Toggle sidebar", () => runAction("app.toggleSidebar"), "Mod+\\")),
     h("div", { class: "ribbon-group" }, ribbonButtons),
     h("div", { class: "ribbon-spacer" }),
-    h("div", { class: "ribbon-group" }, actionButton("app.palette"), iconButton(Keyboard, "Keyboard shortcuts", () => runAction("app.shortcuts"), "Mod+/"), actionButton("app.settings")));
+    h("div", { class: "ribbon-group" }, actionButton("app.palette"), actionButton("app.shortcuts"), actionButton("app.settings")));
   const side = sidebar();
   const back = iconButton(ChevronLeft, "Back", () => router.back(), "Mod+Alt+ArrowLeft");
   const fwd = iconButton(ChevronRight, "Forward", () => router.forward(), "Mod+Alt+ArrowRight");
@@ -166,7 +167,12 @@ export function startApp(root: HTMLElement): void {
       for (const [id, x] of mounted) x.host.hidden = id !== tab;
       showTitle(m.title);
       headerActions.replaceChildren(...m.actions);
-      for (const b of ribbonButtons) b.classList.toggle("current", b.dataset.action === `go.${page}`);
+      for (const b of ribbonButtons) {
+        const current = b.dataset.action === `go.${page}`;
+        b.classList.toggle("current", current);
+        if (current) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
+      }
       if (tab !== shownTab) {
         const y = m.scroll;
         pageScroll.scrollTop = y;
@@ -183,10 +189,19 @@ export function startApp(root: HTMLElement): void {
 async function start(): Promise<void> {
   const saved = pref<SavedTabs | null>("ui.tabs", null);
   await loadPrefs();
+  // The saved tabs come back only when the saved library opens by itself at start; a library
+  // chosen later (another one, or after the Welcome page) opens on Today.
   let wasOpen = false;
+  let restore: boolean | undefined;
   effect(() => {
+    const st = library();
+    if (st) restore ??= st.state === "opening" || st.state === "open";
     const open = isOpen();
-    if (open && !wasOpen) void untracked(() => opened(saved.peek()));
+    if (open && !wasOpen) {
+      const tabs = restore ? saved.peek() : undefined;
+      restore = false;
+      void untracked(() => opened(tabs));
+    }
     wasOpen = open;
   });
   await refreshLibrary();
@@ -200,10 +215,9 @@ async function start(): Promise<void> {
   });
 }
 
-async function opened(saved: SavedTabs | null): Promise<void> {
+/** With the library open: the saved tabs (`undefined` when they don't apply), else Today. */
+async function opened(saved: SavedTabs | null | undefined): Promise<void> {
   await loadRecords();
-  if (router.current.peek().page !== "" || router.restore(saved)) return;
-  // With no tabs: Today (once notes can be shown), else Notes.
-  if (pages.note) await openToday();
-  else router.go("notes", {}, { replace: true });
+  if (saved !== undefined && (router.current.peek().page !== "" || router.restore(saved))) return;
+  await openToday();
 }

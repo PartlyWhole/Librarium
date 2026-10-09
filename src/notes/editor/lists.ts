@@ -57,7 +57,7 @@ function previousSibling(n: SyntaxNode): SyntaxNode | null {
 }
 
 /** Tab on a list item: it (and what's under it) moves under the item before it. */
-export const indentListItem: Command = (view) => {
+const indentListItem: Command = (view) => {
   const { state } = view;
   const items = selectedItems(state);
   if (!items.length) return false;
@@ -77,7 +77,7 @@ export const indentListItem: Command = (view) => {
 };
 
 /** ⇧Tab on a list item: it (and what's under it) moves out, to its parent's level. */
-export const outdentListItem: Command = (view) => {
+const outdentListItem: Command = (view) => {
   const { state } = view;
   const items = selectedItems(state);
   if (!items.length) return false;
@@ -102,7 +102,7 @@ export const outdentListItem: Command = (view) => {
 
 /** Numbers every numbered list in order: a top-level list keeps its first number, a nested
  * one starts at 1. */
-export function renumber(view: EditorView): void {
+function renumber(view: EditorView): void {
   const { state } = view;
   const changes: ChangeSpec[] = [];
   syntaxTree(state).iterate({

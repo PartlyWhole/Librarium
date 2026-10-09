@@ -26,7 +26,7 @@ export function readable(md: string): string {
 const segmenter = typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(undefined, { granularity: "word" }) : null;
 
 /** Words and characters (without spaces) in Markdown. */
-export function countText(md: string): { words: number; chars: number } {
+function countText(md: string): { words: number; chars: number } {
   const t = readable(md);
   let words = 0;
   if (segmenter) for (const s of segmenter.segment(t)) words += s.isWordLike ? 1 : 0;

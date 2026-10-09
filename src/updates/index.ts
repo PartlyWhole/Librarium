@@ -1,6 +1,6 @@
 /**
  * Updates: new versions are published as GitHub releases (`npm run release`). The app looks
- * for one 20 s after it starts (once the library has opened) and then daily, and asks before
+ * for one 20 s after the window loads (library open or not) and then daily, and asks before
  * installing; once installed, it offers to restart, saving first as when quitting.
  * Librarium ▸ Check for Updates… looks now, and also says when there is nothing new.
  */
@@ -53,14 +53,14 @@ async function look(byHand: boolean): Promise<void> {
   if (byHand) return offer(u);
   if (declined.has(u.version)) return;
   const found = u;
-  toast(`Librarium ${u.version} is available`, { action: { label: "Update…", run: () => void offer(found) }, ms: 20_000 });
+  toast(`Librarium ${u.version} is available.`, { action: { label: "Update…", run: () => void offer(found) }, ms: 20_000 });
 }
 
 /** What's new, then Install / Later; progress shows in the status bar. */
 async function offer(u: AppUpdate): Promise<void> {
   const notes = u.notes.trim();
   const choice = await ask(`Librarium ${u.version} is available`, [
-    h("p", null, `You have ${u.current}. Installing takes a moment; then Librarium can restart, with your work saved first.`),
+    h("p", null, `You have ${u.current}. Installing takes a moment; then Librarium restarts, with your work saved first.`),
     notes ? h("div", { class: "update-notes" }, h("h3", null, "What’s new"), h("p", null, notes)) : null,
   ], [{ label: "Later", value: "later" as const }, { label: "Install", value: "install" as const, primary: true }]);
   if (choice !== "install") return void declined.add(u.version);

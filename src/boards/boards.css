@@ -19,7 +19,6 @@
 .board-card-cite { display: flex; align-items: center; gap: 4px; }
 .board-card-cite .embed-cite { flex: 1; color: var(--muted); text-decoration: none; }
 
-.embed.embed-board { padding: 0; border: 0; background: none; }
 .embed-board.embed-sizable:not(.embed-sized) { width: auto; }
 .embed-board-link { display: block; }
 .embed-board-picture { display: flex; justify-content: center; min-height: 60px; border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; background: var(--bg); }

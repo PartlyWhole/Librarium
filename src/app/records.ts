@@ -40,7 +40,8 @@ on<{ ids: string[] }>("records.changed", async ({ ids }) => {
   records.set(m);
 });
 
-const ARCHIVED = "archive.at";
+/** The field an archived record carries: when it was archived. */
+export const ARCHIVED = "archive.at";
 /** Archived records are left out of lists, the sidebar and search. */
 export const isArchived = (r: RecordInfo | undefined): boolean => r?.fields[ARCHIVED] != null;
 
@@ -65,6 +66,9 @@ export function kindName(r: RecordInfo): string {
   return (r.kind === "item" ? FORMAT_NAMES[formatOf(r)] : undefined) ?? KIND_NAMES[r.kind] ?? r.kind;
 }
 
+/** How many snapshots a saved web page has. */
+export const snapshotCount = (r: RecordInfo): number => (Array.isArray(r.fields["library.snapshots"]) ? r.fields["library.snapshots"].length : 0);
+
 /** A short line beside a name in lists: a web page's site and snapshots, a document's pages. */
 export function recordDetail(r: RecordInfo): string {
   if (r.kind !== "item") return "";
@@ -76,7 +80,7 @@ export function recordDetail(r: RecordInfo): string {
     } catch {
       /* not an address */
     }
-    const n = Array.isArray(r.fields["library.snapshots"]) ? r.fields["library.snapshots"].length : 0;
+    const n = snapshotCount(r);
     return [host, n > 1 ? count(n, "snapshot") : ""].filter(Boolean).join(" · ");
   }
   const n = Number(r.fields["library.pages"]);

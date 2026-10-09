@@ -4,6 +4,8 @@
  * and the words a card reads as outside the app.
  */
 import { readBytes } from "../backend";
+import { citation } from "../captures/common";
+import { base64 } from "../library/files";
 import { getRecord, kindName } from "../app/records";
 import type { RecordInfo } from "../types";
 import type { Picture, Portable } from "./engine";
@@ -25,13 +27,6 @@ export const isPicture = (r: RecordInfo | undefined) => r?.kind === "item" && r.
 
 const MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", heic: "image/heic", tif: "image/tiff", tiff: "image/tiff", bmp: "image/bmp" };
 
-/** Bytes as base64. */
-export function base64(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
-}
-
 /** A picture's data and size, from the library (a picture that never loads gets a usual size). */
 export async function pictureData(id: string): Promise<Picture | null> {
   const r = getRecord(id);
@@ -52,13 +47,6 @@ export async function pictureData(id: string): Promise<Picture | null> {
   } catch {
     return null;
   }
-}
-
-/** "Source, place", leaving out a place that only repeats the source's title. */
-export function citation(r: RecordInfo): string {
-  const source = getRecord(String(r.fields["captures.source"] ?? ""))?.title ?? "an unknown source";
-  const place = String(r.fields["captures.locator"] ?? "").trim();
-  return place && place.toLowerCase() !== source.trim().toLowerCase() ? `${source}, ${place}` : source;
 }
 
 /** How a board reads outside the app: cards as words, pictures with their data. */

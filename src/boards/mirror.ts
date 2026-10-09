@@ -13,7 +13,7 @@ import { formatLink } from "../notes/editor/links";
 import { recordOf, type BoardElement, type BoardLink } from "./links";
 
 /** The page's first line, as the backend writes it for a new board. */
-export const pageNote = (id: string) => `<!-- Librarium writes this page from the board's drawing (${id}.excalidraw); edits here are replaced when the board is saved. -->`;
+const pageNote = (id: string) => `<!-- Librarium writes this page from the board's drawing (${id}.excalidraw); edits here are replaced when the board is saved. -->`;
 
 /** How far apart (in drawing units) two things must be to be on different rows. */
 const ROW = 24;

@@ -19,7 +19,7 @@ import { addMeta, BOOK_CSP, isMarkup, neutralize, parsePage } from "./safe";
 export const BASE = "https://book.librarium.invalid/";
 
 /** One item of the spine, in package order (including non-linear items), for CFIs. */
-export interface SpineItem {
+interface SpineItem {
   href: string;
   type: string;
   /** The item's CFI in the package document, as EPUB CFIs start (`/6/4[id]`). */
@@ -27,7 +27,7 @@ export interface SpineItem {
   linear: boolean;
 }
 
-export interface TocEntry {
+interface TocEntry {
   title: string;
   /** A path in the book, with a fragment if any. */
   href: string;
@@ -58,7 +58,7 @@ const BY_EXTENSION: Record<string, string> = {
 };
 
 /** A path in the book, from a reference relative to another path (no fragment or query). */
-export function resolvePath(from: string, ref: string): string | null {
+function resolvePath(from: string, ref: string): string | null {
   if (/^[a-z][a-z0-9+.-]*:/i.test(ref) || ref.startsWith("//")) return null; // elsewhere
   try {
     const u = new URL(ref, `https://z/${from.split("/").map(encodeURIComponent).join("/")}`);

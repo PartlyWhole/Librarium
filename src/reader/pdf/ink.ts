@@ -13,7 +13,7 @@
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 
 /** A run of ink along a line: where a printed word is, in canvas pixels. */
-export interface Ink {
+interface Ink {
   start: number;
   end: number;
 }
@@ -22,7 +22,7 @@ export interface Ink {
  * The words along a band of a canvas: runs of dark columns, joined across gaps narrower than
  * `gapMin` (the spaces between letters).
  */
-export function inkRuns(data: Uint8ClampedArray, width: number, height: number, gapMin: number, dark = 150): Ink[] {
+function inkRuns(data: Uint8ClampedArray, width: number, height: number, gapMin: number, dark = 150): Ink[] {
   const inked: boolean[] = new Array(width).fill(false);
   for (let x = 0; x < width; x++) {
     for (let y = 0; y < height; y++) {
@@ -56,7 +56,7 @@ export function inkRuns(data: Uint8ClampedArray, width: number, height: number, 
  * recognised text is often shorter or longer than the print), and no further apart than
  * `maxGap` (wider than any word space, narrower than a column gap).
  */
-export function lineInk(runs: Ink[], textStart: number, textEnd: number, near: number, maxGap: number): Ink[] {
+function lineInk(runs: Ink[], textStart: number, textEnd: number, near: number, maxGap: number): Ink[] {
   const first = runs.findIndex((r) => r.end >= textStart - near && r.start <= textStart + near);
   if (first < 0) return [];
   const limit = textEnd + Math.max(near, (textEnd - textStart) * 0.25);
@@ -69,7 +69,7 @@ export function lineInk(runs: Ink[], textStart: number, textEnd: number, near: n
  * Where each word of a line goes, given the words' places now (left, width) and the printed
  * words: one to one when the counts agree, else the line stretched over its ink.
  */
-export function placeOnInk(words: { left: number; width: number }[], ink: Ink[]): { left: number; width: number }[] | null {
+function placeOnInk(words: { left: number; width: number }[], ink: Ink[]): { left: number; width: number }[] | null {
   if (!words.length || !ink.length) return null;
   if (ink.length === words.length) {
     return words.map((_, i) => {

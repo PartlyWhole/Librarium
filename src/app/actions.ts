@@ -11,9 +11,9 @@ import type { IconNode } from "../ui/icon";
 import { accelerator, display, fromEvent, isPassThrough, normalize } from "../ui/keys";
 import { effect, untracked } from "../ui/signal";
 
-export type MenuName = "app" | "file" | "edit" | "format" | "view" | "go" | "window" | "help";
+type MenuName = "app" | "file" | "edit" | "format" | "view" | "go" | "window" | "help";
 
-export interface Action {
+interface Action {
   id: string;
   /** May be a getter (Undo names the step it undoes). */
   title: string;

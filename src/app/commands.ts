@@ -61,8 +61,8 @@ defineAction({ id: "tabs.close", title: "Close tab", keys: ["Mod+W"], reserved: 
 defineAction({ id: "app.closeWindow", title: "Close window", keys: ["Mod+Shift+W"], reserved: true, run: quit, menu: { name: "file", group: 9.2 } });
 
 // ---- Edit -------------------------------------------------------------------------------------
-defineAction({ id: "edit.undo", get title() { const l = undoHere().label; return l ? `Undo ${l}` : "Undo"; }, keys: ["Mod+Z"], reserved: true, palette: false, when: () => undoHere().can, run: undo, menu: { name: "edit", group: -1.1 } });
-defineAction({ id: "edit.redo", get title() { const l = redoHere().label; return l ? `Redo ${l}` : "Redo"; }, keys: ["Mod+Shift+Z"], reserved: true, palette: false, when: () => redoHere().can, run: redo, menu: { name: "edit", group: -1.2 } });
+defineAction({ id: "edit.undo", get title() { const l = undoHere().label; return l ? `Undo ${l}` : "Undo"; }, keys: ["Mod+Z"], reserved: true, palette: false, when: () => undoHere().can, run: undo, menu: { name: "edit", group: -1.9 } });
+defineAction({ id: "edit.redo", get title() { const l = redoHere().label; return l ? `Redo ${l}` : "Redo"; }, keys: ["Mod+Shift+Z"], reserved: true, palette: false, when: () => redoHere().can, run: redo, menu: { name: "edit", group: -1.8 } });
 defineAction({ id: "edit.undoLast", title: "Undo the last move, rename or archiving", when: () => lastStep() !== null, run: undoLast, menu: { name: "edit", group: 0.1 } });
 defineAction({ id: "edit.redoLast", title: "Redo the last move, rename or archiving", when: () => nextStep() !== null, run: redoLast, menu: { name: "edit", group: 0.2 } });
 
@@ -89,7 +89,7 @@ export const ribbon: string[] = [];
 
 /** Defines Today and the Go actions for the pages that exist (call after features load). */
 export function defineGoActions(): void {
-  defineAction({ id: "go.today", title: "Today", keys: ["Mod+Shift+D"], reserved: true, when: isOpen, run: openToday, menu: { name: "go", group: 0 }, icon: CalendarDays });
+  defineAction({ id: "go.today", title: "Go to Today", keys: ["Mod+Shift+D"], reserved: true, when: isOpen, run: openToday, menu: { name: "go", group: 0, title: "Today" }, icon: CalendarDays });
   ribbon.push("go.today");
   for (const [page, title, icon, keys] of GO) {
     if (!pages[page]) continue;

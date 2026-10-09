@@ -15,7 +15,7 @@ import { toast } from "../ui/toast";
 import { errorText } from "../ui/dom";
 import { router } from "./router";
 
-export interface Undoable {
+interface Undoable {
   label: string;
   undo(): Promise<void>;
   /** Does it again after an undo (without it, the step can't be redone). */
@@ -226,13 +226,13 @@ const TEXT_INPUTS = new Set(["text", "search", "url", "email", "tel", "number", 
 let region: "sidebar" | "page" | null = null;
 const focusMoved = signal(0);
 const bump = () => focusMoved.set(focusMoved.peek() + 1);
-document.addEventListener("pointerdown", (e) => {
-  const el = e.target as Element | null;
+const regionOf = (target: EventTarget | null) => {
+  const el = target as Element | null;
   if (el?.closest?.(".app-sidebar")) region = "sidebar";
   else if (el?.closest?.(".workspace")) region = "page";
-  bump();
-}, true);
-document.addEventListener("focusin", bump);
+};
+document.addEventListener("pointerdown", (e) => (regionOf(e.target), bump()), true);
+document.addEventListener("focusin", (e) => (regionOf(e.target), bump()));
 document.addEventListener("focusout", () => setTimeout(bump, 0));
 // A field's typing makes its undo possible.
 document.addEventListener("input", (e) => !(e.target as Element | null)?.closest?.(".cm-editor") && bump());

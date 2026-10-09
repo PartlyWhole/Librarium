@@ -98,7 +98,7 @@ class BulletWidget extends WidgetType {
 }
 const bullet = new BulletWidget();
 
-export interface LivePreviewOptions {
+interface LivePreviewOptions {
   /** The current title of a linked record (labels are a cache; this is for tooltips). */
   titleOf: (id: string) => string | null;
   /** Whether an embed's record can be drawn (embeds.ts draws it); if not, it shows as its
@@ -134,7 +134,7 @@ function build(view: EditorView, opts: LivePreviewOptions): Built {
       }
       // Being edited: `[[label]]`, the ID hidden and skipped as one unit.
       const unshown = l.embed && !touchesLines(state, l.from, l.to);
-      ranges.push(Decoration.mark({ class: `cm-wikilink-source${unshown ? " cm-embed-unshown" : ""}`, attributes: unshown ? { title: "Not shown: it is in the archive, or no longer in the library" } : undefined }).range(l.from, l.to));
+      ranges.push(Decoration.mark({ class: "cm-wikilink-source", attributes: unshown ? { title: "Not shown: it is in the archive, or no longer in the library" } : undefined }).range(l.from, l.to));
       if (l.id) {
         const tail = state.sliceDoc(l.from, l.to).lastIndexOf(`|${l.id}`);
         if (tail >= 0) {

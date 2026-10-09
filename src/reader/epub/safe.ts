@@ -65,10 +65,3 @@ export function parsePage(text: string, type: string): Document {
   return doc;
 }
 
-/** A book page with its code made inert and the book policy in its head (as XML). */
-export function safeMarkup(text: string, type: string): string {
-  const doc = parsePage(text, type);
-  neutralize(doc);
-  addMeta(doc, { "http-equiv": "Content-Security-Policy", content: BOOK_CSP });
-  return new XMLSerializer().serializeToString(doc);
-}

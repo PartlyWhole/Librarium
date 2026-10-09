@@ -84,7 +84,7 @@ function choose(c: RecordInfo, refs: Reference[], asText: AsText): Promise<Choic
           h("button", { type: "button", class: "link-button", onclick: () => setAll("leave") }, "Leave")) : null,
         h("div", { class: "refs-list" }, sources.map((s) =>
           h("section", { class: "ref-source", "aria-label": s.title || "Untitled" },
-            h("h3", { class: "ref-source-title" }, s.title || "Untitled", s.kind === "capture" ? h("span", { class: "muted small" }, " · a capture’s words") : null),
+            h("h3", { class: "ref-source-title" }, s.title || "Untitled", s.kind === "note" ? null : h("span", { class: "muted small" }, ` · ${s.kind === "capture" ? "a capture’s words" : s.kind}`)),
             h("ul", { class: "ref-rows" }, refs.map((r, i) => (r.source.id === s.id ? row(r, i) : null)))))),
         h("p", { class: "muted small" }, "The capture goes to the archive. Undo puts back the capture and every note changed here.")),
       h("div", { class: "ask-buttons" }, h("button", { class: "button", onclick: () => m.close() }, "Cancel"), go));

@@ -1,7 +1,7 @@
 /** Brief, inverted toasts at the bottom centre, announced politely. One at a time. */
 import { h } from "./dom";
 
-export interface ToastOptions {
+interface ToastOptions {
   action?: { label: string; run: () => void };
   ms?: number;
 }

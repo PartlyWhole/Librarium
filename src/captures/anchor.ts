@@ -14,9 +14,9 @@
  */
 import search from "approx-string-match";
 
-export const CONTEXT = 32;
+const CONTEXT = 32;
 /** A fuzzy match must score at least this (0–1) to be offered as "moved". */
-export const MOVED_THRESHOLD = 0.75;
+const MOVED_THRESHOLD = 0.75;
 
 export const PDF_PAGE = "http://tools.ietf.org/rfc/rfc8118";
 export const MEDIA = "http://www.w3.org/TR/media-frags/";
@@ -63,9 +63,9 @@ export interface Anchor {
   parts: AnchorPart[];
 }
 
-export type Status = "found" | "moved" | "lost";
+type Status = "found" | "moved" | "lost";
 
-export interface Located {
+interface Located {
   status: Status;
   /** Code-point range in the current text (absent when lost). */
   start?: number;

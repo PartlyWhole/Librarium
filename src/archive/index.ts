@@ -7,7 +7,7 @@
 import { call } from "../backend";
 import { defineAction } from "../app/actions";
 import { pages } from "../app/pages";
-import { getRecord, isArchived, openRecord, putRecord, records } from "../app/records";
+import { ARCHIVED, getRecord, isArchived, openRecord, putRecord, records } from "../app/records";
 import { recordActionsFor, addRecordAction, showRecordMenu } from "../app/recordmenu";
 import { router } from "../app/router";
 import { showStatus } from "../app/status";
@@ -175,7 +175,7 @@ pages.archive = {
     const selection = new Selection();
     const mode = signal(false);
     let list: SelectListElement | null = null;
-    const archived = () => [...records().values()].filter(isArchived).sort((a, b) => String(b.fields["archive.at"]).localeCompare(String(a.fields["archive.at"])));
+    const archived = () => [...records().values()].filter(isArchived).sort((a, b) => String(b.fields[ARCHIVED]).localeCompare(String(a.fields[ARCHIVED])));
     const bar = selectBar(selection, mode, archived, () => list?.sync());
     const content = h("div");
     const stop = effect(() => {
@@ -187,13 +187,13 @@ pages.archive = {
         }
         list = selectList({
           label: "Archived records",
-          className: "item-list archive-list",
+          className: "item-list",
           items: all,
           selection,
           mode,
           id: (r) => r.id,
           render: (r) => h("div", { class: "archive-row" },
-            h("span", { class: "item-link" }, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, `${r.kind} · archived ${shortDate(String(r.fields["archive.at"]))}`)),
+            h("span", { class: "item-link" }, h("span", null, r.title || "Untitled"), h("span", { class: "muted small" }, `${r.kind} · archived ${shortDate(String(r.fields[ARCHIVED]))}`)),
             h("button", { class: "button", type: "button", tabindex: "-1", onclick: () => void setArchived([r.id], false) }, icon(ArchiveRestore, 14), "Restore"),
             h("button", { class: "button destructive", type: "button", tabindex: "-1", onclick: () => void deletePermanently([r.id]) }, icon(Trash2, 14), "Delete permanently…")),
           open: (r) => openRecord(r.id),

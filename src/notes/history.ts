@@ -5,13 +5,13 @@
  */
 import { call } from "../backend";
 import { addPanelView } from "../app/panel";
-import { getRecord } from "../app/records";
+import { getRecord, putRecord } from "../app/records";
 import { done, recordScope } from "../app/undo";
 import { modal } from "../ui/dialog";
 import { errorText, h, replace } from "../ui/dom";
 import { effect } from "../ui/signal";
 import { toast } from "../ui/toast";
-import type { DiffLine, HistoryVersion } from "../types";
+import type { DiffLine, HistoryVersion, RecordInfo } from "../types";
 import { flushNote } from "./page";
 import { History } from "lucide";
 
@@ -64,11 +64,16 @@ async function restore(id: string, v: HistoryVersion, when: string): Promise<voi
   await flushNote(id);
   const before = getRecord(id)?.version;
   if (!before) return;
-  await call("history.restore", { id, hash: v.hash, base_version: before });
+  // Each restore is recorded at once, so an immediate ⌘Z sees the version it made.
+  const restoreTo = async (hash: string, base: string) => {
+    await call("history.restore", { id, hash, base_version: base });
+    putRecord(await call<RecordInfo>("records.get", { id }));
+  };
+  await restoreTo(v.hash, before);
   // The text before was kept as a version: its hash is the version it had.
   const to = async (hash: string) => {
     const now = getRecord(id)?.version;
-    if (now) await call("history.restore", { id, hash, base_version: now });
+    if (now) await restoreTo(hash, now);
   };
   done(`Restored the version of ${when}.`, { label: "restoring", undo: () => to(before), redo: () => to(v.hash) }, recordScope(id));
 }
@@ -87,7 +92,7 @@ async function compare(id: string, v: HistoryVersion): Promise<void> {
   const copy = h("button", { class: "button", type: "button" }, "Copy its text");
   const close = h("button", { class: "button", type: "button" }, "Close");
   const m = modal(
-    h("div", { class: "ask history-compare" },
+    h("div", { class: "ask" },
       h("h2", { class: "ask-title" }, `The version of ${when}`),
       v.current
         ? h("p", { class: "muted small" }, "This is the text as it is now.")

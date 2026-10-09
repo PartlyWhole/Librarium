@@ -20,7 +20,7 @@ export function placeOf(r: Route): string {
 }
 
 /** A tab as the tab bar shows it. */
-export interface TabInfo {
+interface TabInfo {
   id: string;
   route: Route;
   title: string;
@@ -46,12 +46,10 @@ let nextTab = 1;
 const newTab = (stack: Route[] = [], title = ""): Tab => ({ id: `tab-${nextTab++}`, stack, index: stack.length - 1, title });
 const routeOf = (t: Tab): Route => t.stack[t.index] ?? NOWHERE;
 
-export interface GoOptions {
+interface GoOptions {
   /** Replaces the current entry instead of adding one. */
   replace?: boolean;
   newTab?: boolean;
-  /** With `newTab`: opens it without showing it. */
-  background?: boolean;
   /** Asks for the route even if it is shown already (the page is told again). */
   again?: boolean;
 }
@@ -82,12 +80,12 @@ class Router {
     if (other >= 0 && !opts.replace) {
       const t = this.list[other]!;
       if (opts.again || !sameRoute(routeOf(t), r)) t.stack[t.index] = r;
-      if (!opts.background) this.at = other;
+      this.at = other;
       return this.sync();
     }
     if (opts.newTab) {
       this.list.splice(this.at + 1, 0, newTab([r]));
-      if (!opts.background) this.at += 1;
+      this.at += 1;
       return this.sync();
     }
     const t = this.tab;
@@ -193,16 +191,6 @@ class Router {
     if (!t || t.title === title) return;
     t.title = title;
     this.publish();
-  }
-
-  /** Drops history entries matching a predicate (a record that no longer exists). */
-  forget(pred: (r: Route) => boolean): void {
-    for (const t of this.list) {
-      const cur = t.stack[t.index];
-      t.stack = t.stack.filter((r) => r === cur || !pred(r));
-      t.index = cur ? t.stack.indexOf(cur) : -1;
-    }
-    this.sync();
   }
 
   save(): SavedTabs {

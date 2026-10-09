@@ -3,7 +3,7 @@
  * parts as one quotation, and finding each part again in the stored text.
  */
 import { call } from "../backend";
-import { getRecord, listRecords, openRecord } from "../app/records";
+import { getRecord, listRecords, openRecord, records } from "../app/records";
 import { h } from "../ui/dom";
 import { toast } from "../ui/toast";
 import type { RecordInfo, StoredText } from "../types";
@@ -18,9 +18,22 @@ export const quoteOf = (c: RecordInfo): string => flowQuote(String(c.fields[F.qu
 export const isPicture = (c: RecordInfo): boolean => !String(c.fields[F.quote] ?? "").trim();
 const byCreated = (a: RecordInfo, b: RecordInfo) => (a.created ?? "").localeCompare(b.created ?? "");
 
+/** Captures by source, worked out once for each version of the records. */
+let bySource: { of: ReadonlyMap<string, RecordInfo>; map: Map<string, RecordInfo[]> } | null = null;
+
 /** A source's captures (not archived), oldest first. */
 export function capturesOf(source: string): RecordInfo[] {
-  return listRecords(KIND).filter((c) => sourceOf(c) === source).sort(byCreated);
+  const all = records();
+  if (bySource?.of !== all) {
+    const map = new Map<string, RecordInfo[]>();
+    for (const c of listRecords(KIND).sort(byCreated)) {
+      const list = map.get(sourceOf(c));
+      if (list) list.push(c);
+      else map.set(sourceOf(c), [c]);
+    }
+    bySource = { of: all, map };
+  }
+  return bySource.map.get(source) ?? [];
 }
 
 /** "Source, place, place": places that only repeat the source's title are left out. */
@@ -82,26 +95,26 @@ export function quoteParts(parts: ShownPart[], cls: string): HTMLElement[] {
     }
     if (quote) quote.append(h("span", { class: "quote-gap", title: "A passage left out" }, " […] "));
     else out.push((quote = h("blockquote", { class: cls })));
-    quote.append(h("span", { class: "quote-part" }, p.text), p.after ?? "");
+    quote.append(p.text, p.after ?? "");
   }
   return out;
 }
 
 /** A region's picture, filled in when it has loaded. */
-export function regionImage(id: string, n: number, cls = "capture-region"): HTMLImageElement {
-  const img = h("img", { class: cls, alt: "A captured picture" });
-  void call<string>("captures.region", { id, n }).then((d) => (img.src = d), () => (img.alt = "A captured picture (can’t be shown)"));
+export function regionImage(id: string, n: number, cls = "capture-region", alt = "A captured picture"): HTMLImageElement {
+  const img = h("img", { class: cls, alt });
+  void call<string>("captures.region", { id, n }).then((d) => (img.src = d), () => (img.alt = `${alt} (can’t be shown)`));
   return img;
 }
 
-export type PartStatus = "found" | "moved" | "lost" | "region";
+type PartStatus = "found" | "moved" | "lost" | "region";
 
 /** The stored text a capture's places point into. */
 export const storedText = (a: Anchor): Promise<StoredText | null> => call<StoredText | null>("records.text", { id: a.source, part: a.snapshot ?? null }).catch(() => null);
 
-/** Finds every part of a capture again in its source's stored text. */
-export async function statuses(a: Anchor): Promise<PartStatus[]> {
-  const stored = await storedText(a);
+/** Finds every part of a capture again in its source's stored text (fetched by `text`). */
+export async function statuses(a: Anchor, text = storedText): Promise<PartStatus[]> {
+  const stored = await text(a);
   return a.parts.map((p) => (isRegion(p) ? "region" : !stored ? "lost" : locate(stored.text, p.selector).status));
 }
 

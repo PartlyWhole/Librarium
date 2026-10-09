@@ -21,7 +21,7 @@ export type { Box, EditedPart, EditPart, Mark, PartsEditor, PlaceSelector, Reade
 
 pages.item = { title: "Item", icon: BookOpen, render: renderItem };
 
-defineAction({ id: "reader.find", title: "Find in this item", keys: ["Mod+F"], when: () => router.current().page === "item", run: focusFind, menu: { name: "edit", group: 1.9 } });
+defineAction({ id: "reader.find", title: "Find in this item", keys: ["Mod+F"], when: () => router.current().page === "item", run: focusFind, menu: { name: "edit", group: 2.9 } });
 
 // A book's layout, as in Apple Books' View menu (also in the Aa panel).
 const LAYOUTS: [Layout, string, number][] = [["single", "Single Page", 1], ["two", "Two Pages", 2], ["scroll", "Scrolling", 3]];

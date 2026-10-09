@@ -26,7 +26,7 @@ export class BackendError extends Error {
 }
 
 /** True inside the app's webview; false in a plain browser (`npm run dev:web`). */
-export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 /**
  * Development only: a plain browser opened at `?bridge=<port>` reaches the real backend over
@@ -79,7 +79,7 @@ export function on<T = unknown>(event: string, fn: (payload: T) => void): () => 
 
 // ---- The menu bar ------------------------------------------------------------------------
 
-export type PredefinedItem = "Cut" | "Copy" | "Paste" | "SelectAll" | "Minimize" | "Maximize" | "Fullscreen" | "Hide" | "HideOthers" | "ShowAll" | "Services" | "About";
+type PredefinedItem = "Cut" | "Copy" | "Paste" | "SelectAll" | "Minimize" | "Maximize" | "Fullscreen" | "Hide" | "HideOthers" | "ShowAll" | "Services" | "About";
 
 export type MenuEntry =
   | { kind: "item"; id: string; text: string; accelerator?: string; enabled: boolean; run: () => void }

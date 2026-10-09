@@ -7,7 +7,7 @@ import { contextMenu, type MenuItem, type Point } from "../ui/menu";
 import type { RecordInfo } from "../types";
 import { canOpen, openRecord } from "./records";
 
-export interface RecordAction {
+interface RecordAction {
   id: string;
   /** The label, given how many records it acts on. */
   label: string | ((n: number) => string);

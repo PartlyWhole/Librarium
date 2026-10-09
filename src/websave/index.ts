@@ -18,7 +18,7 @@ import { Globe } from "lucide";
 import "./websave.css";
 
 /** The distinct http(s) addresses in some text (one per line, or anywhere in it). */
-export function webAddresses(text: string): string[] {
+function webAddresses(text: string): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(/https?:\/\/[^\s<>"'\]]+/gi)) {
     // Trailing punctuation belongs to the sentence, and ")" too unless it closes a "(" inside.
@@ -52,20 +52,20 @@ async function save(urls: string[], folder: string): Promise<void> {
   const failed: string[] = [];
   for (const url of urls) {
     try {
-      await call("library.savePage", { url, hide: ["archive.at"], folder: folder || null });
+      await call("library.savePage", { url, folder: folder || null });
       queued++;
     } catch {
       failed.push(url);
     }
   }
-  if (queued) showStatus(queued === 1 ? `Saving ${urls[0]}…` : `Saving ${queued} pages in the background; the Jobs view shows how far it has got.`, 8000);
+  if (queued) showStatus(queued === 1 ? `Saving ${urls[0]}…` : `Saving ${queued} pages in the background; the jobs list shows how far it has got.`, 8000);
   if (failed.length) toast(`${failed.length} couldn’t be queued: ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? "…" : ""}`);
 }
 
 function openDialog(): void {
   const folder = libraryHere();
   const saved = savedAddresses(untracked(() => listRecords("item")));
-  const input = h("textarea", { class: "links-input", rows: 4, placeholder: "https://…\nOne address per line, or paste a whole list.", "aria-label": "Addresses of the pages to save", spellcheck: false });
+  const input = h("textarea", { class: "combo-input links-input", rows: 4, placeholder: "https://…\nOne address per line, or paste a whole list.", "aria-label": "Addresses of the pages to save", spellcheck: false });
   const summary = h("p", { class: "muted small", "aria-live": "polite" });
   const again = h("input", { type: "checkbox" });
   const againRow = h("label", { class: "check-row small", hidden: true }, again, " Save a new snapshot of those too");

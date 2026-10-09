@@ -9,7 +9,7 @@ import type { EditorView } from "@codemirror/view";
 import { call, pickSavePath } from "../backend";
 import type { PageContext, PageHandle } from "../app/pages";
 import { beforeQuit } from "../app/quit";
-import { getRecord, isArchived, listRecords, canOpen, openRecord, putRecord, records } from "../app/records";
+import { getRecord, isArchived, openRecord, putRecord, records } from "../app/records";
 import { showStatus } from "../app/status";
 import { attachEditor, done, keepText, recordScope, takeText, typed } from "../app/undo";
 import { errorText, h, replace } from "../ui/dom";
@@ -89,7 +89,7 @@ function mount(host: HTMLElement, ctx: PageContext, t: RecordText, anchor: Ancho
     if (!title || title === before) return void (titleInput.value = before);
     try {
       let version = await retitle(title);
-      done(`Renamed to “${title}”.`, {
+      done(`Renamed to “${title}”`, {
         label: `rename to “${title}”`,
         undo: async () => void (version = await retitle(before, version)),
         redo: async () => void (version = await retitle(title, version)),
@@ -113,7 +113,7 @@ function mount(host: HTMLElement, ctx: PageContext, t: RecordText, anchor: Ancho
   const editorHost = h("div", { class: "editor-host capture-words" });
   const usedIn = h("section", { class: "used-in", "aria-label": "Used in" });
   const archived = isArchived(info) ? h("p", { class: "notice" }, "This capture is in the archive. ", h("button", { type: "button", class: "link-button", onclick: () => void restore(info) }, "Restore")) : null;
-  replace(host, archived, titleInput, h("div", { class: "capture-parts" }, quoteParts(shown, "capture-quote")), cite, h("h2", { class: "list-heading" }, "Your words"), editorHost, usedIn);
+  replace(host, archived, titleInput, h("div", null, quoteParts(shown, "capture-quote")), cite, h("h2", { class: "list-heading" }, "Your words"), editorHost, usedIn);
 
   const session: NoteSession = new NoteSession(id, info.version, t.body, {
     current: () => view.state.doc.toString(),
@@ -128,7 +128,8 @@ function mount(host: HTMLElement, ctx: PageContext, t: RecordText, anchor: Ancho
     onHistoryStep: () => typed(scope),
     readOnly: !!info.read_only,
     label: "Your words",
-    targets: () => listRecords().filter((r) => canOpen(r) && r.id !== id).map((r) => ({ id: r.id, title: r.title, detail: r.kind === "note" ? undefined : r.kind })),
+    // Your words are plain words: no link completion.
+    targets: () => [],
     open: (target, o) => openRecord(target, {}, o),
     titleOf: (target) => untracked(() => getRecord(target))?.title ?? null,
     onChange: () => session.changed(),
@@ -158,13 +159,13 @@ function mount(host: HTMLElement, ctx: PageContext, t: RecordText, anchor: Ancho
 
   ctx.setHeaderActions([
     iconButton(LocateFixed, "Show in the source", () => showInSource(info)),
-    iconButton(Pencil, "Edit selection", () => showInSource(info, { edit: true })),
-    iconButton(Copy, "Copy embed", () => copyEmbed(info)),
+    iconButton(Pencil, "Edit selection", () => showInSource(info, { edit: true }), undefined, undefined, "Edit what this capture holds, in its source (drag a passage’s ends, resize a region)"),
+    iconButton(Copy, "Copy embed", () => copyEmbed(info), undefined, undefined, "Copy embed (paste it into a note)"),
     iconButton(FileDown, "Export as W3C annotations", () => void exportW3C(info, view.state.doc.toString())),
-    isArchived(info) ? null : iconButton(Trash2, "Delete", async () => {
+    isArchived(info) ? null : iconButton(Trash2, "Delete capture", async () => {
       await session.flush();
       await deleteCapture(getRecord(id) ?? info, scope);
-    }),
+    }, undefined, undefined, "Delete (it goes to the archive, where you can restore it or delete it for good)"),
   ].filter((b) => !!b));
   return cleanup;
 }

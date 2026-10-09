@@ -6,6 +6,7 @@
 import type { EditorView } from "@codemirror/view";
 import { call } from "../backend";
 import { spaceFor } from "../app/folders";
+import { folderOf } from "../app/folders/model";
 import { moveTo } from "../app/folders/ops";
 import type { PageContext, PageHandle } from "../app/pages";
 import { beforeQuit } from "../app/quit";
@@ -24,9 +25,6 @@ import { createEditor, historyJSON, positionOf, replaceDoc, textHistory } from "
 import { NoteSession, type Resolution } from "./editor/session";
 import { countLabel } from "./editor/stats";
 import { FolderInput } from "lucide";
-
-/** The folder a note is in, inside notes/ ("" at the top), for making notes beside it. */
-export const noteFolder = (r: RecordInfo) => r.path.split("/").slice(1, -1).join("/");
 
 /** The notes on screen, by ID. */
 const open = new Map<string, { session: NoteSession; view: EditorView }>();
@@ -118,7 +116,7 @@ function mount(host: HTMLElement, params: Record<string, string>, ctx: PageConte
     // An unresolved link's note is made beside this one.
     create: async (label) => {
       try {
-        const w = await call<Written>("notes.create", { title: label, folder: noteFolder(info) || null });
+        const w = await call<Written>("notes.create", { title: label, folder: folderOf(info) || null });
         putRecord(w.info);
         return w.info.id;
       } catch (e) {
@@ -189,7 +187,7 @@ function mount(host: HTMLElement, params: Record<string, string>, ctx: PageConte
     if (!title || title === before) return void (titleInput.value = before);
     try {
       let version = await retitle(title);
-      done(`Renamed to “${title}”.`, {
+      done(`Renamed to “${title}”`, {
         label: `rename to “${title}”`,
         undo: async () => void (version = await retitle(before, version)),
         redo: async () => void (version = await retitle(title, version)),
@@ -281,7 +279,7 @@ async function resolveConflict(title: string, id: string, mine: string, theirs: 
   if (choice === "both") {
     try {
       const r = getRecord(id);
-      const w = await call<Written>("notes.create", { title: `${title} (your version)`, body: mine, folder: r ? noteFolder(r) || null : null });
+      const w = await call<Written>("notes.create", { title: `${title} (your version)`, body: mine, folder: r ? folderOf(r) || null : null });
       putRecord(w.info);
       toast(`Your version was kept as “${w.info.title}”.`);
     } catch (e) {

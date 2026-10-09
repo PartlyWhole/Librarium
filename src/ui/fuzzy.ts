@@ -1,5 +1,5 @@
 /** Subsequence matching with a simple score: consecutive and word-start matches rank higher. */
-export function fuzzyScore(query: string, text: string): number | null {
+function fuzzyScore(query: string, text: string): number | null {
   const q = query.toLowerCase().trim();
   if (!q) return 0;
   const t = text.toLowerCase();

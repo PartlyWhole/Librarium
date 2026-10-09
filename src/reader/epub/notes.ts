@@ -31,7 +31,7 @@ const BLOCK = new Set(["p", "li", "div", "aside", "section", "blockquote", "dd",
 const BACKLINK = /^(↵|↩|⤴|\^|back|return|[[(]?(\d{1,4}|[*†‡§¶]{1,3})[\])]?\.?)$/i;
 
 /** The note as plain formatting only, its links back to the text left out. */
-export function noteBody(note: Element): HTMLElement {
+function noteBody(note: Element): HTMLElement {
   const out = h("div", { class: "epub-note-body" });
   const walk = (from: Node, into: HTMLElement) => {
     for (const n of from.childNodes) {

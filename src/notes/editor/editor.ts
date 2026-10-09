@@ -21,7 +21,7 @@ import { hangingIndent, listKeymap } from "./lists";
 import { livePreview } from "./livepreview";
 import { markdownSupport } from "./markdown";
 
-export interface EditorOptions {
+interface EditorOptions {
   parent: HTMLElement;
   doc: string;
   readOnly?: boolean;

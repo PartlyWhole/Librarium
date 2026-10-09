@@ -66,7 +66,7 @@ function range(order: readonly string[], a: string, b: string): string[] {
   return order.slice(Math.min(i, j), Math.max(i, j) + 1);
 }
 
-export interface SelectListOptions<T> {
+interface SelectListOptions<T> {
   label: string;
   items: T[];
   id(t: T): string;

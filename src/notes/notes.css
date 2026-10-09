@@ -88,8 +88,12 @@
 
 /* Embeds: in a line of writing, an embed fills the rest of the line beside its marker */
 .embed { margin: 4px 0; padding: 8px 12px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--r2); }
-.cm-embed { display: inline-block; width: 100%; box-sizing: border-box; vertical-align: top; text-indent: 0; white-space: normal; cursor: default; }
+.cm-embed { display: inline-block; width: 100%; box-sizing: border-box; vertical-align: top; text-indent: 0; white-space: normal; }
 .cm-embed.embed-card { width: auto; max-width: 100%; }
+/* An embed in writing opens on a click. */
+.cm-embed.embed { cursor: pointer; transition: border-color 0.12s, background 0.12s; }
+.cm-embed.embed:hover { border-color: var(--border-strong); background: var(--hover); }
+.cm-embed.embed .embed-cite, .cm-embed.embed button { cursor: pointer; }
 .embed-card { margin: 4px 0; padding: 6px 10px; display: inline-block; }
 .embed-card a { display: inline-flex; align-items: center; gap: 6px; }
 .embed.embed-figure { margin: 4px 0; padding: 0; border: 0; background: none; }
@@ -105,7 +109,7 @@
 .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .compare-col h3 { font-size: var(--small); margin: 0 0 4px; color: var(--muted); }
 .compare-text { white-space: pre-wrap; font: var(--small)/1.4 var(--font-ui); background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--r2); padding: 8px; max-height: 40vh; overflow: auto; margin: 0; }
-.modal.wide, .modal:has(.compare) { max-width: min(880px, 90vw); }
+.modal:has(.compare) { max-width: min(880px, 90vw); }
 
 /* The outline */
 .outline { list-style: none; margin: 0; padding: 0; }

@@ -19,7 +19,7 @@ export const NoIndentedCode: MarkdownConfig = { remove: ["IndentedCode"] };
 const mdParser = baseParser.configure([GFM, NoIndentedCode]);
 const CODE = new Set(["InlineCode", "FencedCode", "CodeBlock", "HTMLBlock", "HTMLTag", "CommentBlock", "Comment"]);
 
-export function escapeLabel(label: string): string {
+function escapeLabel(label: string): string {
   return label.replace(/[\\[\]|]/g, (c) => `\\${c}`).replace(/[\r\n]+/g, " ");
 }
 
@@ -53,7 +53,7 @@ function splitInner(inner: string): { label: string; id: string | null } {
 }
 
 /** Code ranges, from a syntax tree (the editor's) or a fresh parse. */
-export function codeRanges(text: string, tree?: Tree, from = 0, to = text.length): [number, number][] {
+function codeRanges(text: string, tree?: Tree, from = 0, to = text.length): [number, number][] {
   const out: [number, number][] = [];
   (tree ?? mdParser.parse(text)).iterate({
     from,

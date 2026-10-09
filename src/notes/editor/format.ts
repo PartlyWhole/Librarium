@@ -18,7 +18,7 @@ const INLINE = {
   highlight: { node: "Highlight", mark: "HighlightMark", text: "==" },
   code: { node: "InlineCode", mark: "CodeMark", text: "`" },
 } as const;
-export type InlineFormat = keyof typeof INLINE;
+type InlineFormat = keyof typeof INLINE;
 
 /** The innermost node of a type around [from, to]. */
 function around(state: EditorState, from: number, to: number, name: string): SyntaxNode | null {
@@ -31,7 +31,7 @@ function around(state: EditorState, from: number, to: number, name: string): Syn
 }
 
 /** Toggles an inline format on every selection. */
-export function toggleInline(kind: InlineFormat): Command {
+function toggleInline(kind: InlineFormat): Command {
   const f = INLINE[kind];
   return (view) => {
     const { state } = view;
@@ -61,7 +61,7 @@ const URLISH = /^(https?:\/\/|mailto:)\S+$/i;
 
 /** ⌘K: a selection becomes `[text](|)`, an address `[|](address)`; with nothing selected,
  * `[[` opens the link picker. */
-export const insertLink: Command = (view) => {
+const insertLink: Command = (view) => {
   const { state } = view;
   if (state.selection.ranges.every((r) => r.empty)) {
     view.dispatch(state.update(state.replaceSelection("[[]]"), { userEvent: "input" }));
@@ -107,7 +107,7 @@ function perLine(view: EditorView, change: (text: string) => string | null): boo
 }
 
 /** ⌘L: a task is ticked or unticked; a list item or a line becomes a task. */
-export const toggleTask: Command = (view) =>
+const toggleTask: Command = (view) =>
   perLine(view, (t) => {
     let m = /^(\s*(?:[-*+]|\d+[.)])\s+)\[( |x|X)\](\s?)(.*)$/.exec(t);
     if (m) return `${m[1]}[${m[2] === " " ? "x" : " "}]${m[3] || " "}${m[4]}`;
@@ -118,7 +118,7 @@ export const toggleTask: Command = (view) =>
   });
 
 /** ⌥⌘1–6: the line becomes a heading of that level (again: back to body text); ⌥⌘0: body text. */
-export function setHeading(level: number): Command {
+function setHeading(level: number): Command {
   return (view) => {
     const lines = new Set(view.state.selection.ranges.flatMap((r) => linesOf(view.state.doc, r)));
     // Pressed again on headings of that level: they go back to body text.

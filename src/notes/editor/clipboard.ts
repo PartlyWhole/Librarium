@@ -19,7 +19,7 @@ function worthConverting(html: string): boolean {
 }
 
 /** `[[label|id]]` → `[[label]]` (and `![[…]]` likewise), for other apps. */
-export function withoutIds(text: string): string {
+function withoutIds(text: string): string {
   let out = "";
   let last = 0;
   for (const l of parseLinks(text)) {
@@ -79,7 +79,7 @@ function copyOut(e: ClipboardEvent, view: EditorView, cut: boolean): boolean {
 }
 
 /** ⇧⌥⌘V: pastes the clipboard's plain text, as it is. */
-export const pastePlain: Command = (view) => {
+const pastePlain: Command = (view) => {
   if (view.state.readOnly) return false;
   void navigator.clipboard?.readText().then((t) => t && insert(view, t), () => {});
   return true;

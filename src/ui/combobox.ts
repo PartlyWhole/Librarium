@@ -16,7 +16,7 @@ export interface Choice {
   icon?: IconNode;
 }
 
-export interface ComboboxOptions {
+interface ComboboxOptions {
   label: string;
   placeholder: string;
   emptyText: string;

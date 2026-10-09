@@ -11,7 +11,7 @@ export function icon(node: IconNode, size = 18): SVGElement {
   return svg;
 }
 
-/** A labelled icon button; its tooltip names its shortcut. */
-export function iconButton(node: IconNode, label: string, run: (e: MouseEvent) => void, keys?: string, size?: number): HTMLButtonElement {
-  return h("button", { class: "icon-button", type: "button", "aria-label": label, title: keys ? `${label} (${display(keys)})` : label, onclick: run }, icon(node, size));
+/** A labelled icon button; its tooltip (the label, unless `tip` is given) names its shortcut. */
+export function iconButton(node: IconNode, label: string, run: (e: MouseEvent) => void, keys?: string, size?: number, tip = label): HTMLButtonElement {
+  return h("button", { class: "icon-button", type: "button", "aria-label": label, title: keys ? `${tip} (${display(keys)})` : tip, onclick: run }, icon(node, size));
 }

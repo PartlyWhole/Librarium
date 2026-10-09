@@ -20,7 +20,7 @@ export interface Picture {
   height: number;
 }
 
-export interface EngineOptions {
+interface EngineOptions {
   /** The drawing, in Excalidraw's file format. */
   scene: string;
   theme: "light" | "dark";

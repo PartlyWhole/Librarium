@@ -5,6 +5,7 @@
  */
 import { call, pickSavePath } from "../backend";
 import { defineAction } from "../app/actions";
+import { folderOf } from "../app/folders/model";
 import { isOpen } from "../app/library";
 import { here, pages } from "../app/pages";
 import { showPanelView } from "../app/panel";
@@ -20,7 +21,7 @@ import { activeEditor } from "./editor/editor";
 import { FORMATS } from "./editor/format";
 import { parseLinks } from "./editor/links";
 import { embedMarkdown } from "./embeds";
-import { flushNote, noteFolder, renderNote } from "./page";
+import { flushNote, renderNote } from "./page";
 import "./history";
 import "./panels";
 import "./notes.css";
@@ -34,7 +35,7 @@ const shownNote = () => (router.current().page === "note" ? router.current().par
 async function newNote(): Promise<void> {
   const cur = getRecord(untracked(shownNote));
   const at = here.peek();
-  const folder = cur ? noteFolder(cur) : at?.kind === "note" ? at.folder : "";
+  const folder = cur ? folderOf(cur) : at?.kind === "note" ? at.folder : "";
   try {
     const w = await call<Written>("notes.create", { folder: folder || null });
     putRecord(w.info);
@@ -45,7 +46,7 @@ async function newNote(): Promise<void> {
 }
 
 /** A note's text with each embed written out, for reading outside the app. */
-export function expandEmbeds(body: string): string {
+function expandEmbeds(body: string): string {
   let out = "";
   let last = 0;
   for (const l of parseLinks(body)) {
@@ -64,7 +65,7 @@ async function exportWithQuotations(): Promise<void> {
   try {
     await flushNote(id);
     const t = await call<RecordText>("records.read", { id });
-    const path = await pickSavePath(`${t.info.title || "Untitled"}.md`, "Export with quotations");
+    const path = await pickSavePath(`${t.info.title || "note"}.md`, "Export with quotations");
     if (!path) return;
     await call("export.write", { path, text: expandEmbeds(t.body), data: null });
     showStatus("Exported, with each quotation written out.");

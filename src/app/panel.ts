@@ -10,7 +10,7 @@ import { pref } from "./prefs";
 import { router, type Route } from "./router";
 import { X } from "lucide";
 
-export interface PanelView {
+interface PanelView {
   id: string;
   title: string;
   icon: IconNode;
@@ -67,7 +67,7 @@ export function sidePanel(onClose: () => void): HTMLElement {
       return b;
     }));
     if (!shown) return replace(body, h("p", { class: "empty" }, "Nothing more to show here."));
-    const host = h("div", { class: "panel-body" });
+    const host = h("div");
     dispose = untracked(() => shown.render(host, r));
     replace(body, h("section", { class: "panel-section", role: "tabpanel", "aria-label": shown.title, tabindex: "-1", dataset: { view: shown.id } }, h("h2", { class: "panel-title" }, shown.title), host));
   });
