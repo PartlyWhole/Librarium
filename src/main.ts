@@ -8,6 +8,7 @@ import "./search";
 import "./notes";
 import "./boards";
 import "./library";
+import "./reader";
 import "./websave";
 import "./updates";
 import { startApp } from "./app/shell";
