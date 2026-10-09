@@ -1,0 +1,64 @@
+/* A folder page, as in Finder: path bar, list or icons, renaming, dropping. */
+.files-entry.drop-over, .crumb.drop-over { background: var(--selection); box-shadow: inset 0 0 0 2px var(--accent); }
+.ws-page.files-page { max-width: none; padding: 0; min-height: 100%; display: flex; flex-direction: column; font-size: var(--small); line-height: 1.35; }
+.files-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.files-bar .spacer { flex: 1; }
+.files-crumbs { min-width: 0; overflow: hidden; }
+.crumbs { display: flex; align-items: center; list-style: none; margin: 0; padding: 0; white-space: nowrap; }
+.crumbs li { display: flex; align-items: center; min-width: 0; }
+.crumbs li + li::before { content: "›"; color: var(--faint); margin: 0 2px; }
+.crumb { border: 0; background: none; font: inherit; color: var(--muted); padding: 3px 6px; border-radius: var(--r1); cursor: default; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; }
+.crumb:hover:not([aria-current]) { background: var(--hover); color: var(--ink); }
+.crumb[aria-current] { color: var(--ink); font-weight: 600; }
+.files-filter { width: 180px; font: inherit; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--r1); background: var(--bg-alt); color: var(--ink); }
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r1); }
+.segmented .icon-button { border-radius: 0; }
+.segmented .icon-button[aria-pressed="true"] { background: var(--active); color: var(--ink); }
+.files-head { position: sticky; top: 45px; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.files-head[hidden] { display: none; }
+.files-col { border: 0; background: none; font: inherit; font-weight: 600; color: var(--muted); text-align: left; padding: 5px 8px; cursor: default; display: flex; gap: 4px; align-items: center; }
+.files-col:hover { color: var(--ink); }
+.files-arrow { font-size: 9px; }
+.files-body { flex: 1; padding: 4px 16px 80px; outline: none; user-select: none; -webkit-user-select: none; }
+.files-body.list .files-entry { display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px; align-items: center; height: 28px; border-radius: var(--r1); }
+.files-body.list .files-entry:nth-child(even) { background: var(--bg-alt); }
+.files-body.list .files-entry > span { padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-kind, .files-added { color: var(--muted); }
+.files-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.files-name svg { flex: none; color: var(--muted); }
+.files-entry.folder .files-name svg { color: var(--accent); }
+.files-name-lines { display: flex; flex-direction: column; min-width: 0; }
+.files-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-detail { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-entry { outline: none; cursor: default; }
+.files-body .files-entry.selected, .files-body.list .files-entry.selected:nth-child(even) { background: var(--selection); }
+.files-body:focus-within .files-entry.selected, .files-body.list:focus-within .files-entry.selected:nth-child(even) { background: var(--accent-solid); color: #ffffff; }
+.files-body:focus-within .files-entry.selected :is(.files-kind, .files-added, .files-detail, svg) { color: inherit; }
+.files-entry:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.files-body.icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; align-content: start; padding-top: 12px; }
+.files-body.icons .files-entry { padding: 10px 6px 8px; border-radius: var(--r2); text-align: center; }
+.files-body.icons .files-name { flex-direction: column; gap: 6px; }
+.files-body.icons .files-name-lines { align-items: center; max-width: 100%; }
+.files-body.icons .files-name-text { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
+.files-body.drop-over { box-shadow: inset 0 0 0 2px var(--accent); border-radius: var(--r2); }
+.files-rename { font: inherit; width: 100%; min-width: 8ch; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 3px; background: var(--bg); color: var(--ink); user-select: text; -webkit-user-select: text; }
+.files-body.icons .files-rename { text-align: center; }
+.files-empty { margin: 24px 16px; padding: 24px; text-align: center; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--r2); }
+.files-empty p { margin: 0 0 6px; }
+.files-body.list .files-entry.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.files-body.list .files-entry.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.files-body.icons .files-entry.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+.files-body.icons .files-entry.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
+.files-body.list .files-name-lines { flex-direction: row; align-items: baseline; gap: 8px; }
+.files-body.list .files-detail { flex: none; max-width: 40%; }
+.files-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 12px; }
+.files-actions:empty { display: none; }
+.files-actions .button { padding: 2px 8px; font-size: 12px; }
+.files-body:empty { flex: 0; padding: 0; }
+.files-empty.drop-over { box-shadow: inset 0 0 0 2px var(--accent); }
+@media (max-width: 640px) {
+  .files-head, .files-body.list .files-entry { grid-template-columns: minmax(0, 1fr) 90px; }
+  .files-added, .files-col.added { display: none; }
+  .files-filter { width: 110px; }
+}
+.files-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px; margin-top: auto; padding: 4px 16px; font-size: 11px; color: var(--muted); background: var(--bg); border-top: 1px solid var(--border); text-align: center; }

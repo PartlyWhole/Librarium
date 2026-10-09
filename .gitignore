@@ -1,0 +1,9 @@
+node_modules
+dist
+public/pdfjs
+public/excalidraw
+src-tauri/target
+src-tauri/gen
+.secrets/
+release-*.log
+.DS_Store

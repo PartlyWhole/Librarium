@@ -1,0 +1,10 @@
+{
+  "extractor": "pdfkit",
+  "pages": [
+    {
+      "page": 1,
+      "text": "The technique of our time is the sum of means, and nothing escapes it."
+    }
+  ],
+  "version": 1
+}

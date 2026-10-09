@@ -1,0 +1,10 @@
+/* The Search page: kind chips and ranked hits. */
+.chips { display: flex; gap: 6px; margin: 8px 0 16px; flex-wrap: wrap; }
+.chip { height: 24px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--muted); font-size: var(--small); }
+.chip.on { background: var(--active); color: var(--ink); border-color: var(--border-strong); }
+.hit-list { list-style: none; padding: 0; margin: 0; }
+.hit { display: block; padding: 10px 12px; margin: 0 -12px; border-radius: var(--r2); color: var(--ink); text-decoration: none; }
+.hit:hover, .hit:focus-visible { background: var(--hover); }
+.hit-title { display: block; font-weight: 600; font-size: var(--ui); }
+.hit-kind { font-weight: 400; color: var(--faint); font-size: var(--tiny); margin-left: 8px; }
+.hit-snippet { display: block; color: var(--muted); font-size: var(--small); margin-top: 2px; }

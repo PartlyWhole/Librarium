@@ -1,0 +1,10 @@
+/* The Archive page: rows with Restore and Delete, select mode, notes deleted outside. */
+.archive-row { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); padding: 2px 0; }
+.archive-row .item-link { flex: 1; min-width: 0; margin: 0; }
+.archive-row .button { flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.delete-list { max-height: 200px; overflow: auto; margin: 8px 0 0; padding-left: 20px; }
+.select-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; min-height: 30px; }
+.select-bar .spacer { flex: 1; }
+.select-count { font-size: var(--small); font-weight: 600; }
+.recently-deleted { margin-top: 28px; }
+@media (max-width: 600px) { .archive-row { flex-wrap: wrap; } }

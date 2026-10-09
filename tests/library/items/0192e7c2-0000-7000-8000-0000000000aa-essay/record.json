@@ -1,0 +1,18 @@
+{
+  "created": "2026-10-02T09:14:00Z",
+  "id": "0192e7c2-0000-7000-8000-0000000000aa",
+  "kind": "item",
+  "kind-version": 1,
+  "library.format": "pdf",
+  "library.original": "original.pdf",
+  "library.pages": 1,
+  "library.text": "extracted/text-v1.json",
+  "provenance": {
+    "original-name": "essay.pdf",
+    "saved-at": "2026-10-02T09:14:00Z",
+    "saved-with": "Librarium 0.1.0 (import)",
+    "source": null
+  },
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "title": "essay"
+}

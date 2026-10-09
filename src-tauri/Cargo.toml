@@ -1,0 +1,51 @@
+[package]
+name = "librarium"
+version = "0.1.0"
+description = "Librarium: a notebook and library for slow, careful reading and writing."
+edition = "2021"
+license = "MIT"
+publish = false
+
+# Its own root: the folder sits inside another checkout while it is being rebuilt.
+[workspace]
+
+[lib]
+name = "librarium"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ts-rs = { version = "12", features = ["serde-json-impl", "uuid-impl", "no-serde-warnings"] }
+uuid = { version = "1", features = ["v7", "serde"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+saphyr-parser = "0.1"
+pulldown-cmark = { version = "0.13", default-features = false }
+similar = "2"
+sha2 = "0.10"
+unicode-normalization = "0.1"
+base64 = "0.22"
+libc = "0.2"
+notify = "7"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSURL"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace"] }
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+
+[profile.dev.package."*"]
+opt-level = 1

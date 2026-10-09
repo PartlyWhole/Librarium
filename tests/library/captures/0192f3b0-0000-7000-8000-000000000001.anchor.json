@@ -1,0 +1,27 @@
+{
+  "id": "0192f3b0-0000-7000-8000-000000000001",
+  "parts": [
+    {
+      "selector": [
+        {
+          "exact": "The technique of our time is the sum of means",
+          "prefix": "",
+          "suffix": "",
+          "type": "TextQuoteSelector"
+        },
+        {
+          "end": 46,
+          "start": 0,
+          "type": "TextPositionSelector"
+        }
+      ]
+    }
+  ],
+  "snapshot": null,
+  "source": "0192e7c2-0000-7000-8000-0000000000aa",
+  "text": {
+    "extractor": "pdfkit",
+    "file": "extracted/text-v1.json",
+    "version": 1
+  }
+}
