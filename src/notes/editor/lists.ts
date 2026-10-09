@@ -2,11 +2,18 @@
  * Lists, as in Obsidian: Tab and ⇧Tab move a list item with everything under it, by the width
  * of its parent's marker (so items under "1." line up with its text), and numbered lists are
  * renumbered after. Wrapped lines of an item hang under its text, not under its marker.
+ * List indentation is written as spaces only, whatever the indent unit (a tab, for Tab outside
+ * lists); tabs already there count as four columns and become spaces when an item moves.
  */
+import { insertNewlineAndIndent } from "@codemirror/commands";
+import { deleteMarkupBackward, insertNewlineContinueMarkup } from "@codemirror/lang-markdown";
 import { syntaxTree } from "@codemirror/language";
-import { RangeSetBuilder, type ChangeSpec, type EditorState } from "@codemirror/state";
-import { Decoration, ViewPlugin, type Command, type DecorationSet, type EditorView, type ViewUpdate } from "@codemirror/view";
+import { countColumn, Prec, RangeSetBuilder, type ChangeSpec, type EditorState, type Transaction } from "@codemirror/state";
+import { Decoration, keymap, ViewPlugin, type Command, type DecorationSet, type EditorView, type ViewUpdate } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
+
+/** Tabs stop every four columns, as in indent.ts. */
+const TAB = 4;
 
 /** The list item starting on a line, if any. */
 function itemOn(state: EditorState, lineNo: number): SyntaxNode | null {
@@ -22,11 +29,23 @@ function itemOn(state: EditorState, lineNo: number): SyntaxNode | null {
 function contentColumn(state: EditorState, item: SyntaxNode): number {
   const line = state.doc.lineAt(item.from);
   const m = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(line.text);
-  return m ? m[0].length : 0;
+  return m ? countColumn(m[0], TAB) : 0;
 }
 
+/** A line's indentation, in columns. */
 function indentOf(state: EditorState, lineNo: number): number {
-  return /^\s*/.exec(state.doc.line(lineNo).text)![0].length;
+  return countColumn(/^\s*/.exec(state.doc.line(lineNo).text)![0], TAB);
+}
+
+/** Moves an item's lines by `by` columns, rewriting their indentation as spaces (blank lines are
+ * left empty). */
+function shift(state: EditorState, item: SyntaxNode, by: number, changes: ChangeSpec[]): void {
+  for (const l of linesOf(state, item)) {
+    const line = state.doc.line(l);
+    const ws = /^\s*/.exec(line.text)![0];
+    const insert = ws.length === line.length ? "" : " ".repeat(Math.max(0, indentOf(state, l) + by));
+    if (insert !== ws) changes.push({ from: line.from, to: line.from + ws.length, insert });
+  }
 }
 
 /** The top items whose first line is selected (an item inside another selected one is carried). */
@@ -67,7 +86,7 @@ const indentListItem: Command = (view) => {
     if (!prev) continue; // the first item has nothing to go under
     const by = contentColumn(state, prev) - indentOf(state, state.doc.lineAt(it.from).number);
     if (by <= 0) continue;
-    for (const l of linesOf(state, it)) changes.push({ from: state.doc.line(l).from, insert: " ".repeat(by) });
+    shift(state, it, by, changes);
   }
   if (changes.length) {
     view.dispatch({ changes, userEvent: "input.indent" });
@@ -87,16 +106,46 @@ const outdentListItem: Command = (view) => {
     if (parentItem?.name !== "ListItem") continue; // already at the top
     const by = indentOf(state, state.doc.lineAt(it.from).number) - indentOf(state, state.doc.lineAt(parentItem.from).number);
     if (by <= 0) continue;
-    for (const l of linesOf(state, it)) {
-      const line = state.doc.line(l);
-      const n = Math.min(by, indentOf(state, l));
-      if (n) changes.push({ from: line.from, to: line.from + n });
-    }
+    shift(state, it, -by, changes);
   }
   if (changes.length) {
     view.dispatch({ changes, userEvent: "input.indent" });
     renumber(view);
   }
+  return true;
+};
+
+/**
+ * Enter in a list or quote continues it, as lang-markdown does (or, in a list line's indentation,
+ * as plain Enter does), but the indentation they build from the indent unit, a tab, is rewritten
+ * as spaces, and a blank line they leave, such as the one that makes a list loose, is empty.
+ */
+const continueMarkup: Command = (view) => {
+  const { state } = view;
+  let tr: Transaction | undefined;
+  const target = { state, dispatch: (t: Transaction) => (tr = t) };
+  const inList = state.selection.ranges.every((r) => itemOn(state, state.doc.lineAt(r.head).number));
+  if (!insertNewlineContinueMarkup(target) && !(inList && insertNewlineAndIndent(target))) return false;
+  if (!tr) return false;
+  const changes: ChangeSpec[] = [];
+  tr.changes.iterChanges((from, to, _f, _t, text) => {
+    const lines = text.toJSON();
+    const line = state.doc.lineAt(from);
+    // Whitespace left before the new line break would be a blank line: take it too.
+    if (lines.length > 1 && !/\S/.test(state.sliceDoc(line.from, from))) from = line.from;
+    const atStart = from === line.from;
+    const insert = lines.map((s, i) => {
+      if (i === 0 && !atStart) return s; // the end of the line Enter was pressed on
+      const ws = /^[ \t]*/.exec(s)![0];
+      if (ws.length === s.length && i < lines.length - 1) return ""; // a whole line, blank
+      return " ".repeat(countColumn(ws, TAB)) + s.slice(ws.length);
+    });
+    changes.push({ from, to, insert: insert.join(state.lineBreak) });
+  });
+  const set = state.changes(changes);
+  // The cursor ends at or after the inserted text: take it back to before, then past the new text.
+  const selection = tr.selection!.map(tr.changes.invertedDesc).map(set, 1);
+  view.dispatch({ changes: set, selection, scrollIntoView: true, userEvent: "input" });
   return true;
 };
 
@@ -188,6 +237,14 @@ export const hangingIndent = ViewPlugin.fromClass(
     }
   },
   { decorations: (v) => v.decorations },
+);
+
+/** Enter and Backspace in lists and quotes; in place of lang-markdown's own keymap. */
+export const markupKeymap = Prec.high(
+  keymap.of([
+    { key: "Enter", run: continueMarkup },
+    { key: "Backspace", run: deleteMarkupBackward },
+  ]),
 );
 
 export const listKeymap = [

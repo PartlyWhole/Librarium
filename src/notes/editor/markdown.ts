@@ -44,7 +44,7 @@ const codeLanguages: LanguageDescription[] = [
 
 export function markdownSupport() {
   return [
-    markdown({ base: markdownLanguage, extensions: [Highlight, NoIndentedCode], addKeymap: true, codeLanguages }),
+    markdown({ base: markdownLanguage, extensions: [Highlight, NoIndentedCode], addKeymap: false, codeLanguages }),
     // Code tokens get `tok-*` classes, coloured inside code blocks only (notes.css).
     syntaxHighlighting(classHighlighter),
   ];

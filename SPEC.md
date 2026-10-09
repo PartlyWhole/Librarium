@@ -148,8 +148,10 @@ One window. Only regions scroll, never the window.
     selected it starts `[[`.
   - Typing `* _ = \` ~` over a selection wraps it.
 - **Cursors.** ⌘D adds the next match, ⌥-click adds a cursor, and ⌥-drag makes a block selection.
-- **Lists.** Tab / ⇧Tab move an item with its children and renumber the list. Wrapped lines hang
-  under the text, and markers are drawn monospace.
+- **Lists.** Tab / ⇧Tab move an item with its children and renumber the list. Enter continues the
+  list. List indentation is written as spaces (tabs already there count as 4 columns), and a
+  blank line Enter adds is empty. Wrapped lines hang under the text, and markers are drawn
+  monospace.
 - **Folding.**
   - An arrow appears left of headings and bullets, on hover or while folded. A folded line ends in
     "…" and its bullet gets a ring.
