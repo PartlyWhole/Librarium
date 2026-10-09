@@ -74,7 +74,8 @@ described here (indexes, caches) is disposable.
   1. Decompose to NFD and drop combining marks.
   2. Lowercase each run of alphanumerics and join the runs with `-`, with no leading or trailing
      `-`.
-  3. Stop adding runs once the slug reaches 60 characters or more.
+  3. Stop as soon as the slug is 60 characters or longer, even in the middle of a word. A `-`
+     and the character after it are added together, so a slug can be 61 characters long.
   4. Recompose to NFC.
 
   `"  Éthique — et  Technique! "` → `ethique-et-technique`; CJK is kept; `"???"` → `""`.
