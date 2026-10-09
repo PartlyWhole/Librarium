@@ -8,3 +8,4 @@ target/
 public/pdfjs/
 public/excalidraw/
 .secrets/
+release-*.log
