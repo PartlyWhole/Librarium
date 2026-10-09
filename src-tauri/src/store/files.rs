@@ -5,7 +5,8 @@
 //! New items and snapshots are staged in app data and moved in with one rename, so the
 //! library never holds half of one.
 
-use super::record::{self, commit, decode, kind, record_path, slug_for, Entry};
+use super::record::{decode, kind, record_path, slug_for, Entry};
+use super::save::{self, commit};
 use super::write::{rename_exclusive, safe_write, sync_dir};
 use super::{Library, Write};
 use crate::error::{Context, Error, Result};
@@ -35,7 +36,7 @@ pub fn check_suffix(suffix: &str) -> Result<()> {
 /// Writes a sidecar beside a Markdown record. The record's file itself is unchanged.
 pub fn write_sidecar(w: &Write, id: crate::util::Id, suffix: &str, bytes: &[u8]) -> Result<()> {
     check_suffix(suffix)?;
-    let e = record::writable(w, id)?;
+    let e = save::writable(w, id)?;
     let dir = e.dir(w.lib);
     safe_write(&dir.join(format!("{id}{suffix}")), bytes, false).ctx("writing a sidecar")
 }
@@ -116,17 +117,18 @@ pub fn import_item(w: &Write, stage: &Path) -> Result<Entry> {
 /// item's `record.json` after.
 pub fn move_into_item(w: &Write, e: &Entry, stage: &Path, rel_dir: &str) -> Result<()> {
     check_inner(rel_dir)?;
-    record::writable(w, e.id)?;
+    save::writable(w, e.id)?;
     move_in(w.lib, stage, &e.dir(w.lib).join(rel_dir))
 }
 
-/// Writes a file inside an item's folder (its extracted text). Update `record.json` after.
+/// Writes a new file inside an item's folder (its extracted text), never replacing one. Update
+/// `record.json` after.
 pub fn write_item_file(w: &Write, e: &Entry, rel: &str, bytes: &[u8]) -> Result<()> {
     check_inner(rel)?;
-    record::writable(w, e.id)?;
+    save::writable(w, e.id)?;
     let p = e.dir(w.lib).join(rel);
     fs::create_dir_all(p.parent().expect("inside the item")).ctx("making the folder")?;
-    safe_write(&p, bytes, false).ctx("writing")
+    safe_write(&p, bytes, true).ctx("writing")
 }
 
 /// Removes a folder inside an item's folder for good (a snapshot the user chose to remove,

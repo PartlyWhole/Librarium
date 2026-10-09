@@ -91,16 +91,17 @@ pub fn writable(path: &Path) -> bool {
 }
 
 /// A multi-file operation, written before it starts and redone at the next start if it didn't
-/// finish. Each is idempotent: redoing a finished one changes nothing.
+/// finish. Each is idempotent, and a redo first checks that what it was based on still holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case")]
 pub enum Intent {
-    /// Make the record's file name and fields match a title and subfolder.
-    Relocate { record: Id, title: String, subfolder: Option<String> },
-    /// Rename `from` to the canonical name for `id` and write the ID in.
-    Identify { from: String, id: Id, copied_from: Option<Id> },
-    /// Delete a record: its own file first, then these files, then these folders.
-    Delete { record: Id, files: Vec<String>, folders: Vec<String> },
+    /// Make the record's file name and fields match a title and subfolder; it was at `from`.
+    Relocate { record: Id, from: String, title: String, subfolder: Option<String> },
+    /// Rename `from` (whose bytes had `hash`) to the canonical name for `id` and write the ID in.
+    Identify { from: String, hash: String, id: Id, copied_from: Option<Id> },
+    /// Delete a record confirmed at `version`: its own file first, then these files, then these
+    /// folders, then its history.
+    Delete { record: Id, version: String, files: Vec<String>, folders: Vec<String> },
     /// Move a folder, then make the records inside follow.
     MoveFolder { kind: String, from: String, to: String },
 }
@@ -113,6 +114,19 @@ pub fn write_intent(app_dir: &Path, intent: &Intent) -> Result<PathBuf> {
     let v = serde_json::to_value(intent)?;
     safe_write(&p, &json_bytes(&v, false), true).ctx("writing an intent")?;
     Ok(p)
+}
+
+/// Runs a multi-file operation under an intent, so it finishes after a crash. `f` sets its flag
+/// once it has changed something on disk (and clears it if it put everything back): an
+/// operation that fails before then leaves no intent behind.
+pub(crate) fn with_intent<T>(app_dir: &Path, intent: &Intent, f: impl FnOnce(&mut bool) -> Result<T>) -> Result<T> {
+    let p = write_intent(app_dir, intent)?;
+    let mut changed = false;
+    let r = f(&mut changed);
+    if r.is_ok() || !changed {
+        let _ = fs::remove_file(p);
+    }
+    r
 }
 
 /// Intents left by an operation that didn't finish, oldest first (unreadable ones as `None`).

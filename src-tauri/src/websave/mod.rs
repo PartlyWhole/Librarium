@@ -38,18 +38,17 @@ pub fn is_web_address(u: &str) -> bool {
 }
 
 /// The item already saved from this address (its source or final address, ignoring the
-/// `#fragment` and a trailing `/`), passing over items with any of the `hide` fields set.
-pub fn item_for_url(lib: &Library, url: &str, hide: &[String]) -> Option<Entry> {
+/// `#fragment` and a trailing `/`), passing over archived items.
+pub fn item_for_url(lib: &Library, url: &str) -> Option<Entry> {
     let norm = |u: &str| u.split('#').next().unwrap_or("").trim_end_matches('/').to_string();
     if !is_web_address(url) {
         return None;
     }
     let want = norm(url);
     lib.index.list(Some(KIND)).ok()?.into_iter().find(|e| {
-        let hidden = hide.iter().any(|f| e.fields.get(f).is_some_and(|v| !v.is_null()));
         let p = e.fields.get("provenance");
         let urls = [p.and_then(|p| p["source"].as_str()), p.and_then(|p| p["final-url"].as_str())];
-        !hidden && urls.iter().flatten().any(|u| norm(u) == want)
+        !crate::index::is_archived(&e.fields) && urls.iter().flatten().any(|u| norm(u) == want)
     })
 }
 
@@ -60,11 +59,7 @@ pub fn enqueue(lib: &Library, p: SavePageParams) -> Result<JobInfo> {
         return Err(Error::invalid("That isn’t a web address (it should start with https://)."));
     }
     let folder = p.folder.as_deref().map(str::trim).filter(|f| !f.is_empty()).map(folders::clean_folder).transpose()?;
-    let mut hide = p.hide;
-    if !hide.iter().any(|h| h == crate::archive::AT) {
-        hide.push(crate::archive::AT.into());
-    }
-    let payload = json!({ "url": url, "hide": hide, "folder": folder });
+    let payload = json!({ "url": url, "folder": folder });
     lib.jobs.enqueue(lib, "library.savePage", url, payload).ok_or_else(|| Error::io("The save couldn’t be queued."))
 }
 
@@ -96,8 +91,6 @@ pub fn run(lib: &Library, payload: &Value, job: &JobCtx) -> Result<()> {
         "title": page.title,
         "version": 1,
     });
-    let hide: Vec<String> =
-        payload["hide"].as_array().into_iter().flatten().filter_map(|v| v.as_str().map(String::from)).collect();
     job.progress(Some(0.9), Some("Storing the snapshot"));
     let stage = files::stage_dir(lib)?;
     let saved = (|| -> Result<()> {
@@ -105,7 +98,7 @@ pub fn run(lib: &Library, payload: &Value, job: &JobCtx) -> Result<()> {
         files::stage_file(&stage, &format!("{snap_dir}/page.pdf"), &page.pdf)?;
         files::stage_file(&stage, &format!("{snap_dir}/text.json"), &json_bytes(&text, false))?;
         let w = lib.write();
-        let existing = item_for_url(lib, url, &hide).or_else(|| item_for_url(lib, &page.final_url, &hide));
+        let existing = item_for_url(lib, url).or_else(|| item_for_url(lib, &page.final_url));
         match existing {
             Some(e) => add_snapshot(&w, e.id, &stage.join(&snap_dir), &snap_dir, snapshot, &sha),
             None => {
@@ -163,5 +156,5 @@ fn add_snapshot(
         (SNAPSHOTS.to_string(), Some(FmValue::Other(Value::Array(all)))),
         (SNAPSHOT.to_string(), Some(FmValue::Str(at))),
     ];
-    crate::store::record::set_fields(w, id, None, &edits).map(drop)
+    crate::store::save::set_fields(w, id, None, &edits).map(drop)
 }

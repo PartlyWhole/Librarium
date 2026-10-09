@@ -4,7 +4,7 @@
 
 use crate::error::Result;
 use crate::store::frontmatter::FmValue;
-use crate::store::{record, Library};
+use crate::store::{record, save, Library};
 use crate::types::Written;
 use crate::util::{local_date, local_offset_s, now_ms};
 
@@ -21,7 +21,7 @@ pub fn today(lib: &Library, day_start: Option<u32>) -> Result<Written> {
     found.sort_by(|a, b| a.created.cmp(&b.created).then(a.id.cmp(&b.id)));
     let e = match found.into_iter().next() {
         Some(e) => e,
-        None => record::create(&w, "note", &date, vec![(DATE_FIELD.into(), FmValue::Str(date.clone()))], "", None)?,
+        None => save::create(&w, "note", &date, vec![(DATE_FIELD.into(), FmValue::Str(date.clone()))], "", None)?,
     };
     Ok(Written { info: record::info(lib, &e), seq: w.seq() })
 }

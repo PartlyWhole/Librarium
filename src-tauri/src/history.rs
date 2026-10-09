@@ -12,9 +12,9 @@
 use crate::error::{Context, Error, Result};
 use crate::store::record::{self, Entry};
 use crate::store::write::safe_write;
-use crate::store::Library;
+use crate::store::{save, Library};
 use crate::types::{DeletedNote, DiffLine, HistoryVersion, SaveResult, Written};
-use crate::util::{json_bytes, new_id, now_ms, sha256, Id};
+use crate::util::{new_id, now_ms, sha256, Id};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -85,6 +85,9 @@ pub struct History {
     /// Why a record's next write happens, when it isn't an edit (a restore).
     next: Mutex<HashMap<Id, Origin>>,
     last_prune_ms: Mutex<i64>,
+    /// Held while this Mac's log is read and rewritten, or objects are written or collected:
+    /// the ticker takes versions outside the library's write lock.
+    log: Mutex<()>,
 }
 
 /// This Mac's name in the history: a random ID kept in `device.json` in app data.
@@ -96,7 +99,7 @@ fn device_id(app_dir: &Path) -> String {
     }
     let d = new_id().to_string();
     let _ = fs::create_dir_all(app_dir);
-    let _ = safe_write(&p, &json_bytes(&json!({ "device": d }), false), false);
+    let _ = safe_write(&p, json!({ "device": d }).to_string().as_bytes(), false);
     d
 }
 
@@ -136,6 +139,7 @@ impl History {
             pending: Mutex::default(),
             next: Mutex::default(),
             last_prune_ms: Mutex::new(i64::MIN),
+            log: Mutex::new(()),
         }
     }
 
@@ -237,6 +241,7 @@ impl History {
     }
 
     fn try_take(&self, e: &Entry, bytes: &[u8], origin: Origin, force: bool) -> Result<()> {
+        let _log = self.log.lock().unwrap_or_else(|p| p.into_inner());
         self.refresh();
         let hash = sha256(bytes);
         let now = now_ms();
@@ -280,6 +285,7 @@ impl History {
 
     /// Applies retention to this Mac's log, then removes objects no log refers to.
     fn prune(&self, now: i64) -> Result<()> {
+        let _log = self.log.lock().unwrap_or_else(|p| p.into_inner());
         let own = self.read_own()?;
         let mut by_id: BTreeMap<Id, Vec<usize>> = BTreeMap::new();
         for (i, l) in own.iter().enumerate() {
@@ -308,6 +314,7 @@ impl History {
     /// Erases a record's history (permanent deletion): its lines leave this Mac's log, and a
     /// `forget` line hides it in other Macs' logs.
     pub fn forget(&self, id: Id) -> Result<()> {
+        let _log = self.log.lock().unwrap_or_else(|p| p.into_inner());
         let mut own = self.read_own()?;
         own.retain(|l| !matches!(l, Line::Version(v) if v.id == id));
         own.push(Line::Forget { forget: id, ms: now_ms() });
@@ -445,7 +452,10 @@ pub fn restore(lib: &Library, id: Id, hash: &str, base_version: &str) -> Result<
     let now = fs::read(lib.root.join(&e.path)).ctx("reading the note")?;
     lib.history.take(&e, &now, Origin::BeforeRestore);
     lib.history.expect(id, Origin::Restore);
-    record::save_body(&w, id, base_version, None, record::body(&old))
+    let r = save::save_body(&w, id, base_version, None, record::body(&old));
+    // A save that wrote has used it; one that didn't mustn't leave it for the next edit.
+    lib.history.next_origin(id);
+    r
 }
 
 /// Notes deleted outside the app that their history can bring back, newest first.
@@ -472,6 +482,8 @@ pub fn bring_back(lib: &Library, id: Id) -> Result<Written> {
     let bytes = lib.history.read(&v.hash)?;
     let w = lib.write();
     lib.history.expect(id, Origin::Restore);
-    let e = record::bring_back(&w, id, &v.path, &bytes)?;
+    let e = save::bring_back(&w, id, &v.path, &bytes);
+    lib.history.next_origin(id);
+    let e = e?;
     Ok(Written { info: record::info(lib, &e), seq: w.seq() })
 }

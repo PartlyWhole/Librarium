@@ -7,7 +7,7 @@ use super::{item, SNAPSHOT, SNAPSHOTS};
 use crate::error::{Error, Result};
 use crate::store::frontmatter::FmValue;
 use crate::store::record::Entry;
-use crate::store::{files, record, Library};
+use crate::store::{files, save, Library};
 use crate::types::{ProtectedSnapshot, RemovalItem, RemovalPreview, Skipped, SnapshotRequest, SnapshotsRemoved};
 use crate::util::{new_id, now_ms, Id};
 use serde_json::Value;
@@ -107,7 +107,7 @@ fn remove_from(lib: &Library, id: Id, version: &str, gone: Vec<String>) -> Resul
         (SNAPSHOTS.to_string(), Some(FmValue::Other(Value::Array(keep)))),
         (SNAPSHOT.to_string(), Some(FmValue::Str(current))),
     ];
-    let e = record::set_fields(&w, id, Some(version), &edits)?;
+    let e = save::set_fields(&w, id, Some(version), &edits)?;
     for at in &gone {
         files::remove_item_dir(&w, &e, &format!("snapshots/{at}"))?;
     }

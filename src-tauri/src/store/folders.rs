@@ -4,12 +4,13 @@
 
 use super::frontmatter::FmValue;
 use super::record::{self, kind, subfolder_of, Kind, KINDS};
-use super::write::{rename_exclusive, safe_write, sync_dir, write_intent, Intent};
+use super::write::{rename_exclusive, safe_write, sync_dir, with_intent, Intent};
+use super::{relocate, save};
 use super::{Library, Write};
 use crate::error::{Context, Error, Result};
 use crate::types::{FolderSpace, FoldersList};
 use crate::util::{json_bytes, parse_id, Id};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
@@ -69,8 +70,24 @@ fn space_kinds(k: &Kind) -> Vec<&'static Kind> {
     KINDS.iter().filter(|o| o.folder == k.folder).collect()
 }
 
+/// `order.json` as it is, unknown keys included; empty when there is none. A file that doesn't
+/// parse is an error, so it is never replaced by a smaller one.
+fn read_orders(lib: &Library) -> Result<Map<String, Value>> {
+    let unreadable = || Error::invalid("The arrangement in .librarium/order.json can’t be read, so it wasn’t changed.");
+    match fs::read(lib.root.join(ORDER_FILE)) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Map::new()),
+        Err(e) => Err(e).ctx("reading order.json"),
+        Ok(b) => match serde_json::from_slice(&b) {
+            Ok(Value::Object(m)) => Ok(m),
+            _ => Err(unreadable()),
+        },
+    }
+}
+
+/// Each space's arrangement, as far as it can be read.
 fn all_orders(lib: &Library) -> BTreeMap<String, Order> {
-    fs::read(lib.root.join(ORDER_FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    let all = read_orders(lib).unwrap_or_default();
+    all.into_iter().filter_map(|(k, v)| Some((k, serde_json::from_value(v).ok()?))).collect()
 }
 
 /// The records kept in a space's folders.
@@ -156,18 +173,20 @@ pub fn move_folder(w: &Write, kind_name: &str, from: &str, to: &str) -> Result<u
         return Err(Error::conflict(format!("There’s already a folder called “{}” there.", name(&to))));
     }
     let intent = Intent::MoveFolder { kind: kind_name.into(), from: from.clone(), to: to.clone() };
-    let p = write_intent(&w.lib.app_dir, &intent)?;
-    let moved = apply_move(w, kind_name, &from, &to)?;
-    let _ = fs::remove_file(p);
-    Ok(moved)
+    with_intent(&w.lib.app_dir, &intent, |changed| apply_move(w, kind_name, &from, &to, changed))
 }
 
-/// Carries out a folder move; redone at start, it finishes what is left.
-pub(crate) fn apply_move(w: &Write, kind_name: &str, from: &str, to: &str) -> Result<usize> {
+/// Carries out a folder move; redone at start, it finishes what is left. Every record is
+/// tried and the arrangement updated even when some fail; the failures are reported after.
+pub(crate) fn apply_move(w: &Write, kind_name: &str, from: &str, to: &str, changed: &mut bool) -> Result<usize> {
     let lib = w.lib;
     let k = foldered(kind_name)?;
     let (a, b) = (lib.root.join(k.folder).join(from), lib.root.join(k.folder).join(to));
-    if a.exists() && !b.exists() {
+    if a.exists() == b.exists() {
+        return Err(Error::conflict(format!("“{}” changed since, so it wasn’t moved.", name(from))));
+    }
+    if a.exists() {
+        *changed = true;
         fs::create_dir_all(b.parent().unwrap()).ctx("making the folder")?;
         rename_exclusive(&a, &b).ctx("moving the folder")?;
         let _ = sync_dir(b.parent().unwrap());
@@ -175,7 +194,9 @@ pub(crate) fn apply_move(w: &Write, kind_name: &str, from: &str, to: &str) -> Re
     }
     // The index follows the files, then each record's folder field follows its path.
     let (old, new) = (format!("{}/{from}/", k.folder), format!("{}/{to}/", k.folder));
+    *changed = true;
     let mut moved = 0;
+    let mut failed = vec![];
     for mut e in space_records(lib, k)? {
         if let Some(rest) = e.path.strip_prefix(&old) {
             let path = format!("{new}{rest}");
@@ -191,12 +212,14 @@ pub(crate) fn apply_move(w: &Write, kind_name: &str, from: &str, to: &str) -> Re
         let field = k.folder_field.unwrap_or_default();
         let sub = subfolder_of(k, &e.path).filter(|s| !s.is_empty());
         if e.fields.get(field) != sub.clone().map(Value::String).as_ref() && e.read_only.is_none() {
-            record::rewrite_fields(w, &e, &[(field.into(), sub.map(FmValue::Str))], true)?;
+            if let Err(err) = save::rewrite_fields(w, &e, &[(field.into(), sub.map(FmValue::Str))], true) {
+                failed.push(format!("“{}” ({})", e.title, err.message));
+            }
         } else {
             w.changed(e.id);
         }
     }
-    change_order(w, k, |order| {
+    let ordered = change_order(w, k, |order| {
         let under = |key: &str| key == from || key.starts_with(&format!("{from}/"));
         let keys: Vec<String> = order.keys().filter(|key| under(key)).cloned().collect();
         for key in keys {
@@ -214,7 +237,11 @@ pub(crate) fn apply_move(w: &Write, kind_name: &str, from: &str, to: &str) -> Re
                 }
             }
         }
-    })?;
+    });
+    if !failed.is_empty() {
+        return Err(Error::io(format!("The folder moved, but these weren’t updated: {}", failed.join(", "))));
+    }
+    ordered?;
     Ok(moved)
 }
 
@@ -288,25 +315,32 @@ pub fn set_order(w: &Write, kind_name: &str, path: &str, entries: Vec<String>) -
 }
 
 /// Changes one space's arrangement, writing the file only if something changed.
+/// Other keys of the file are kept.
 fn change_order(w: &Write, k: &Kind, f: impl FnOnce(&mut Order)) -> Result<()> {
-    let mut all = all_orders(w.lib);
-    let before = all.clone();
-    let order = all.entry(k.folder.to_string()).or_default();
-    f(order);
+    let mut all = read_orders(w.lib)?;
+    let before: Order = match all.get(k.folder) {
+        Some(v) => serde_json::from_value(v.clone()).map_err(|_| {
+            Error::invalid("The arrangement in .librarium/order.json can’t be read, so it wasn’t changed.")
+        })?,
+        None => Order::new(),
+    };
+    let mut order = before.clone();
+    f(&mut order);
+    if order == before {
+        return Ok(());
+    }
     if order.is_empty() {
         all.remove(k.folder);
-    }
-    if all == before {
-        return Ok(());
+    } else {
+        all.insert(k.folder.to_string(), serde_json::to_value(&order)?);
     }
     let p = w.lib.root.join(ORDER_FILE);
     fs::create_dir_all(p.parent().unwrap()).ctx("making .librarium")?;
-    let v = serde_json::to_value(&all)?;
-    safe_write(&p, &json_bytes(&v, true), false).ctx("keeping the order")
+    safe_write(&p, &json_bytes(&Value::Object(all), true), false).ctx("keeping the order")
 }
 
 /// Moves a record into one of its kind's folders (`None`: the top level).
 pub fn move_to_folder(w: &Write, id: Id, folder: Option<&str>) -> Result<record::Entry> {
     let folder = folder.map(clean_folder).transpose()?;
-    record::relocate(w, id, None, None, Some(folder.as_deref()))
+    relocate::relocate(w, id, None, None, Some(folder.as_deref()))
 }

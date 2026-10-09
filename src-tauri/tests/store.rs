@@ -11,7 +11,7 @@ use serde_json::json;
 use std::fs;
 
 fn note(app: &librarium::app::App, title: &str, body: &str) -> serde_json::Value {
-    call(app, "records.create", json!({ "kind": "note", "title": title, "body": body }))["info"].clone()
+    call(app, "notes.create", json!({ "title": title, "body": body }))["info"].clone()
 }
 
 #[test]
@@ -41,11 +41,15 @@ fn an_interrupted_rename_finishes_at_the_next_start() {
     let info = note(&app, "Before", "text\n");
     let id = parse_id(info["id"].as_str().unwrap()).unwrap();
     let lib_dir = data.join("libraries").join(call(&app, "folder.status", json!({}))["id"].as_str().unwrap());
-    call(&app, "folder.close", json!({}));
+    app.close();
 
     // The app stopped after writing the intent and renaming the file, before the title.
-    write_intent(&lib_dir, &Intent::Relocate { record: id, title: "After".into(), subfolder: Some("Moved".into()) })
-        .unwrap();
+    let from = info["path"].as_str().unwrap().to_string();
+    write_intent(
+        &lib_dir,
+        &Intent::Relocate { record: id, from, title: "After".into(), subfolder: Some("Moved".into()) },
+    )
+    .unwrap();
     fs::create_dir_all(root.join("notes/Moved")).unwrap();
     fs::rename(root.join(info["path"].as_str().unwrap()), root.join(format!("notes/Moved/{id}-after.md"))).unwrap();
 
@@ -77,7 +81,7 @@ fn duplicates_are_classified_and_copies_get_their_own_id() {
     let copy = path.with_file_name("Weil copy.md");
     fs::copy(&path, &conflict).unwrap();
     fs::copy(&path, &copy).unwrap();
-    call(&app, "folder.close", json!({}));
+    app.close();
 
     let app = open(&root, &data);
     let r = call(&app, "records.get", json!({ "id": info["id"] }));
@@ -147,7 +151,7 @@ fn the_startup_check_notices_outside_edits() {
     fs::create_dir_all(&root).unwrap();
     let app = open(&root, &data);
     let info = note(&app, "Ellul", "Technique.\n");
-    call(&app, "folder.close", json!({}));
+    app.close();
 
     let path = root.join(info["path"].as_str().unwrap());
     let mut text = fs::read_to_string(&path).unwrap();
@@ -205,6 +209,6 @@ fn the_fixture_library_survives_a_round_trip_byte_for_byte() {
         call(&app, "records.text", json!({ "id": "0192e7c2-0000-7000-8000-0000000000aa" }))["segments"][0]["label"],
         "p. 1"
     );
-    call(&app, "folder.close", json!({}));
+    app.close();
     assert_eq!(files(&root), before, "every file is byte for byte as it was");
 }

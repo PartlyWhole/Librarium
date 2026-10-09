@@ -3,8 +3,7 @@
 
 use crate::app::{self, App};
 use crate::error::{Error, Result};
-use crate::store::frontmatter::FmValue;
-use crate::store::{folders, record, Library};
+use crate::store::{folders, record, relocate, save, Library};
 use crate::types::*;
 use crate::util::now_ms;
 use crate::{archive, boards, captures, daily, history, library, links, notes, websave};
@@ -14,32 +13,6 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::Arc;
-
-/// Every method, for `app.info`.
-#[rustfmt::skip]
-pub const METHODS: &[&str] = &[
-    "app.info", "app.quit", "app.log", "app.openUrl", "app.revealLogs",
-    "folder.status", "folder.open", "folder.close", "folder.inspect", "folder.reveal",
-    "records.list", "records.get", "records.read", "records.text", "records.create", "records.save",
-    "records.setFields", "records.relocate", "records.move",
-    "folders.list", "folders.create", "folders.move", "folders.remove", "folders.setOrder",
-    "settings.get", "settings.set",
-    "drafts.put", "drafts.get", "drafts.list", "drafts.discard",
-    "jobs.list", "jobs.retry", "jobs.cancel", "jobs.dismiss",
-    "index.rebuild", "index.status",
-    "export.write",
-    "history.versions", "history.read", "history.diff", "history.restore", "history.deleted", "history.bringBack",
-    "search.query",
-    "links.backlinks", "links.unresolved", "links.resolve",
-    "notes.create", "notes.folders",
-    "daily.today",
-    "archive.archive", "archive.restore", "archive.list", "archive.prepareDelete", "archive.delete",
-    "library.import", "library.importData", "library.text", "library.savePage",
-    "library.removeSnapshots.prepare", "library.removeSnapshots",
-    "captures.create", "captures.update", "captures.anchor", "captures.updateAnchor", "captures.forSource",
-    "captures.orphans", "captures.region",
-    "boards.create", "boards.load", "boards.save",
-];
 
 /// Calls a method off the main thread. `app.quit` is answered here: the interface has saved
 /// its work, so the library is closed and the app exits.
@@ -77,11 +50,6 @@ fn written(lib: &Library, e: &record::Entry, seq: u64) -> Written {
 pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
     let lib = || app.library();
     match method {
-        "app.info" => ok(AppInfo {
-            name: "Librarium".into(),
-            version: env!("CARGO_PKG_VERSION").into(),
-            api_methods: METHODS.iter().map(|m| m.to_string()).collect(),
-        }),
         "app.log" => {
             let l: LogParams = p(params)?;
             let msg: String = l.message.chars().take(4000).collect();
@@ -99,10 +67,6 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         }
         "folder.status" => ok(app.status()),
         "folder.open" => ok(app.open(Path::new(&p::<PathParams>(params)?.path))?),
-        "folder.close" => {
-            app.close();
-            ok(app.status())
-        }
         "folder.inspect" => ok(app::inspect(Path::new(&p::<PathParams>(params)?.path))),
         "folder.reveal" => ok(app::reveal(&lib()?.root)?),
         "settings.get" => ok(app.settings.all()),
@@ -142,40 +106,20 @@ fn library_call(lib: &Library, method: &str, params: Value) -> Result<Value> {
             let t: TextParams = p(params)?;
             ok(record::stored_text(lib, &get(t.id)?, t.part.as_deref()))
         }
-        "records.create" => {
-            let c: CreateParams = p(params)?;
-            let mut fields = vec![];
-            for (k, v) in c.fields.iter().filter(|(_, v)| !v.is_null()) {
-                fields.push((k.clone(), field_value(k, v)?));
-            }
-            let w = lib.write();
-            let e = record::create(&w, &c.kind, &c.title, fields, &c.body, c.subfolder.as_deref())?;
-            ok(written(lib, &e, w.seq()))
-        }
         "records.save" => {
             let s: SaveParams = p(params)?;
-            let r = record::save_body(&lib.write(), s.id, &s.base_version, s.base_body.as_deref(), &s.body)?;
+            let r = save::save_body(&lib.write(), s.id, &s.base_version, s.base_body.as_deref(), &s.body)?;
             // The draft is kept until its save succeeds (and more typing since keeps it).
             if !matches!(r, SaveResult::Conflict { .. }) {
                 lib.drafts.settle(s.id, &s.body);
             }
             ok(r)
         }
-        "records.setFields" => {
-            let s: SetFieldsParams = p(params)?;
-            let mut edits = vec![];
-            for (k, v) in &s.fields {
-                edits.push((k.clone(), if v.is_null() { None } else { Some(field_value(k, v)?) }));
-            }
-            let w = lib.write();
-            let e = record::set_fields(&w, s.id, s.base_version.as_deref(), &edits)?;
-            ok(written(lib, &e, w.seq()))
-        }
         "records.relocate" => {
             let r: RelocateParams = p(params)?;
             let w = lib.write();
             let sub = r.subfolder.as_ref().map(|s| s.as_deref());
-            let e = record::relocate(&w, r.id, r.base_version.as_deref(), r.title.as_deref(), sub)?;
+            let e = relocate::relocate(&w, r.id, r.base_version.as_deref(), r.title.as_deref(), sub)?;
             ok(written(lib, &e, w.seq()))
         }
         "records.move" => {
@@ -245,12 +189,6 @@ fn library_call(lib: &Library, method: &str, params: Value) -> Result<Value> {
         "jobs.cancel" => ok(lib.jobs.cancel(lib, p::<IdParams>(params)?.id)?),
         "jobs.dismiss" => ok(lib.jobs.dismiss(p::<IdParams>(params)?.id)?),
         "index.rebuild" => ok(lib.jobs.enqueue(lib, "index.rebuild", "all", Value::Null)),
-        "index.status" => ok(IndexStatus {
-            ready: true,
-            applied: lib.seq(),
-            progress: None,
-            views: vec!["records".into(), "links".into(), "search".into()],
-        }),
         "history.versions" => ok(history::versions(lib, p::<IdParams>(params)?.id)),
         "history.read" => {
             let h: HistoryParams = p(params)?;
@@ -275,7 +213,6 @@ fn library_call(lib: &Library, method: &str, params: Value) -> Result<Value> {
         "links.unresolved" => ok(lib.index.unresolved(p::<UnresolvedParams>(params)?.id)?),
         "links.resolve" => ok(links::resolve(lib, p(params)?)?),
         "notes.create" => ok(notes::create(lib, p(params)?)?),
-        "notes.folders" => ok(notes::folders(lib)?),
         "archive.archive" => {
             let a: ArchiveParams = p(params)?;
             ok(archive::archive(lib, a.id, a.base_version.as_deref())?)
@@ -284,7 +221,6 @@ fn library_call(lib: &Library, method: &str, params: Value) -> Result<Value> {
             let a: ArchiveParams = p(params)?;
             ok(archive::restore(lib, a.id, a.base_version.as_deref())?)
         }
-        "archive.list" => ok(archive::list(lib)?),
         "archive.prepareDelete" => ok(archive::prepare_delete(lib, &p::<IdsParams>(params)?.ids)?),
         "archive.delete" => ok(archive::delete(lib, &p::<TokenParams>(params)?.token)?),
         "library.import" => {
@@ -325,10 +261,4 @@ fn library_call(lib: &Library, method: &str, params: Value) -> Result<Value> {
         "boards.save" => ok(boards::save(lib, p(params)?)?),
         _ => Err(Error::not_found(format!("There is no method “{method}”."))),
     }
-}
-
-/// A field value the app can write: a string, number, boolean, or a list of these.
-fn field_value(key: &str, v: &Value) -> Result<FmValue> {
-    FmValue::from_json(v)
-        .ok_or_else(|| Error::invalid(format!("field “{key}” must be a string, number, boolean or list of these")))
 }

@@ -12,7 +12,7 @@
 
 use crate::error::{Error, Result};
 use crate::store::frontmatter::FmValue;
-use crate::store::{files, record, Library};
+use crate::store::{files, record, save, Library};
 use crate::types::{BoardLoaded, BoardSaveParams, BoardSaved, SaveResult, Written};
 use crate::util::{new_id, sha256, Id};
 use serde_json::Value;
@@ -40,7 +40,7 @@ pub fn create(lib: &Library, title: Option<&str>, folder: Option<&str>) -> Resul
     let sidecars = [(SCENE.to_string(), EMPTY_SCENE.as_bytes().to_vec())];
     let page = format!("{}\n", page_note(id));
     let w = lib.write();
-    let e = record::create_with_sidecars(&w, id, KIND, title, fields, &page, folder, &sidecars)?;
+    let e = save::create_with_sidecars(&w, id, KIND, title, fields, &page, folder, &sidecars)?;
     Ok(Written { info: record::info(lib, &e), seq: w.seq() })
 }
 
@@ -80,12 +80,12 @@ pub fn save(lib: &Library, p: BoardSaveParams) -> Result<BoardSaved> {
         return Err(changed());
     }
     files::write_sidecar(&w, p.id, SCENE, p.scene.as_bytes())?;
-    let version = match record::save_body(&w, p.id, &p.base_version, None, &p.page)? {
+    let version = match save::save_body(&w, p.id, &p.base_version, None, &p.page)? {
         SaveResult::Saved { version, .. } | SaveResult::Merged { version, .. } => version,
         SaveResult::Conflict { .. } => return Err(changed()),
     };
     let scene_sha = sha256(p.scene.as_bytes());
     let edits = [(SCENE_SHA.to_string(), Some(FmValue::Str(scene_sha.clone())))];
-    let e = record::set_fields(&w, p.id, Some(&version), &edits)?;
+    let e = save::set_fields(&w, p.id, Some(&version), &edits)?;
     Ok(BoardSaved { info: record::info(lib, &e), seq: w.seq(), scene_sha })
 }

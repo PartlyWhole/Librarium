@@ -9,7 +9,7 @@
 
 use crate::error::{Error, Result};
 use crate::jobs::JobCtx;
-use crate::store::{record, Library};
+use crate::store::{save, Library};
 use crate::types::{ResolveParams, Resolved};
 use crate::util::{parse_id, Id};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
@@ -212,7 +212,7 @@ pub fn resolve(lib: &Library, p: ResolveParams) -> Result<Resolved> {
         return Err(Error::not_found("That record can’t be found."));
     }
     let w = lib.write();
-    let changed = record::rewrite_body(&w, p.source, &e.hash, |body| {
+    let changed = save::rewrite_body(&w, p.source, &e.hash, |body| {
         let mut out = body.to_string();
         let mut changed = false;
         for l in parse_links(body).into_iter().rev() {
@@ -267,7 +267,7 @@ fn repair_source(lib: &Library, source: Id, renamed: Option<(Id, &str, &str)>) -
         return Ok(false);
     }
     let w = lib.write();
-    let result = record::rewrite_body(&w, source, &e.hash, |body| {
+    let result = save::rewrite_body(&w, source, &e.hash, |body| {
         let mut out = body.to_string();
         let mut changed = false;
         for l in parse_links(body).into_iter().rev() {

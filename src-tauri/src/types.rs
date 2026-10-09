@@ -7,13 +7,6 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use ts_rs::TS;
 
-#[derive(Clone, Debug, Serialize, TS)]
-pub struct AppInfo {
-    pub name: String,
-    pub version: String,
-    pub api_methods: Vec<String>,
-}
-
 /// A record as listed: its envelope and fields, never its body.
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
 pub struct RecordInfo {
@@ -226,15 +219,6 @@ pub struct JobsList {
     pub resumed: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, TS)]
-pub struct IndexStatus {
-    pub ready: bool,
-    /// The number of the last change indexed.
-    pub applied: u64,
-    pub progress: Option<f32>,
-    pub views: Vec<String>,
-}
-
 /// A search result: a passage of a record.
 #[derive(Clone, Debug, Serialize, TS)]
 pub struct SearchHit {
@@ -380,19 +364,6 @@ pub struct ListParams {
 }
 
 #[derive(Clone, Debug, Deserialize, TS)]
-pub struct CreateParams {
-    pub kind: String,
-    pub title: String,
-    #[serde(default)]
-    #[ts(type = "Record<string, unknown>")]
-    pub fields: Map<String, Value>,
-    #[serde(default)]
-    pub body: String,
-    #[serde(default)]
-    pub subfolder: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, TS)]
 pub struct SaveParams {
     pub id: Id,
     pub base_version: String,
@@ -400,16 +371,6 @@ pub struct SaveParams {
     #[serde(default)]
     pub base_body: Option<String>,
     pub body: String,
-}
-
-#[derive(Clone, Debug, Deserialize, TS)]
-pub struct SetFieldsParams {
-    pub id: Id,
-    #[serde(default)]
-    pub base_version: Option<String>,
-    /// `null` removes a field.
-    #[ts(type = "Record<string, unknown>")]
-    pub fields: Map<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, TS)]
@@ -594,9 +555,6 @@ pub struct ImportFailure {
 #[derive(Clone, Debug, Deserialize, TS)]
 pub struct SavePageParams {
     pub url: String,
-    /// Records with any of these fields set never receive the snapshot (archived ones never do).
-    #[serde(default)]
-    pub hide: Vec<String>,
     #[serde(default)]
     pub folder: Option<String>,
 }
@@ -802,7 +760,6 @@ pub fn typescript() -> String {
     export!(
         Code,
         Error,
-        AppInfo,
         RecordInfo,
         RecordText,
         Written,
@@ -822,7 +779,6 @@ pub fn typescript() -> String {
         JobState,
         JobInfo,
         JobsList,
-        IndexStatus,
         SearchHit,
         Backlink,
         Unresolved,
@@ -840,9 +796,7 @@ pub fn typescript() -> String {
         IdParams,
         IdsParams,
         ListParams,
-        CreateParams,
         SaveParams,
-        SetFieldsParams,
         RelocateParams,
         TextParams,
         MoveRecordsParams,

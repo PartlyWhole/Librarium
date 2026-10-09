@@ -7,8 +7,8 @@
 use crate::error::{Error, Result};
 use crate::index::is_archived;
 use crate::store::frontmatter::FmValue;
-use crate::store::{record, Library};
-use crate::types::{Deleted, DeletionPreview, DeletionRecord, RecordInfo, Skipped, Written};
+use crate::store::{record, relocate, save, Library};
+use crate::types::{Deleted, DeletionPreview, DeletionRecord, Skipped, Written};
 use crate::util::{iso_utc, new_id, now_ms, Id};
 
 pub const AT: &str = "archive.at";
@@ -23,7 +23,7 @@ pub struct Confirmation {
 
 fn set(lib: &Library, id: Id, base_version: Option<&str>, v: Option<FmValue>) -> Result<Written> {
     let w = lib.write();
-    let e = record::set_fields(&w, id, base_version, &[(AT.into(), v)])?;
+    let e = save::set_fields(&w, id, base_version, &[(AT.into(), v)])?;
     Ok(Written { info: record::info(lib, &e), seq: w.seq() })
 }
 
@@ -34,14 +34,6 @@ pub fn archive(lib: &Library, id: Id, base_version: Option<&str>) -> Result<Writ
 
 pub fn restore(lib: &Library, id: Id, base_version: Option<&str>) -> Result<Written> {
     set(lib, id, base_version, None)
-}
-
-/// Archived records, most recently archived first.
-pub fn list(lib: &Library) -> Result<Vec<RecordInfo>> {
-    let mut v: Vec<RecordInfo> =
-        lib.index.list(None)?.iter().filter(|e| is_archived(&e.fields)).map(|e| record::info(lib, e)).collect();
-    v.sort_by(|a, b| b.fields[AT].as_str().cmp(&a.fields[AT].as_str()));
-    Ok(v)
 }
 
 /// Says exactly what would be deleted, and returns a token for the user's confirmation.
@@ -55,7 +47,7 @@ pub fn prepare_delete(lib: &Library, ids: &[Id]) -> Result<DeletionPreview> {
         if !is_archived(&e.fields) {
             return Err(Error::invalid("Archive it first: only archived records can be deleted permanently."));
         }
-        let (files, _) = record::deletion_plan(lib, &e);
+        let (files, _) = relocate::deletion_plan(lib, &e);
         records.push(DeletionRecord { id, title: e.title, kind: e.kind, version: e.hash, files });
     }
     let now = now_ms();
@@ -80,7 +72,7 @@ pub fn delete(lib: &Library, token: &str) -> Result<Deleted> {
     for (id, version) in c.records {
         let archived = lib.index.get(id).is_some_and(|e| is_archived(&e.fields));
         let r = if archived {
-            record::delete_permanently(&w, id, &version)
+            relocate::delete_permanently(&w, id, &version)
         } else {
             Err(Error::invalid("it is no longer archived"))
         };

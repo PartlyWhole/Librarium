@@ -12,7 +12,7 @@ use super::{epub, file_path, import::stem, ocr, stored_json, FORMAT, KIND, PAGES
 use crate::error::{Error, Result};
 use crate::jobs::JobCtx;
 use crate::store::frontmatter::FmValue;
-use crate::store::{files, record, Library};
+use crate::store::{files, relocate, save, Library};
 use crate::util::{clean_title, json_bytes, parse_id};
 use serde_json::{json, Value};
 use std::path::Path;
@@ -30,9 +30,15 @@ pub fn run(lib: &Library, payload: &Value, job: &JobCtx) -> Result<()> {
     if stored_json(lib, &e).is_some() {
         return Ok(());
     }
-    // Stored before, but `record.json` didn't get to say so: kept as it is.
-    let written: Option<Value> =
-        std::fs::read(e.dir(lib).join(TEXT_FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok());
+    // Stored before, but `record.json` didn't get to say so: kept as it is. One that doesn't
+    // parse is never replaced.
+    let written: Option<Value> = match std::fs::read(e.dir(lib).join(TEXT_FILE)) {
+        Ok(b) => Some(serde_json::from_slice(&b).map_err(|_| {
+            Error::invalid(format!("{TEXT_FILE} of “{}” can’t be read, so it was left as it is.", e.title))
+        })?),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => return Err(Error::io(format!("reading the stored text: {err}"))),
+    };
     let fresh = written.is_none();
     let stored = match written {
         Some(v) => v,
@@ -64,12 +70,12 @@ fn commit(lib: &Library, id: crate::util::Id, stored: &Value, fresh: bool) -> Re
     if let Some(n) = stored["pages"].as_array().or_else(|| stored["chapters"].as_array()).map(Vec::len) {
         edits.push((PAGES.to_string(), Some(FmValue::Int(n as i64))));
     }
-    let e = record::set_fields(&w, id, None, &edits)?;
+    let e = save::set_fields(&w, id, None, &edits)?;
     let book_title = stored["title"].as_str().map(clean_title).filter(|t| !t.is_empty());
     if let (Some("epub"), Some(t)) = (e.field_str(FORMAT), book_title) {
         let original = e.fields.get("provenance").and_then(|p| p["original-name"].as_str()).map(stem);
         if original.as_deref() == Some(e.title.as_str()) && e.title != t {
-            record::relocate(&w, id, None, Some(&t), None)?;
+            relocate::relocate(&w, id, None, Some(&t), None)?;
         }
     }
     Ok(())

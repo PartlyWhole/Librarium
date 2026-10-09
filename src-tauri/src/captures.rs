@@ -9,7 +9,7 @@
 
 use crate::error::{Error, Result};
 use crate::store::frontmatter::FmValue;
-use crate::store::{files, record, Library};
+use crate::store::{files, record, relocate, save, Library};
 use crate::types::{
     AnchorUpdated, CaptureParams, CapturePart, CaptureUpdateParams, MarkPart, OrphanSidecar, SavedMarks, Written,
 };
@@ -105,13 +105,14 @@ pub fn create(lib: &Library, p: CaptureParams) -> Result<Written> {
     }
     let words = if p.words.trim().is_empty() { String::new() } else { format!("{}\n", p.words.trim_end()) };
     let w = lib.write();
-    let e = record::create_with_sidecars(&w, id, KIND, &title, fields, &words, None, &sidecars)?;
+    let e = save::create_with_sidecars(&w, id, KIND, &title, fields, &words, None, &sidecars)?;
     Ok(Written { info: record::info(lib, &e), seq: w.seq() })
 }
 
 /// New parts for a capture (its selection edited). The user's words stay, and the title
 /// follows the new quote only if it was still the automatic one.
 pub fn update(lib: &Library, p: CaptureUpdateParams) -> Result<Written> {
+    let w = lib.write();
     let e = capture(lib, p.id)?;
     let (parts, regions) = anchor_parts(&p.parts)?;
     let quote = quote_of(&p.parts);
@@ -121,7 +122,6 @@ pub fn update(lib: &Library, p: CaptureUpdateParams) -> Result<Written> {
     let mut a = anchor(lib, p.id)?;
     a["parts"] = Value::Array(parts);
     let locator = p.parts.iter().find_map(|x| x.locator.clone());
-    let w = lib.write();
     files::write_sidecar(&w, p.id, ANCHOR, &json_bytes(&a, false))?;
     for (suffix, png) in &regions {
         files::write_sidecar(&w, p.id, suffix, png)?;
@@ -131,19 +131,19 @@ pub fn update(lib: &Library, p: CaptureUpdateParams) -> Result<Written> {
         (PARTS.to_string(), Some(FmValue::Int(p.parts.len() as i64))),
         (LOCATOR.to_string(), locator.map(FmValue::Str)),
     ];
-    let mut e = record::set_fields(&w, p.id, None, &edits)?;
+    let mut e = save::set_fields(&w, p.id, None, &edits)?;
     if let Some(t) = title.filter(|t| *t != e.title) {
-        e = record::relocate(&w, p.id, None, Some(&t), None)?;
+        e = relocate::relocate(&w, p.id, None, Some(&t), None)?;
     }
     Ok(Written { info: record::info(lib, &e), seq: w.seq() })
 }
 
 /// The user confirmed where moved parts are now: the anchor's parts are replaced.
 pub fn update_anchor(lib: &Library, id: Id, parts: Vec<Value>) -> Result<AnchorUpdated> {
+    let w = lib.write();
     capture(lib, id)?;
     let mut a = anchor(lib, id)?;
     a["parts"] = Value::Array(parts);
-    let w = lib.write();
     files::write_sidecar(&w, id, ANCHOR, &json_bytes(&a, false))?;
     Ok(AnchorUpdated { seq: w.changed(id) })
 }

@@ -15,7 +15,9 @@ src-tauri/src/            the backend: one crate, one module per concern
   store/                  the library folder: the only code that writes to it
     write.rs              safe writes, intents, and the write lock that orders them
     frontmatter.rs        byte-preserving YAML frontmatter edits
-    record.rs             read, create and save records; rename and move; merging
+    record.rs             the kinds, reading records, names and paths
+    save.rs               create, save (with three-way merge, merge.rs), set fields
+    relocate.rs           rename, move, permanent delete; finishing them after a crash
     files.rs              sidecars, item folders, staged imports
     folders.rs            user folders and order.json
     scan.rs               walk the folder; outside changes (startup scan + live watch)

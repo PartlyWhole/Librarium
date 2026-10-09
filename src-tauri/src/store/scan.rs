@@ -9,8 +9,8 @@
 use super::record::{self, decode, entry_from, folder_kind, record_path, slug_for, subfolder_of, Decoded, Entry};
 use super::repair::{classify, DupClass, Duplicate, Repair};
 use super::write::{is_temp, safe_write};
-use super::{Library, Write};
-use crate::error::{Context, Result};
+use super::{save, Library, Write};
+use crate::error::{Context, Error, Result};
 use crate::util::{iso_utc, json_bytes, new_id, now_ms, sha256, Id};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -21,20 +21,30 @@ use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
 /// Reads `.librarium/library.json`, or makes it (and `.librarium/.gitignore`) for a new library.
+/// An existing one is never rewritten: any form of UUID is accepted, and one that can't be read
+/// stops the library from opening, since a new ID would orphan its drafts and history.
 pub fn library_id(root: &Path) -> Result<Id> {
     let meta = root.join(".librarium");
     let p = meta.join("library.json");
-    if let Some(id) = fs::read(&p)
-        .ok()
-        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-        .and_then(|v| v["id"].as_str().and_then(crate::util::parse_id))
-    {
-        return Ok(id);
+    match fs::read(&p) {
+        Ok(b) => {
+            let id = serde_json::from_slice::<Value>(&b)
+                .ok()
+                .and_then(|v| v["id"].as_str().and_then(|s| uuid::Uuid::parse_str(s.trim()).ok()));
+            return id.ok_or_else(|| {
+                Error::invalid(format!(
+                    "{} can’t be read, so the library wasn’t opened. Fix or remove that file, then try again.",
+                    p.display()
+                ))
+            });
+        }
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e).ctx("reading library.json"),
+        Err(_) => {}
     }
     fs::create_dir_all(&meta).ctx("making .librarium")?;
     let id = new_id();
     let v = json!({ "created": iso_utc(now_ms()), "id": id });
-    safe_write(&p, &json_bytes(&v, true), false).ctx("writing library.json")?;
+    safe_write(&p, &json_bytes(&v, true), true).ctx("writing library.json")?;
     let gitignore = meta.join(".gitignore");
     if !gitignore.exists() {
         safe_write(&gitignore, b"lock\n", true).ctx("writing .gitignore")?;
@@ -291,7 +301,7 @@ fn resolve(w: &Write, id: Id, claims: Vec<(String, Seen)>, report: &mut Report) 
     match &indexed {
         Some(old) if old.hash == e.hash && old.path == e.path => lib.index.touch(&e)?,
         _ => {
-            record::index(w, &e, bytes)?;
+            save::index(w, &e, bytes)?;
             if indexed.is_some() && e.is_markdown() {
                 // Changed outside the app: a version of it as it is now.
                 lib.history.take(&e, bytes, crate::history::Origin::Outside);
@@ -304,14 +314,14 @@ fn resolve(w: &Write, id: Id, claims: Vec<(String, Seen)>, report: &mut Report) 
 }
 
 /// Watches the folder for outside changes, checking what changed once events have been quiet
-/// for 300 ms. Stops when the returned watcher is dropped.
+/// for 300 ms. An event for the root, or one saying events were dropped, checks everything.
+/// Stops when the returned watcher is dropped.
 pub fn watch(lib: &Arc<Library>) -> Option<notify::RecommendedWatcher> {
     use notify::Watcher;
-    let (tx, rx) = mpsc::channel::<Vec<PathBuf>>();
+    // `None`: check everything.
+    let (tx, rx) = mpsc::channel::<Option<Vec<PathBuf>>>();
     let mut watcher = notify::recommended_watcher(move |r: notify::Result<notify::Event>| {
-        if let Ok(ev) = r {
-            let _ = tx.send(ev.paths);
-        }
+        let _ = tx.send(r.ok().filter(|ev| !ev.need_rescan()).map(|ev| ev.paths));
     })
     .map_err(|e| log::warn!("the folder can’t be watched: {e}"))
     .ok()?;
@@ -327,21 +337,24 @@ pub fn watch(lib: &Arc<Library>) -> Option<notify::RecommendedWatcher> {
         .name("librarium-watcher".into())
         .spawn(move || {
             while let Ok(first) = rx.recv() {
-                let mut paths: BTreeSet<PathBuf> = first.into_iter().collect();
+                let mut full = first.is_none();
+                let mut paths: BTreeSet<PathBuf> = first.into_iter().flatten().collect();
                 while let Ok(more) = rx.recv_timeout(Duration::from_millis(300)) {
-                    paths.extend(more);
+                    full |= more.is_none();
+                    paths.extend(more.into_iter().flatten());
                 }
                 let mut paths: BTreeSet<PathBuf> =
                     paths.into_iter().map(|p| p.strip_prefix(&real).map(|r| root.join(r)).unwrap_or(p)).collect();
+                full |= paths.contains(&root);
                 paths.retain(|p| {
                     !p.starts_with(&meta_dir) && !p.file_name().is_some_and(|n| is_temp(&n.to_string_lossy()))
                 });
                 let Some(lib) = weak.upgrade() else { return };
-                if paths.is_empty() || lib.is_closed() {
+                if (paths.is_empty() && !full) || lib.is_closed() {
                     continue;
                 }
                 let paths: Vec<PathBuf> = paths.into_iter().collect();
-                let checked = check_paths(&lib.write(), &paths);
+                let checked = if full { lib.full_check(&lib.write()) } else { check_paths(&lib.write(), &paths) };
                 match checked {
                     Ok(r) if r.changed + r.duplicates + r.unidentified > 0 => lib.note_outside_activity(),
                     Ok(_) => {}

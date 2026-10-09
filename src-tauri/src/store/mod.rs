@@ -7,8 +7,11 @@
 pub mod files;
 pub mod folders;
 pub mod frontmatter;
+pub mod merge;
 pub mod record;
+pub mod relocate;
 pub mod repair;
+pub mod save;
 pub mod scan;
 pub mod write;
 
@@ -32,6 +35,8 @@ pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
 
 /// How long the folder must be free of outside changes before repairs run.
 pub const QUIET_MS: i64 = 3_000;
+/// Every file is checked this often, in case the watcher missed something.
+pub const FULL_CHECK_MS: i64 = 30 * 60 * 1000;
 
 pub struct Library {
     pub id: Id,
@@ -53,6 +58,9 @@ pub struct Library {
     seq: AtomicU64,
     last_outside_ms: AtomicI64,
     last_check_ms: AtomicU64,
+    last_full_ms: AtomicI64,
+    /// Unfinished operations found at open while a git operation was in progress.
+    intents_waiting: AtomicBool,
     closed: AtomicBool,
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
 }
@@ -117,24 +125,20 @@ impl Library {
             seq: AtomicU64::new(0),
             last_outside_ms: AtomicI64::new(0),
             last_check_ms: AtomicU64::new(0),
+            last_full_ms: AtomicI64::new(0),
+            intents_waiting: AtomicBool::new(false),
             closed: AtomicBool::new(false),
             watcher: Mutex::new(None),
         });
         {
             let w = lib.write();
-            let t = std::time::Instant::now();
-            let report = scan::full_scan(&w)?;
-            lib.last_check_ms.store(t.elapsed().as_millis() as u64, Ordering::SeqCst);
-            if report.changed > 0 {
+            if lib.full_check(&w)?.changed > 0 {
                 lib.note_outside_activity();
             }
-            for (path, intent) in write::pending_intents(&lib.app_dir) {
-                if let Some(i) = intent {
-                    if let Err(e) = record::redo(&w, &i) {
-                        log::warn!("dropping an unfinished operation {i:?}: {e}");
-                    }
-                }
-                let _ = std::fs::remove_file(path);
+            if git_busy(&lib.root) {
+                lib.intents_waiting.store(true, Ordering::SeqCst);
+            } else {
+                redo_intents(&w);
             }
         }
         *lib.watcher.lock().unwrap() = scan::watch(&lib);
@@ -176,11 +180,16 @@ impl Library {
 
     /// No outside changes for a while, and no git operation in progress.
     pub fn quiet(&self) -> bool {
-        let git = self.root.join(".git");
-        let git_busy = ["index.lock", "MERGE_HEAD", "rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", "REVERT_HEAD"]
-            .iter()
-            .any(|n| git.join(n).exists());
-        now_ms() - self.last_outside_ms.load(Ordering::SeqCst) >= QUIET_MS && !git_busy
+        now_ms() - self.last_outside_ms.load(Ordering::SeqCst) >= QUIET_MS && !git_busy(&self.root)
+    }
+
+    /// Checks every file against the index.
+    pub fn full_check(&self, w: &Write) -> Result<scan::Report> {
+        let t = std::time::Instant::now();
+        self.last_full_ms.store(now_ms(), Ordering::SeqCst);
+        let report = scan::full_scan(w)?;
+        self.last_check_ms.store(t.elapsed().as_millis() as u64, Ordering::SeqCst);
+        Ok(report)
     }
 
     pub fn status(&self) -> StoreStatus {
@@ -202,8 +211,27 @@ impl Drop for Library {
     }
 }
 
-/// Once a second: versions of notes written since their last one, and repairs once the folder
-/// is quiet.
+fn git_busy(root: &Path) -> bool {
+    let git = root.join(".git");
+    ["index.lock", "MERGE_HEAD", "rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", "REVERT_HEAD"]
+        .iter()
+        .any(|n| git.join(n).exists())
+}
+
+/// Finishes the operations a crash cut short, where what they were based on still holds.
+fn redo_intents(w: &Write) {
+    for (path, intent) in write::pending_intents(&w.lib.app_dir) {
+        if let Some(i) = intent {
+            if let Err(e) = relocate::redo(w, &i) {
+                log::warn!("dropping an unfinished operation {i:?}: {e}");
+            }
+        }
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// Once a second: versions of notes written since their last one; unfinished operations and
+/// repairs once the folder is quiet; and now and then a check of every file.
 fn start_ticker(lib: Weak<Library>) {
     std::thread::Builder::new()
         .name("librarium-ticker".into())
@@ -214,8 +242,19 @@ fn start_ticker(lib: Weak<Library>) {
                 return;
             }
             crate::history::tick(&lib);
+            if lib.intents_waiting.load(Ordering::SeqCst) && lib.quiet() {
+                redo_intents(&lib.write());
+                lib.intents_waiting.store(false, Ordering::SeqCst);
+            }
             if lib.problems.lock().unwrap().has_repairs() && lib.quiet() {
                 repair::run_repairs(&lib.write());
+            }
+            if now_ms() - lib.last_full_ms.load(Ordering::SeqCst) >= FULL_CHECK_MS {
+                match lib.full_check(&lib.write()) {
+                    Ok(r) if r.changed + r.duplicates + r.unidentified > 0 => lib.note_outside_activity(),
+                    Ok(_) => {}
+                    Err(e) => log::warn!("checking every file failed: {e}"),
+                }
             }
         })
         .expect("start the ticker thread");

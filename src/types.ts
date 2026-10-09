@@ -7,8 +7,6 @@ export type ErrorCode = "no_library" | "not_found" | "conflict" | "read_only" | 
 
 export type BackendError = { code: ErrorCode, message: string, };
 
-export type AppInfo = { name: string, version: string, api_methods: Array<string>, };
-
 /**
  * A record as listed: its envelope and fields, never its body.
  */
@@ -150,12 +148,6 @@ export type JobsList = { running: Array<JobInfo>, failed: Array<JobInfo>, recent
  */
 resumed: string | null, };
 
-export type IndexStatus = { ready: boolean, 
-/**
- * The number of the last change indexed.
- */
-applied: number, progress: number | null, views: Array<string>, };
-
 /**
  * A search result: a passage of a record.
  */
@@ -252,19 +244,11 @@ export type IdsParams = { ids: Array<string>, };
 
 export type ListParams = { kind: string | null, };
 
-export type CreateParams = { kind: string, title: string, fields: Record<string, unknown>, body: string, subfolder: string | null, };
-
 export type SaveParams = { id: string, base_version: string, 
 /**
  * The body the edit started from, for a three-way merge.
  */
 base_body: string | null, body: string, };
-
-export type SetFieldsParams = { id: string, base_version: string | null, 
-/**
- * `null` removes a field.
- */
-fields: Record<string, unknown>, };
 
 export type RelocateParams = { id: string, 
 /**
@@ -382,11 +366,7 @@ export type ImportFailure = { path: string, error: string, };
  * Saves a web page in the background: a new item (into `folder`), or a new snapshot of the
  * item saved from the same address.
  */
-export type SavePageParams = { url: string, 
-/**
- * Records with any of these fields set never receive the snapshot (archived ones never do).
- */
-hide: Array<string>, folder: string | null, };
+export type SavePageParams = { url: string, folder: string | null, };
 
 export type SnapshotRequest = { id: string, 
 /**
