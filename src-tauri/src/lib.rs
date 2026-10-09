@@ -6,6 +6,8 @@ pub mod boards;
 pub mod captures;
 pub mod commands;
 pub mod daily;
+#[cfg(debug_assertions)]
+pub mod devbridge;
 pub mod error;
 pub mod history;
 pub mod index;
@@ -36,6 +38,8 @@ const QUIT_WAIT: Duration = Duration::from_secs(3);
 /// `records:changed`.
 fn emitter(handle: tauri::AppHandle) -> store::Emit {
     Arc::new(move |name: &str, payload: Value| {
+        #[cfg(debug_assertions)]
+        devbridge::broadcast(&name.replace('.', ":"), &payload);
         if let Err(e) = handle.emit(&name.replace('.', ":"), payload) {
             log::warn!("the event {name} wasn’t sent: {e}");
         }
@@ -149,6 +153,8 @@ pub fn run() {
             if let (Some(w), Some(frame)) = (app.get_webview_window("main"), state.settings.get(FRAME)) {
                 restore_frame(&w, &frame);
             }
+            #[cfg(debug_assertions)]
+            devbridge::start(state.clone());
             state.open_saved_soon();
             app.manage(state);
             websave::init(app.handle().clone());

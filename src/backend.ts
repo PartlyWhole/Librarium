@@ -28,8 +28,30 @@ export class BackendError extends Error {
 /** True inside the app's webview; false in a plain browser (`npm run dev:web`). */
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/**
+ * Development only: a plain browser opened at `?bridge=<port>` reaches the real backend over
+ * localhost (see `src-tauri/src/devbridge.rs`), so the interface can be tried outside the app.
+ */
+const bridgePort = !inTauri && import.meta.env.DEV ? new URLSearchParams(location.search).get("bridge") : null;
+const bridge = bridgePort ? `http://127.0.0.1:${bridgePort}` : null;
+
+async function viaBridge<T>(method: string, params: unknown): Promise<T> {
+  const reply = (await (await fetch(`${bridge}/call`, { method: "POST", body: JSON.stringify({ method, params }) })).json()) as { ok?: T; error?: { code: ErrorCode; message: string } };
+  if (reply.error) throw new BackendError(reply.error.code, reply.error.message);
+  return reply.ok as T;
+}
+
+let events: EventSource | null = null;
+function onBridge<T>(name: string, fn: (payload: T) => void): () => void {
+  events ??= new EventSource(`${bridge}/events`);
+  const listener = (e: MessageEvent<string>) => fn(JSON.parse(e.data) as T);
+  events.addEventListener(name, listener);
+  return () => events?.removeEventListener(name, listener);
+}
+
 /** Calls a backend method. Rejects with a `BackendError`. */
 export async function call<T = unknown>(method: string, params: unknown = {}): Promise<T> {
+  if (bridge) return viaBridge<T>(method, params);
   if (!inTauri) throw new BackendError("no_library", "Librarium’s backend isn’t running (this is a plain browser).");
   try {
     return await invoke<T>("call", { method, params });
@@ -44,6 +66,7 @@ export async function call<T = unknown>(method: string, params: unknown = {}): P
  * Tauri's event names can't hold dots, so they travel with colons ("records:changed").
  */
 export function on<T = unknown>(event: string, fn: (payload: T) => void): () => void {
+  if (bridge) return onBridge(event.replaceAll(".", ":"), fn);
   if (!inTauri) return () => {};
   let off: (() => void) | null = null;
   let stopped = false;
@@ -123,6 +146,7 @@ export function onFileDrop(handler: (paths: string[], at: { x: number; y: number
 
 /** A library item's original file (or a file in its folder, `name`), as bytes. */
 export async function readBytes(id: string, name?: string): Promise<ArrayBuffer> {
+  if (bridge) return (await fetch(`${bridge}/bytes?id=${id}&name=${encodeURIComponent(name ?? "")}`)).arrayBuffer();
   if (!inTauri) throw new BackendError("no_library", "Librarium’s backend isn’t running (this is a plain browser).");
   const r = await invoke<ArrayBuffer | number[]>("bytes", { id, name: name ?? null });
   return r instanceof ArrayBuffer ? r : new Uint8Array(r).buffer;
@@ -130,6 +154,7 @@ export async function readBytes(id: string, name?: string): Promise<ArrayBuffer>
 
 /** An address the webview can load a local file from (an item's original, a picture). */
 export function fileUrl(path: string): string {
+  if (bridge) return `${bridge}/file?path=${encodeURIComponent(path)}`;
   return inTauri ? convertFileSrc(path) : path;
 }
 

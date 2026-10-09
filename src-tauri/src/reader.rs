@@ -63,7 +63,7 @@ fn serve(app: &App, request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
 
 /// The file, if it is inside the library folder (links resolved) and no part of its path
 /// inside starts with a dot.
-fn inside(root: &Path, path: &Path) -> Option<PathBuf> {
+pub(crate) fn inside(root: &Path, path: &Path) -> Option<PathBuf> {
     let root = root.canonicalize().ok()?;
     let file = path.canonicalize().ok().filter(|f| f.is_file())?;
     let rel = file.strip_prefix(&root).ok()?;
@@ -71,7 +71,7 @@ fn inside(root: &Path, path: &Path) -> Option<PathBuf> {
     (!hidden).then_some(file)
 }
 
-fn percent_decode(s: &str) -> Option<String> {
+pub(crate) fn percent_decode(s: &str) -> Option<String> {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
@@ -87,7 +87,7 @@ fn percent_decode(s: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-fn mime(p: &Path) -> &'static str {
+pub(crate) fn mime(p: &Path) -> &'static str {
     match p.extension().map(|e| e.to_string_lossy().to_lowercase()).as_deref() {
         Some("pdf") => "application/pdf",
         Some("epub") => "application/epub+zip",
