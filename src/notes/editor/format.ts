@@ -87,22 +87,37 @@ function linesOf(doc: Text, r: SelectionRange): number[] {
   return out;
 }
 
-/** Changes every selected line once (several ranges on one line count once). */
+/** Changes every selected line once (several ranges on one line count once). Only the part of
+ * the line that differs is replaced, so cursors and selections stay with their text. */
 function perLine(view: EditorView, change: (text: string) => string | null): boolean {
   const { state } = view;
   const seen = new Set<number>();
-  const changes: ChangeSpec[] = [];
+  const specs: ChangeSpec[] = [];
   for (const r of state.selection.ranges) {
     for (const n of linesOf(state.doc, r)) {
       if (seen.has(n)) continue;
       seen.add(n);
       const line = state.doc.line(n);
-      const next = change(line.text);
-      if (next !== null && next !== line.text) changes.push({ from: line.from, to: line.to, insert: next });
+      const old = line.text;
+      const next = change(old);
+      if (next === null || next === old) continue;
+      let pre = 0;
+      while (pre < old.length && pre < next.length && old[pre] === next[pre]) pre++;
+      let suf = 0;
+      while (suf < old.length - pre && suf < next.length - pre && old[old.length - 1 - suf] === next[next.length - 1 - suf]) suf++;
+      specs.push({ from: line.from + pre, to: line.to - suf, insert: next.slice(pre, next.length - suf) });
     }
   }
-  if (!changes.length) return false;
-  view.dispatch(state.update({ changes, userEvent: "input.format", scrollIntoView: true }));
+  if (!specs.length) return false;
+  const changes = state.changes(specs);
+  // A marker inserted at a cursor or a selection's start goes before it, not after it.
+  const map = (r: SelectionRange) => {
+    if (r.empty) return EditorSelection.cursor(changes.mapPos(r.head, 1));
+    const fwd = r.anchor < r.head;
+    return EditorSelection.range(changes.mapPos(r.anchor, fwd ? 1 : -1), changes.mapPos(r.head, fwd ? -1 : 1));
+  };
+  const selection = EditorSelection.create(state.selection.ranges.map(map), state.selection.mainIndex);
+  view.dispatch(state.update({ changes, selection, userEvent: "input.format", scrollIntoView: true }));
   return true;
 }
 
