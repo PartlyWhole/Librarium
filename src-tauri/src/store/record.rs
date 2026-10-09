@@ -374,7 +374,7 @@ pub(crate) fn commit(w: &Write, rel: &str, bytes: &[u8]) -> Result<Entry> {
 }
 
 /// The record, if the app may rewrite it.
-fn writable(w: &Write, id: Id) -> Result<Entry> {
+pub(crate) fn writable(w: &Write, id: Id) -> Result<Entry> {
     let e = w.lib.index.get(id).ok_or_else(|| Error::not_found("That record can’t be found."))?;
     if let Some(why) = &e.read_only {
         return Err(Error::read_only(why.clone()));
@@ -394,9 +394,25 @@ pub fn create(
     w: &Write,
     kind_name: &str,
     title: &str,
+    fields: Vec<(String, FmValue)>,
+    body: &str,
+    sub: Option<&str>,
+) -> Result<Entry> {
+    create_with_sidecars(w, crate::util::new_id(), kind_name, title, fields, body, sub, &[])
+}
+
+/// Creates a Markdown record with its sidecars (`(suffix, bytes)`), written first beside it:
+/// the record's own file is the commit point.
+#[allow(clippy::too_many_arguments)]
+pub fn create_with_sidecars(
+    w: &Write,
+    id: Id,
+    kind_name: &str,
+    title: &str,
     mut fields: Vec<(String, FmValue)>,
     body: &str,
     sub: Option<&str>,
+    sidecars: &[(String, Vec<u8>)],
 ) -> Result<Entry> {
     let k = kind(kind_name).ok_or_else(|| Error::invalid(format!("unknown kind “{kind_name}”")))?;
     if k.json {
@@ -416,13 +432,20 @@ pub fn create(
         fields.retain(|(key, _)| key != f);
         fields.push((f.to_string(), FmValue::Str(s.clone())));
     }
-    let id = crate::util::new_id();
+    if w.lib.index.get(id).is_some() {
+        return Err(Error::conflict("That ID is taken."));
+    }
     let title = clean_title(title);
     let fm = new_frontmatter(id, kind_name, &iso_utc(now_ms()), &title, &fields);
     let map: Map<String, Value> = fields.iter().map(|(k, v)| (k.clone(), v.to_json())).collect();
     let rel = record_path(k, id, &slug_for(&title, &map), sub.as_deref());
     let path = w.lib.root.join(&rel);
-    fs::create_dir_all(path.parent().unwrap()).ctx("making the folder")?;
+    let dir = path.parent().unwrap();
+    fs::create_dir_all(dir).ctx("making the folder")?;
+    for (suffix, bytes) in sidecars {
+        super::files::check_suffix(suffix)?;
+        safe_write(&dir.join(format!("{id}{suffix}")), bytes, false).ctx("writing a sidecar")?;
+    }
     let bytes = frontmatter::join(&fm, body, "\n").into_bytes();
     safe_write(&path, &bytes, true).ctx("writing the new record")?;
     commit(w, &rel, &bytes)

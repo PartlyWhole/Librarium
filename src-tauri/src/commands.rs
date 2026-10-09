@@ -7,7 +7,7 @@ use crate::store::frontmatter::FmValue;
 use crate::store::{folders, record, Library};
 use crate::types::*;
 use crate::util::now_ms;
-use crate::{archive, daily, history, links, notes};
+use crate::{archive, boards, captures, daily, history, library, links, notes, websave};
 use base64::Engine as _;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -34,6 +34,11 @@ pub const METHODS: &[&str] = &[
     "notes.create", "notes.folders",
     "daily.today",
     "archive.archive", "archive.restore", "archive.list", "archive.prepareDelete", "archive.delete",
+    "library.import", "library.importData", "library.text", "library.savePage",
+    "library.removeSnapshots.prepare", "library.removeSnapshots",
+    "captures.create", "captures.update", "captures.anchor", "captures.updateAnchor", "captures.forSource",
+    "captures.orphans", "captures.region",
+    "boards.create", "boards.load", "boards.save",
 ];
 
 /// Calls a method off the main thread. `app.quit` is answered here: the interface has saved
@@ -282,6 +287,42 @@ fn library_call(lib: &Library, method: &str, params: Value) -> Result<Value> {
         "archive.list" => ok(archive::list(lib)?),
         "archive.prepareDelete" => ok(archive::prepare_delete(lib, &p::<IdsParams>(params)?.ids)?),
         "archive.delete" => ok(archive::delete(lib, &p::<TokenParams>(params)?.token)?),
+        "library.import" => {
+            let i: ImportParams = p(params)?;
+            ok(library::import::import_paths(lib, &i.paths, i.folder.as_deref())?)
+        }
+        "library.importData" => {
+            let i: ImportDataParams = p(params)?;
+            ok(library::import::import_data(lib, i.name.as_deref(), &i.data, i.folder.as_deref())?)
+        }
+        "library.text" => ok(library::stored_json(lib, &library::item(lib, p::<IdParams>(params)?.id)?)),
+        "library.savePage" => ok(websave::enqueue(lib, p(params)?)?),
+        "library.removeSnapshots.prepare" => {
+            ok(library::snapshots::prepare(lib, &p::<RemoveSnapshotsParams>(params)?.items)?)
+        }
+        "library.removeSnapshots" => ok(library::snapshots::remove(lib, &p::<TokenParams>(params)?.token)?),
+        "captures.create" => ok(captures::create(lib, p(params)?)?),
+        "captures.update" => ok(captures::update(lib, p(params)?)?),
+        "captures.anchor" => ok(captures::anchor(lib, p::<IdParams>(params)?.id)?),
+        "captures.updateAnchor" => {
+            let a: AnchorUpdateParams = p(params)?;
+            ok(captures::update_anchor(lib, a.id, a.parts)?)
+        }
+        "captures.forSource" => {
+            let f: ForSourceParams = p(params)?;
+            ok(captures::for_source(lib, f.source, f.snapshot.as_deref()))
+        }
+        "captures.orphans" => ok(captures::orphans(lib)),
+        "captures.region" => {
+            let r: RegionParams = p(params)?;
+            ok(captures::region(lib, r.id, r.n)?)
+        }
+        "boards.create" => {
+            let b: BoardCreateParams = p(params)?;
+            ok(boards::create(lib, b.title.as_deref(), b.folder.as_deref())?)
+        }
+        "boards.load" => ok(boards::load(lib, p::<IdParams>(params)?.id)?),
+        "boards.save" => ok(boards::save(lib, p(params)?)?),
         _ => Err(Error::not_found(format!("There is no method “{method}”."))),
     }
 }

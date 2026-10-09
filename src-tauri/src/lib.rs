@@ -2,18 +2,23 @@
 
 pub mod app;
 pub mod archive;
+pub mod boards;
+pub mod captures;
 pub mod commands;
 pub mod daily;
 pub mod error;
 pub mod history;
 pub mod index;
 pub mod jobs;
+pub mod library;
 pub mod links;
 pub mod notes;
+pub mod reader;
 pub mod settings;
 pub mod store;
 pub mod types;
 pub mod util;
+pub mod websave;
 
 use app::App;
 use serde_json::{json, Value};
@@ -93,7 +98,7 @@ fn stays_in_app(url: &tauri::Url) -> bool {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    reader::protocol(tauri::Builder::default())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.unminimize();
@@ -140,16 +145,13 @@ pub fn run() {
                 Some(dir) => dir.into(),
                 None => app.path().app_data_dir()?,
             };
-            let state = Arc::new(App::new(
-                data,
-                app.path().app_log_dir()?,
-                emitter(app.handle().clone()),
-            ));
+            let state = Arc::new(App::new(data, app.path().app_log_dir()?, emitter(app.handle().clone())));
             if let (Some(w), Some(frame)) = (app.get_webview_window("main"), state.settings.get(FRAME)) {
                 restore_frame(&w, &frame);
             }
             state.open_saved_soon();
             app.manage(state);
+            websave::init(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -173,7 +175,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![commands::call])
+        .invoke_handler(tauri::generate_handler![commands::call, reader::bytes])
         .build(tauri::generate_context!())
         .expect("error while starting Librarium")
         // Quit from the Dock or at log-out exits at once: the library is closed cleanly, and

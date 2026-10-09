@@ -38,6 +38,15 @@ fn kind(name: &str) -> Option<Kind> {
         "index.rebuild" => {
             Kind { title: "Rebuilding the index", noun: "index rebuilds", resumable: false, run: rebuild_index }
         }
+        "library.extract" => Kind {
+            title: "Reading an item’s text",
+            noun: "text recognitions",
+            resumable: true,
+            run: crate::library::extract::run,
+        },
+        "library.savePage" => {
+            Kind { title: "Saving a web page", noun: "saves", resumable: true, run: crate::websave::run }
+        }
         _ => return None,
     })
 }
@@ -64,6 +73,11 @@ impl JobCtx<'_> {
             j.progress = fraction;
             j.message = message.map(String::from);
         });
+    }
+
+    /// Set when the job is cancelled, for waits that check it themselves.
+    pub fn cancelled(&self) -> &AtomicBool {
+        self.cancelled
     }
 
     pub fn check_cancelled(&self) -> Result<()> {

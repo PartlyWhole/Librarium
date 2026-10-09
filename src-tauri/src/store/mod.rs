@@ -4,6 +4,7 @@
 //! A write takes the lock ([`Library::write`]), writes the file, updates the index, and when
 //! the lock is released the interface is told which records changed (`records.changed`).
 
+pub mod files;
 pub mod folders;
 pub mod frontmatter;
 pub mod record;
@@ -45,6 +46,8 @@ pub struct Library {
     pub problems: Mutex<repair::Problems>,
     /// Permanent deletions the user is being asked to confirm, by token.
     pub confirmations: Mutex<HashMap<String, crate::archive::Confirmation>>,
+    /// Snapshot removals the user is being asked to confirm, by token.
+    pub removals: Mutex<HashMap<String, crate::library::snapshots::Pending>>,
     pub emit: Emit,
     lock: Mutex<()>,
     seq: AtomicU64,
@@ -96,6 +99,7 @@ impl Library {
         scan::take_lock(root);
         let app_dir = app_data.join("libraries").join(id.to_string());
         std::fs::create_dir_all(app_dir.join("drafts"))?;
+        files::clear_staging(root, &app_dir);
         let index = Index::open(&app_dir.join("index.sqlite"))?;
         let lib = Arc::new(Library {
             id,
@@ -107,6 +111,7 @@ impl Library {
             index,
             problems: Mutex::default(),
             confirmations: Mutex::default(),
+            removals: Mutex::default(),
             emit,
             lock: Mutex::new(()),
             seq: AtomicU64::new(0),

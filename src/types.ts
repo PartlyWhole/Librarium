@@ -355,3 +355,165 @@ title: string | null, folder: string | null, body: string, };
 export type ArchiveParams = { id: string, base_version: string | null, };
 
 export type TokenParams = { token: string, };
+
+/**
+ * Adds files to the library, into a Library folder ("" or absent: the top level).
+ */
+export type ImportParams = { paths: Array<string>, folder: string | null, };
+
+/**
+ * Adds pasted or dropped bytes (a picture copied in another app has no file).
+ */
+export type ImportDataParams = { 
+/**
+ * The file name to keep as the original's name; "Pasted image" when absent.
+ */
+name: string | null, 
+/**
+ * The bytes, in base64.
+ */
+data: string, folder: string | null, };
+
+export type ImportResult = { imported: Array<Written>, failed: Array<ImportFailure>, };
+
+export type ImportFailure = { path: string, error: string, };
+
+/**
+ * Saves a web page in the background: a new item (into `folder`), or a new snapshot of the
+ * item saved from the same address.
+ */
+export type SavePageParams = { url: string, 
+/**
+ * Records with any of these fields set never receive the snapshot (archived ones never do).
+ */
+hide: Array<string>, folder: string | null, };
+
+export type SnapshotRequest = { id: string, 
+/**
+ * The snapshots to remove; absent: all but the latest.
+ */
+snapshots: Array<string> | null, };
+
+export type RemoveSnapshotsParams = { items: Array<SnapshotRequest>, };
+
+/**
+ * What removing snapshots would do, and the token that confirms it.
+ */
+export type RemovalPreview = { token: string, 
+/**
+ * Snapshots that would go, in all.
+ */
+count: number, items: Array<RemovalItem>, };
+
+export type RemovalItem = { id: string, title: string, 
+/**
+ * The snapshots that go.
+ */
+remove: Array<string>, 
+/**
+ * Asked for, but kept: captures were made from them.
+ */
+protected: Array<ProtectedSnapshot>, 
+/**
+ * How many the item keeps.
+ */
+kept: number, };
+
+export type ProtectedSnapshot = { at: string, 
+/**
+ * The titles of the captures made from it.
+ */
+by: Array<string>, };
+
+export type SnapshotsRemoved = { removed: number, skipped: Array<Skipped>, };
+
+/**
+ * One part of a capture: its W3C selectors, and a picture of a region when it is one.
+ */
+export type CapturePart = { 
+/**
+ * W3C Web Annotation selectors (TextQuoteSelector, TextPositionSelector, FragmentSelector…).
+ */
+selector: unknown[], 
+/**
+ * The quoted text of this part (empty for a region).
+ */
+quote: string, 
+/**
+ * "p. 3", a chapter's title…, for the citation.
+ */
+locator: string | null, 
+/**
+ * A PNG of the region, base64-encoded.
+ */
+region_png: string | null, 
+/**
+ * Where the part is drawn: boxes in percent of their page (with a 1-based `page` in a PDF)
+ * or of the image.
+ */
+boxes: { page?: number, x: number, y: number, w: number, h: number }[], };
+
+export type CaptureParams = { source: string, snapshot: string | null, 
+/**
+ * The stored text the positions refer to (`StoredText.origin`).
+ */
+text: { file: string, extractor: string, version: number, snapshot?: string } | null, parts: Array<CapturePart>, 
+/**
+ * The user's own words.
+ */
+words: string, };
+
+/**
+ * A capture's new parts (its selection edited); the user's words and title stay.
+ */
+export type CaptureUpdateParams = { id: string, parts: Array<CapturePart>, };
+
+/**
+ * The user confirmed where moved parts are now: the anchor's `parts`, as the anchor holds them.
+ */
+export type AnchorUpdateParams = { id: string, parts: unknown[], };
+
+export type AnchorUpdated = { seq: number, };
+
+export type ForSourceParams = { source: string, 
+/**
+ * A saved page's snapshot; absent or null for other sources.
+ */
+snapshot: string | null, };
+
+/**
+ * A capture of a source, with where to highlight each part.
+ */
+export type SavedMarks = { id: string, title: string, parts: Array<MarkPart>, };
+
+export type MarkPart = { boxes: { page?: number, x: number, y: number, w: number, h: number }[], cfi: string | null, region: boolean, };
+
+/**
+ * A sidecar in `captures/` whose capture doesn't exist: listed, never deleted.
+ */
+export type OrphanSidecar = { path: string, id: string | null, };
+
+/**
+ * A region's picture: part `n` (1-based) of a capture.
+ */
+export type RegionParams = { id: string, n: number, };
+
+export type BoardCreateParams = { 
+/**
+ * Empty: "Untitled board".
+ */
+title: string | null, folder: string | null, };
+
+/**
+ * A board opened: its record and its drawing. `stale_page`: the readable page wasn't written
+ * from this drawing, so the next save rewrites it.
+ */
+export type BoardLoaded = { info: RecordInfo, scene: string, scene_sha: string, stale_page: boolean, };
+
+/**
+ * Saves a board: its drawing and the readable page made from it, refused if either changed
+ * since the versions given.
+ */
+export type BoardSaveParams = { id: string, base_version: string, base_scene_sha: string, scene: string, page: string, };
+
+export type BoardSaved = { info: RecordInfo, seq: number, scene_sha: string, };

@@ -555,6 +555,235 @@ pub struct TokenParams {
     pub token: String,
 }
 
+// ---- library ---------------------------------------------------------------------------------
+
+/// Adds files to the library, into a Library folder ("" or absent: the top level).
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct ImportParams {
+    pub paths: Vec<String>,
+    #[serde(default)]
+    pub folder: Option<String>,
+}
+
+/// Adds pasted or dropped bytes (a picture copied in another app has no file).
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct ImportDataParams {
+    /// The file name to keep as the original's name; "Pasted image" when absent.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// The bytes, in base64.
+    pub data: String,
+    #[serde(default)]
+    pub folder: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct ImportResult {
+    pub imported: Vec<Written>,
+    pub failed: Vec<ImportFailure>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct ImportFailure {
+    pub path: String,
+    pub error: String,
+}
+
+/// Saves a web page in the background: a new item (into `folder`), or a new snapshot of the
+/// item saved from the same address.
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SavePageParams {
+    pub url: String,
+    /// Records with any of these fields set never receive the snapshot (archived ones never do).
+    #[serde(default)]
+    pub hide: Vec<String>,
+    #[serde(default)]
+    pub folder: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SnapshotRequest {
+    pub id: Id,
+    /// The snapshots to remove; absent: all but the latest.
+    #[serde(default)]
+    pub snapshots: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct RemoveSnapshotsParams {
+    pub items: Vec<SnapshotRequest>,
+}
+
+/// What removing snapshots would do, and the token that confirms it.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct RemovalPreview {
+    pub token: String,
+    /// Snapshots that would go, in all.
+    pub count: u64,
+    pub items: Vec<RemovalItem>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct RemovalItem {
+    pub id: Id,
+    pub title: String,
+    /// The snapshots that go.
+    pub remove: Vec<String>,
+    /// Asked for, but kept: captures were made from them.
+    pub protected: Vec<ProtectedSnapshot>,
+    /// How many the item keeps.
+    pub kept: u64,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct ProtectedSnapshot {
+    pub at: String,
+    /// The titles of the captures made from it.
+    pub by: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct SnapshotsRemoved {
+    pub removed: u64,
+    pub skipped: Vec<Skipped>,
+}
+
+// ---- captures --------------------------------------------------------------------------------
+
+/// One part of a capture: its W3C selectors, and a picture of a region when it is one.
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct CapturePart {
+    /// W3C Web Annotation selectors (TextQuoteSelector, TextPositionSelector, FragmentSelector…).
+    #[ts(type = "unknown[]")]
+    pub selector: Vec<Value>,
+    /// The quoted text of this part (empty for a region).
+    #[serde(default)]
+    pub quote: String,
+    /// "p. 3", a chapter's title…, for the citation.
+    #[serde(default)]
+    pub locator: Option<String>,
+    /// A PNG of the region, base64-encoded.
+    #[serde(default)]
+    pub region_png: Option<String>,
+    /// Where the part is drawn: boxes in percent of their page (with a 1-based `page` in a PDF)
+    /// or of the image.
+    #[ts(type = "{ page?: number, x: number, y: number, w: number, h: number }[]")]
+    #[serde(default)]
+    pub boxes: Vec<Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct CaptureParams {
+    pub source: Id,
+    #[serde(default)]
+    pub snapshot: Option<String>,
+    /// The stored text the positions refer to (`StoredText.origin`).
+    #[ts(type = "{ file: string, extractor: string, version: number, snapshot?: string } | null")]
+    #[serde(default)]
+    pub text: Option<Value>,
+    pub parts: Vec<CapturePart>,
+    /// The user's own words.
+    #[serde(default)]
+    pub words: String,
+}
+
+/// A capture's new parts (its selection edited); the user's words and title stay.
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct CaptureUpdateParams {
+    pub id: Id,
+    pub parts: Vec<CapturePart>,
+}
+
+/// The user confirmed where moved parts are now: the anchor's `parts`, as the anchor holds them.
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct AnchorUpdateParams {
+    pub id: Id,
+    #[ts(type = "unknown[]")]
+    pub parts: Vec<Value>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct AnchorUpdated {
+    pub seq: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct ForSourceParams {
+    pub source: Id,
+    /// A saved page's snapshot; absent or null for other sources.
+    #[serde(default)]
+    pub snapshot: Option<String>,
+}
+
+/// A capture of a source, with where to highlight each part.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct SavedMarks {
+    pub id: Id,
+    pub title: String,
+    pub parts: Vec<MarkPart>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct MarkPart {
+    #[ts(type = "{ page?: number, x: number, y: number, w: number, h: number }[]")]
+    pub boxes: Vec<Value>,
+    pub cfi: Option<String>,
+    pub region: bool,
+}
+
+/// A sidecar in `captures/` whose capture doesn't exist: listed, never deleted.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct OrphanSidecar {
+    pub path: String,
+    pub id: Option<Id>,
+}
+
+/// A region's picture: part `n` (1-based) of a capture.
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct RegionParams {
+    pub id: Id,
+    pub n: u32,
+}
+
+// ---- boards ----------------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Default, Deserialize, TS)]
+pub struct BoardCreateParams {
+    /// Empty: "Untitled board".
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub folder: Option<String>,
+}
+
+/// A board opened: its record and its drawing. `stale_page`: the readable page wasn't written
+/// from this drawing, so the next save rewrites it.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BoardLoaded {
+    pub info: RecordInfo,
+    pub scene: String,
+    pub scene_sha: String,
+    pub stale_page: bool,
+}
+
+/// Saves a board: its drawing and the readable page made from it, refused if either changed
+/// since the versions given.
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct BoardSaveParams {
+    pub id: Id,
+    pub base_version: String,
+    pub base_scene_sha: String,
+    pub scene: String,
+    pub page: String,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BoardSaved {
+    pub info: RecordInfo,
+    pub seq: u64,
+    pub scene_sha: String,
+}
+
 /// Every exported type, in the order `src/types.ts` lists them.
 pub fn typescript() -> String {
     use crate::error::{Code, Error};
@@ -631,6 +860,31 @@ pub fn typescript() -> String {
         NoteParams,
         ArchiveParams,
         TokenParams,
+        ImportParams,
+        ImportDataParams,
+        ImportResult,
+        ImportFailure,
+        SavePageParams,
+        SnapshotRequest,
+        RemoveSnapshotsParams,
+        RemovalPreview,
+        RemovalItem,
+        ProtectedSnapshot,
+        SnapshotsRemoved,
+        CapturePart,
+        CaptureParams,
+        CaptureUpdateParams,
+        AnchorUpdateParams,
+        AnchorUpdated,
+        ForSourceParams,
+        SavedMarks,
+        MarkPart,
+        OrphanSidecar,
+        RegionParams,
+        BoardCreateParams,
+        BoardLoaded,
+        BoardSaveParams,
+        BoardSaved,
     );
     out
 }
