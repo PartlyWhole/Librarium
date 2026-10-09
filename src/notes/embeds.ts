@@ -18,6 +18,7 @@ import { h } from "../ui/dom";
 import { icon } from "../ui/icon";
 import { effect, untracked } from "../ui/signal";
 import type { RecordInfo } from "../types";
+import { boardEmbed } from "../boards/cards";
 import { parseLinks } from "./editor/links";
 import { refreshPreview, refreshed } from "./editor/livepreview";
 
@@ -37,7 +38,7 @@ function embedFor(r: RecordInfo, open: Open): Shown {
     case "capture":
       return { el: placeholderEmbed(r, open, "Capture"), sizable: false };
     case "board":
-      return { el: placeholderEmbed(r, open, "Board"), sizable: false };
+      return { el: boardEmbed(r, open), sizable: true };
     default:
       return { el: cardEmbed(r, open), sizable: false };
   }

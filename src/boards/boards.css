@@ -1,0 +1,29 @@
+/* Boards: the title, then the drawing filling the page; cards on it; a board shown in a note. */
+.ws-page.board-page { max-width: none; padding: 0; height: 100%; display: flex; flex-direction: column; }
+.page-scroll:has(> .board-page:not([hidden])) { overflow: hidden; }
+.board-head { padding: 10px 20px 6px; border-bottom: 1px solid var(--border); }
+.board-head .title-input { margin: 0; }
+.board-head .notices:empty { display: none; }
+.board-head .notice { margin: 6px 0 0; }
+.board-host { flex: 1; min-height: 0; position: relative; }
+.board-canvas { position: absolute; inset: 0; }
+/* What is on the board, for screen readers only. */
+.board-outline { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+.board-card-host { width: 100%; height: 100%; overflow: auto; }
+.board-card { box-sizing: border-box; min-height: 100%; padding: 10px 12px; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r2); font-size: var(--small); line-height: 1.45; }
+.board-card-link { display: flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; }
+.board-card-link .muted { margin-left: auto; }
+.board-card.missing { color: var(--muted); font-style: italic; }
+.board-card .embed-quote { margin: 0 0 6px; padding-left: 10px; border-left: 3px solid var(--border-strong); white-space: pre-wrap; }
+.board-card-cite { display: flex; align-items: center; gap: 4px; }
+.board-card-cite .embed-cite { flex: 1; color: var(--muted); text-decoration: none; }
+
+.embed.embed-board { padding: 0; border: 0; background: none; }
+.embed-board.embed-sizable:not(.embed-sized) { width: auto; }
+.embed-board-link { display: block; }
+.embed-board-picture { display: flex; justify-content: center; min-height: 60px; border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; background: var(--bg); }
+.embed-board-picture svg { max-width: 100%; height: auto; max-height: 480px; display: block; }
+.embed-sized .embed-board-picture svg { width: 100%; max-height: none; }
+.embed-board figcaption { margin-top: 4px; font-size: var(--small); }
+.embed-board .embed-cite { color: var(--muted); text-decoration: none; }

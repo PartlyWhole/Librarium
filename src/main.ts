@@ -6,6 +6,7 @@ import { call } from "./backend";
 import "./archive";
 import "./search";
 import "./notes";
+import "./boards";
 import "./library";
 import "./websave";
 import "./updates";

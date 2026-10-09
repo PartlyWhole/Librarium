@@ -121,6 +121,13 @@ export function onFileDrop(handler: (paths: string[], at: { x: number; y: number
   return () => off?.();
 }
 
+/** A library item's original file (or a file in its folder, `name`), as bytes. */
+export async function readBytes(id: string, name?: string): Promise<ArrayBuffer> {
+  if (!inTauri) throw new BackendError("no_library", "Librarium’s backend isn’t running (this is a plain browser).");
+  const r = await invoke<ArrayBuffer | number[]>("bytes", { id, name: name ?? null });
+  return r instanceof ArrayBuffer ? r : new Uint8Array(r).buffer;
+}
+
 /** An address the webview can load a local file from (an item's original, a picture). */
 export function fileUrl(path: string): string {
   return inTauri ? convertFileSrc(path) : path;
