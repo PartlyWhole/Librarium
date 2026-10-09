@@ -6,8 +6,6 @@ edition = "2021"
 license = "MIT"
 publish = false
 
-# Its own root: the folder sits inside another checkout while it is being rebuilt.
-[workspace]
 
 [lib]
 name = "librarium"
