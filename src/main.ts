@@ -5,6 +5,7 @@
 import { call } from "./backend";
 import "./archive";
 import "./search";
+import "./notes";
 import { startApp } from "./app/shell";
 
 // Interface errors go to the app's log file (nothing is sent anywhere).
