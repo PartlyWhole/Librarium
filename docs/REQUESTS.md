@@ -44,17 +44,7 @@ across the library uses PDFKit's text and isn't affected. To look into: the stor
 
 ## Waiting for you
 
-### Publishing Librarium on GitHub (R-069)
-Everything is ready to publish; nothing is published yet. Publishing makes a **public**
-repository `PartlyWhole/Librarium` with the code and its whole history (113 commits, one
-author: PartlyWhole), including `docs/REQUESTS.md` with your requests in your words and the
-titles of books you mentioned. Then `npm run release -- 0.1.0 "First release."` makes the first
-release that people install from.
-
-- **A (recommended):** publish as is.
-- **B:** publish without `docs/REQUESTS.md`'s history of your words (it stays local).
-- **Your answer (2026-10-08): not yet;** no licence (all rights reserved). Say "publish" when
-  you're ready, and whether with or without `docs/REQUESTS.md`.
+(Nothing waiting.)
 
 ---
 
@@ -148,8 +138,10 @@ release that people install from.
   crash). The test copy and its folders are deleted.
 
   All interface tests, WebKit checks and Rust tests pass; lint is clean.
+- **Published (2026-10-08):** you pushed the public repository; **0.1.0** was released with
+  `npm run release` (tests skipped: they had passed on the same code just before). The
+  download link and `latest.json` answer from GitHub.
 - **Left:**
-  - publishing (the question under Waiting for you);
   - Intel Macs (a universal build) and macOS older than 15 aren't covered;
   - Apple's Developer ID later removes the *Open Anyway* step (`docs/RELEASING.md`).
 
