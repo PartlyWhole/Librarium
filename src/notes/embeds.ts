@@ -19,6 +19,7 @@ import { icon } from "../ui/icon";
 import { effect, untracked } from "../ui/signal";
 import type { RecordInfo } from "../types";
 import { boardEmbed } from "../boards/cards";
+import { captureEmbed, captureMarkdown } from "../captures/embed";
 import { parseLinks } from "./editor/links";
 import { refreshPreview, refreshed } from "./editor/livepreview";
 
@@ -36,7 +37,7 @@ function embedFor(r: RecordInfo, open: Open): Shown {
     case "item":
       return formatOf(r) === "image" ? { el: imageEmbed(r, open), sizable: true } : { el: cardEmbed(r, open), sizable: false };
     case "capture":
-      return { el: placeholderEmbed(r, open, "Capture"), sizable: false };
+      return { el: captureEmbed(r, open), sizable: false };
     case "board":
       return { el: boardEmbed(r, open), sizable: true };
     default:
@@ -56,18 +57,6 @@ export function embedMarkdown(r: RecordInfo): string {
   }
 }
 
-/**
- * A capture as quoted text: `> quote` and `> — Source, place` (the place left out when it only
- * repeats the source's title). The captures stage may refine this.
- */
-function captureMarkdown(r: RecordInfo): string {
-  const quote = String(r.fields["captures.quote"] ?? "").trim() || "[a captured region]";
-  const source = getRecord(String(r.fields["captures.source"] ?? ""))?.title ?? "an unknown source";
-  const place = String(r.fields["captures.locator"] ?? "").trim();
-  const cite = place && place.toLowerCase() !== source.trim().toLowerCase() ? `${source}, ${place}` : source;
-  return `${quote.split("\n").map((l) => (l ? `> ${l}` : ">")).join("\n")}\n>\n> — ${cite}`;
-}
-
 /** An item's original file, relative to the library (`items/<folder>/original.png`). */
 const originalPath = (r: RecordInfo) => r.path.replace(/record\.json$/, String(r.fields["library.original"] ?? ""));
 
@@ -80,13 +69,6 @@ function imageEmbed(r: RecordInfo, open: Open): HTMLElement {
 
 function cardEmbed(r: RecordInfo, open: Open): HTMLElement {
   return h("figure", { class: "embed embed-card" }, h("a", { href: "#", class: "list-link", onclick: (e: MouseEvent) => (e.preventDefault(), open(r.id, e)) }, icon(recordIcon(r), 16), " ", r.title || "Untitled"));
-}
-
-/** A card standing in for a kind whose own embed comes later (boards, captures). */
-function placeholderEmbed(r: RecordInfo, open: Open, kind: string): HTMLElement {
-  const el = cardEmbed(r, open);
-  el.querySelector("a")?.append(h("span", { class: "muted small" }, ` · ${kind}`));
-  return el;
 }
 
 /** Whether an embed's record can be drawn: it exists and isn't archived. */

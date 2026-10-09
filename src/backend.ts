@@ -146,7 +146,7 @@ export function onFileDrop(handler: (paths: string[], at: { x: number; y: number
 
 /** A library item's original file (or a file in its folder, `name`), as bytes. */
 export async function readBytes(id: string, name?: string): Promise<ArrayBuffer> {
-  if (bridge) return (await fetch(`${bridge}/bytes?id=${id}&name=${encodeURIComponent(name ?? "")}`)).arrayBuffer();
+  if (bridge) return (await fetch(`${bridge}/bytes?id=${id}${name ? `&name=${encodeURIComponent(name)}` : ""}`)).arrayBuffer();
   if (!inTauri) throw new BackendError("no_library", "Librarium’s backend isn’t running (this is a plain browser).");
   const r = await invoke<ArrayBuffer | number[]>("bytes", { id, name: name ?? null });
   return r instanceof ArrayBuffer ? r : new Uint8Array(r).buffer;

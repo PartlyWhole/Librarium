@@ -9,6 +9,7 @@ import "./notes";
 import "./boards";
 import "./library";
 import "./reader";
+import "./captures";
 import "./websave";
 import "./updates";
 import { startApp } from "./app/shell";

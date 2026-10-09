@@ -1,0 +1,23 @@
+{
+  "text": "Technique integrates everything. It avoids shock and sensational events. Man is not adapted to a world of steel; technique adapts him to it.\n\nThe technique of propaganda is the art of making people act. Propaganda is the art of making people act without thinking.\n\nAttention is the rarest and purest form of generosity. Attention, taken to its highest degree, is the same thing as prayer.\n\nGravity and grace: two forces rule the universe. Grace is the law of the descending movement.\n",
+  "captures": [
+    { "name": "unique sentence", "quote": "It avoids shock and sensational events." },
+    { "name": "repeated phrase, second", "quote": "the art of making people act", "occurrence": 2 },
+    { "name": "repeated phrase, first", "quote": "the art of making people act", "occurrence": 1 },
+    { "name": "across a line", "quote": "rarest and purest form of generosity" },
+    { "name": "short word", "quote": "grace" },
+    { "name": "last sentence", "quote": "Grace is the law of the descending movement." },
+    { "name": "accented and astral", "quote": "Attention, taken to its highest degree" }
+  ],
+  "edits": [
+    { "name": "insert before the paragraph", "find": "The technique of propaganda", "insert": "A new paragraph about other things entirely.\n\n", "where": "before" },
+    { "name": "insert after the paragraph", "find": "without thinking.\n\n", "insert": "An added paragraph, after.\n\n", "where": "after" },
+    { "name": "insert inside the paragraph", "find": "It avoids shock", "insert": "Above all, ", "where": "before" },
+    { "name": "insert inside a quote", "find": "sensational events", "insert": "(quite) ", "where": "before" },
+    { "name": "reflow", "reflow": 24 },
+    { "name": "delete a paragraph", "delete": "Attention is the rarest and purest form of generosity. Attention, taken to its highest degree, is the same thing as prayer.\n\n" },
+    { "name": "reword a quote", "replace": ["Grace is the law of the descending movement.", "Grace is the rule of every descending movement."] },
+    { "name": "duplicate the text", "duplicate": true },
+    { "name": "unicode before", "find": "Technique integrates", "insert": "Ünïcödé 😀 𝒳 — ", "where": "before" }
+  ]
+}
