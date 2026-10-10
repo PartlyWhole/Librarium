@@ -18,22 +18,26 @@ import { attachEditor, done, recordScope, takeText, typed, within } from "../app
 import { comboboxDialog } from "../ui/combobox";
 import { dropTarget } from "../ui/dnd";
 import { errorText, h, replace } from "../ui/dom";
-import { iconButton } from "../ui/icon";
+import { icon, iconButton } from "../ui/icon";
 import { effect, untracked } from "../ui/signal";
 import { toast } from "../ui/toast";
 import type { BoardLoaded, BoardSaved, Draft, ImportResult, Written } from "../types";
 import type { BoardEngine, BoardInsert } from "./engine";
 import { boardOutline, boardPage } from "./mirror";
 import { recordOf, type BoardElement, type BoardLink } from "./links";
+import { renderCapturePanel } from "./capturelist";
 import { renderCard } from "./cards";
 import { appTheme, isPicture, loadEngine, pictureData, portable } from "./shared";
-import { FolderInput } from "lucide";
+import { FolderInput, Quote } from "lucide";
 
 const SAVE_MS = 1000;
 const DRAFT_MS = 300;
 const RETRY_MS = 5000;
 
 type ExportAs = "png" | "svg" | "excalidraw";
+
+/** Whether the Captures panel docks beside the drawing (kept while the app runs). */
+let capturesDocked = true;
 
 /** What the board's commands act on, for each board on screen. */
 const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void> }>();
@@ -216,6 +220,13 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
       if (target) openRecord(target, {}, { newTab });
       else void askToOpen(link, { from: info.title });
     },
+    sidebar: {
+      title: "Captures",
+      icon: () => icon(Quote, 20),
+      render: (panel) => renderCapturePanel(panel, (cid) => insertRecords([cid])),
+      docked: capturesDocked,
+      onDock: (d) => void (capturesDocked = d),
+    },
   });
   if (!alive()) return ready.destroy();
   engine = ready;
@@ -296,11 +307,11 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     if (readOnly) toast("This board is read-only, so nothing can be put on it.");
     else void dropped(paths, at);
   }));
-  // Records dragged from the sidebar or a folder page.
+  // Records dragged from the sidebar, a folder page or the Captures panel (not onto the panel).
   let dropAt: { x: number; y: number } | undefined;
   dropTarget(canvasHost, {
     accepts: (p) => !readOnly && p.records.length > 0 && !p.records.includes(id),
-    where: (_p, x, y) => ((dropAt = { x, y }), "into"),
+    where: (_p, x, y) => (document.elementFromPoint(x, y)?.closest(".board-sidebar") ? null : ((dropAt = { x, y }), "into")),
     drop: (p) => insertRecords(p.records, dropAt),
   });
 
