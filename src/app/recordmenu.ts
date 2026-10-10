@@ -31,6 +31,15 @@ export function addRecordAction(a: RecordAction): void {
   all.sort((x, y) => rank(x) - rank(y));
 }
 
+/** Runs an entry by its ID on those of `rs` it applies to (a key doing what the menu does). */
+export function runRecordAction(id: string, rs: RecordInfo[]): boolean {
+  const a = all.find((x) => x.id === id);
+  const on = a ? rs.filter((r) => a.applies(r)) : [];
+  if (!a || !on.length) return false;
+  void a.run(on);
+  return true;
+}
+
 /** What can be done with these records (the menu's entries, without Open). */
 export function recordActionsFor(rs: RecordInfo[]): Exclude<MenuItem, "separator">[] {
   return all

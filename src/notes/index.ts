@@ -7,19 +7,20 @@ import { call, pickSavePath } from "../backend";
 import { defineAction } from "../app/actions";
 import { folderOf } from "../app/folders/model";
 import { isOpen } from "../app/library";
+import { addRecordAction } from "../app/recordmenu";
 import { here, pages } from "../app/pages";
 import { showPanelView } from "../app/panel";
-import { getRecord, openRecord, putRecord, records } from "../app/records";
+import { getRecord, isArchived, openRecord, putRecord, records } from "../app/records";
 import { router } from "../app/router";
 import { showStatus } from "../app/status";
 import { editorChanged } from "../app/undo";
 import { errorText } from "../ui/dom";
 import { effect, untracked } from "../ui/signal";
 import { toast } from "../ui/toast";
-import type { Draft, RecordText, Written } from "../types";
+import type { Draft, RecordInfo, RecordText, Written } from "../types";
 import { activeEditor } from "./editor/editor";
 import { FORMATS } from "./editor/format";
-import { parseLinks } from "./editor/links";
+import { formatLink, parseLinks } from "./editor/links";
 import { embedMarkdown } from "./embeds";
 import { flushNote, renderNote } from "./page";
 import "./history";
@@ -74,6 +75,21 @@ async function exportWithQuotations(): Promise<void> {
     toast(errorText(e));
   }
 }
+
+/** Links (or embeds) to records, one a line, for pasting into a note; ⌘C on a folder page. */
+async function copyReferences(rs: RecordInfo[], embed: boolean): Promise<void> {
+  const text = rs.map((r) => formatLink(r.title || "Untitled", r.id, embed)).join("\n");
+  const what = `${rs.length === 1 ? "" : `${rs.length} `}${embed ? "embed" : "link"}${rs.length === 1 ? "" : "s"}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(`Copied ${what}: paste into a note.`);
+  } catch {
+    toast(`The ${what} couldn’t be copied.`);
+  }
+}
+// Captures have their own Copy embed; notes don't embed.
+addRecordAction({ id: "copy-link", label: (n) => (n === 1 ? "Copy link" : `Copy ${n} links`), partial: true, applies: (r) => r.kind !== "capture" && !isArchived(r), run: (rs) => copyReferences(rs, false) });
+addRecordAction({ id: "copy-embed", label: (n) => (n === 1 ? "Copy embed" : `Copy ${n} embeds`), partial: true, applies: (r) => r.kind !== "capture" && r.kind !== "note" && !isArchived(r), run: (rs) => copyReferences(rs, true) });
 
 defineAction({ id: "notes.new", title: "New note", keys: ["Mod+N"], reserved: true, when: isOpen, run: newNote, menu: { name: "file", group: 0.3 }, icon: FilePlus });
 defineAction({ id: "notes.history", title: "Show history", keys: ["Mod+Alt+Y"], when: () => !!shownNote(), run: () => showPanelView("history"), menu: { name: "file", group: 3.1 } });

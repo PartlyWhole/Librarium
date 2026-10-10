@@ -255,8 +255,10 @@ One window. Only regions scroll, never the window.
   - Dropping on an edge places the item there and switches the folder to As arranged.
 - **Menus.**
   - **Record:** Open, Open in new tab, Rename, Move to folder…, Move to the Library (attachments),
-    Remove older snapshots… (web pages), Archive, Restore from archive, Delete permanently…
-    (archived only). Destructive entries come last.
+    Remove older snapshots… (web pages), Copy link, Copy embed (not notes), Archive, Restore from
+    archive, Delete permanently… (archived only). Destructive entries come last.
+  - **Copy link / Copy embed** put `[[Title|id]]` (or `![[…]]`), one a line, on the clipboard, to
+    paste into a note; with several selected, one for each.
   - **Folder:** Open, Open in new tab, Rename…, New note inside and New board inside (Notes),
     New folder inside…, Move to…, Delete folder.
   - **Several selected:** "Move N items to…" plus the shared actions.
@@ -275,6 +277,7 @@ One window. Only regions scroll, never the window.
   | ⌘↩ | open in a new tab |
   | ⌘↑ | parent folder |
   | ⌘A | select all |
+  | ⌘C | copy links to what is selected |
   | Escape | clear the selection |
   | Space | toggle selection |
   | F2 | rename |
