@@ -11,7 +11,7 @@ import { isOpen } from "../library";
 import { pref } from "../prefs";
 import { isArchived, kindName, records } from "../records";
 import { Contents, sortEntries, type Entry, type Sort } from "./model";
-import { FilePlus, Globe, Plus } from "lucide";
+import { FilePlus, Globe, Plus, Shapes } from "lucide";
 
 export interface Space {
   /** The kind the space is named for (its folders are under that kind's top folder). */
@@ -26,18 +26,26 @@ export interface Space {
   pageEmpty: string;
   /** Header buttons for its page: actions other features define, shown once they exist. */
   header: [action: string, icon: IconNode, label: string][];
+  /** What its folders' menus can make inside them: actions that take a folder. */
+  create: [action: string, label: string][];
   sort: Signal<Sort>;
   view: Signal<"list" | "icons">;
 }
 
-const space = (kind: string, page: string, title: string, emptyText: string, pageEmpty: string, header: Space["header"]): Space => ({
-  kind, page, title, emptyText, pageEmpty, header,
+const space = (kind: string, page: string, title: string, emptyText: string, pageEmpty: string, header: Space["header"], create: Space["create"] = []): Space => ({
+  kind, page, title, emptyText, pageEmpty, header, create,
   sort: pref<Sort>(`folders.sort.${kind}`, { key: "name", dir: 1 }),
   view: pref<"list" | "icons">(`folders.view.${kind}`, "list"),
 });
 
 export const SPACES: Space[] = [
-  space("note", "notes", "Notes", "No notes yet.", "No notes yet.", [["notes.new", FilePlus, "New note"]]),
+  space("note", "notes", "Notes", "No notes yet.", "No notes yet.", [
+    ["notes.new", FilePlus, "New note"],
+    ["boards.new", Shapes, "New board"],
+  ], [
+    ["notes.new", "New note"],
+    ["boards.new", "New board"],
+  ]),
   space("item", "library", "Library", "No library items yet.", "No library items yet. Add PDFs, images or EPUBs (or drop them on the window), or save web pages.", [
     ["library.savePages", Globe, "Save web pages"],
     ["library.add", Plus, "Add to library"],

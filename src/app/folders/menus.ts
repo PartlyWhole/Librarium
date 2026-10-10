@@ -3,6 +3,7 @@ import { prompt } from "../../ui/dialog";
 import { contextMenu, type MenuItem, type Point } from "../../ui/menu";
 import { untracked } from "../../ui/signal";
 import type { RecordInfo } from "../../types";
+import { actionList, runAction } from "../actions";
 import { recordActionsFor } from "../recordmenu";
 import { router } from "../router";
 import { showStatus } from "../status";
@@ -34,11 +35,19 @@ function insideActions(rs: RecordInfo[]): MenuItem[] {
     .map((a) => ({ ...a, label: rs.length === 1 ? `${a.label} (the one item inside)` : `${a.label} inside` }));
 }
 
+/** New note, New board…: made in `folder` ("" for the top level). */
+function createIn(sp: Space, folder: string, suffix: string): MenuItem[] {
+  return sp.create
+    .filter(([id]) => actionList().some((a) => a.id === id))
+    .map(([id, label]) => ({ label: label + suffix, run: () => void runAction(id, { folder }) }));
+}
+
 /** A folder's entries, beyond Open and Rename. */
 export function folderMenu(sp: Space, path: string): MenuItem[] {
   const c = untracked(() => contents(sp));
   const inside = insideActions(c.recordsUnder(path));
   return [
+    ...createIn(sp, path, " inside"),
     { label: "New folder inside…", run: () => void newFolderIn(sp, path) },
     { label: "Move to…", run: () => void moveTo(sp, [], [path]) },
     ...(inside.length ? ["separator" as const, ...inside] : []),
@@ -79,6 +88,7 @@ export function topMenu(sp: Space): MenuItem[] {
     { label: `Open ${sp.title}`, run: () => goFolder(sp, "") },
     { label: "Open in new tab", run: () => goFolder(sp, "", true) },
     "separator",
+    ...createIn(sp, "", ""),
     { label: "New folder…", run: () => void newFolderIn(sp, "") },
   ];
 }

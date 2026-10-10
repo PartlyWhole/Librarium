@@ -20,11 +20,12 @@ import { Shapes } from "lucide";
 
 pages.board = { title: "Board", icon: Shapes, render: renderBoard };
 
-/** New board: beside the note or board shown, or in the Notes folder being looked at. */
-async function newBoard(): Promise<void> {
+/** New board: in the folder given (from a folder's menu), else beside the note or board shown,
+ * or in the Notes folder being looked at. */
+async function newBoard(where?: { folder: string }): Promise<void> {
   const cur = getRecord(untracked(router.current).params.id);
   const at = here.peek();
-  const folder = cur && (cur.kind === "note" || cur.kind === "board") ? folderOf(cur) : at?.kind === "note" ? at.folder : "";
+  const folder = where ? where.folder : cur && (cur.kind === "note" || cur.kind === "board") ? folderOf(cur) : at?.kind === "note" ? at.folder : "";
   try {
     const w = await call<Written>("boards.create", { title: null, folder: folder || null });
     putRecord(w.info);

@@ -21,7 +21,8 @@ interface Action {
   keys?: string[];
   /** Available now? May read signals. Always, by default. */
   when?: () => boolean;
-  run: () => void | Promise<void>;
+  /** `at.folder`: where to make something, when run from a folder's menu. */
+  run: (at?: { folder: string }) => void | Promise<void>;
   /**
    * Where it sits in the menu bar: a menu, a place (the whole number is a section, set apart by
    * separators; the fraction its order within it, e.g. 0.3), and its own title there.
@@ -61,10 +62,10 @@ export function available(a: Action): boolean {
 }
 
 /** Runs an action if it exists and is available; false otherwise. */
-export function runAction(id: string): boolean {
+export function runAction(id: string, at?: { folder: string }): boolean {
   const a = actions.find((x) => x.id === id);
   if (!a || !untracked(() => available(a))) return false;
-  void a.run();
+  void a.run(at);
   return true;
 }
 
