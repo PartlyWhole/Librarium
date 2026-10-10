@@ -25,7 +25,7 @@ import type { BoardLoaded, BoardSaved, Draft, ImportResult, Written } from "../t
 import type { BoardEngine, BoardInsert } from "./engine";
 import { boardOutline, boardPage } from "./mirror";
 import { recordOf, type BoardElement, type BoardLink } from "./links";
-import { renderCapturePanel } from "./capturelist";
+import { renderBoardPanel } from "./panel";
 import { renderCard } from "./cards";
 import { appTheme, isPicture, loadEngine, pictureData, portable } from "./shared";
 import { FolderInput, Maximize2, Minimize2, Quote } from "lucide";
@@ -36,8 +36,8 @@ const RETRY_MS = 5000;
 
 type ExportAs = "png" | "svg" | "excalidraw";
 
-/** Whether the Captures panel docks beside the drawing (kept while the app runs). */
-let capturesDocked = true;
+/** Whether the Captures and Library panel docks beside the drawing (kept while the app runs). */
+let panelDocked = true;
 
 /** What the board's commands act on, for each board on screen. */
 const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void>; toggleFull(): void }>();
@@ -252,11 +252,11 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     },
     buttons: (bar) => bar.append(fullButton),
     sidebar: {
-      title: "Captures",
+      title: "Captures and Library",
       icon: () => icon(Quote, 20),
-      render: (panel) => renderCapturePanel(panel, (cid) => insertRecords([cid])),
-      docked: capturesDocked,
-      onDock: (d) => void (capturesDocked = d),
+      render: (panel) => renderBoardPanel(panel, (rid) => insertRecords([rid])),
+      docked: panelDocked,
+      onDock: (d) => void (panelDocked = d),
     },
   });
   if (!alive()) return ready.destroy();
@@ -338,7 +338,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     if (readOnly) toast("This board is read-only, so nothing can be put on it.");
     else void dropped(paths, at);
   }));
-  // Records dragged from the sidebar, a folder page or the Captures panel (not onto the panel).
+  // Records dragged from the sidebar, a folder page or the board's panel (not onto the panel).
   let dropAt: { x: number; y: number } | undefined;
   dropTarget(canvasHost, {
     accepts: (p) => !readOnly && p.records.length > 0 && !p.records.includes(id),

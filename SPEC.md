@@ -491,13 +491,14 @@ Boards use Excalidraw. React is used only here.
   - `[[` in a board text opens the title picker.
   - ⌥⌘K links the selection; ⌘K stays Excalidraw's web link.
   - Clicking a link opens the record (⌘-click: new tab). Web links ask first.
-- **Putting things on the board.** ⌥⌘I, dragging from the sidebar, a folder page or the Captures
+- **Putting things on the board.** ⌥⌘I, dragging from the sidebar, a folder page or the board's
   panel, pasting a picture, or dropping files.
-  - **The Captures panel.** A Captures button at the canvas's top right (beside Excalidraw's
-    Library) opens every capture, newest first, searchable by quote, name, source or place. Drag
-    one onto the drawing, or Add (or Enter) puts it in the middle of what is in view. It docks
-    beside the drawing on a wide enough canvas, and the choice is kept while the app runs. Not on
-    read-only boards.
+  - **The panel.** A button at the canvas's top right (Captures and Library) opens two tabs, each
+    newest first with one search box: **Captures** (searched by quote, name, source or place)
+    and **Library** (by title, kind, folder, author or publication). Drag one onto the drawing,
+    or Add (or Enter) puts it in the middle of what is in view. It docks beside the drawing on a
+    wide enough canvas; the docking and the tab are kept while the app runs. Not on read-only
+    boards.
   - Captures become cards with the quotation, the citation and Show in the source. They are
     redrawn when the capture changes.
   - Notes, items and boards become cards with their icon and name.
