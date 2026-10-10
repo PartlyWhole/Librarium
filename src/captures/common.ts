@@ -17,6 +17,16 @@ export const quoteOf = (c: RecordInfo): string => flowQuote(String(c.fields[F.qu
 /** A capture of a picture only (no quoted text). */
 export const isPicture = (c: RecordInfo): boolean => !String(c.fields[F.quote] ?? "").trim();
 const byCreated = (a: RecordInfo, b: RecordInfo) => (a.created ?? "").localeCompare(b.created ?? "");
+export const newestFirst = (a: RecordInfo, b: RecordInfo) => byCreated(b, a);
+
+/** Whether a capture's quote, name, source or place has every word of a search. */
+export function matches(c: RecordInfo, words: string[]): boolean {
+  const hay = [c.title, c.fields[F.quote], c.fields[F.locator], getRecord(sourceOf(c))?.title].filter(Boolean).join(" ").toLowerCase();
+  return words.every((w) => hay.includes(w));
+}
+
+/** A search box's words, lower case. */
+export const searchWords = (query: string): string[] => query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
 /** Captures by source, worked out once for each version of the records. */
 let bySource: { of: ReadonlyMap<string, RecordInfo>; map: Map<string, RecordInfo[]> } | null = null;

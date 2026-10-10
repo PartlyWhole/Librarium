@@ -11,13 +11,12 @@ import { shortDate } from "../ui/format";
 import { iconButton } from "../ui/icon";
 import { effect, signal } from "../ui/signal";
 import type { RecordInfo } from "../types";
-import { copyEmbed, F, isPicture, KIND, quoteOf, regionImage, showInSource, sourceOf } from "./common";
+import { copyEmbed, F, isPicture, KIND, matches, newestFirst, quoteOf, regionImage, searchWords, showInSource, sourceOf } from "./common";
 import { captureMenu, deleteCapture } from "./delete";
 import { Copy, LocateFixed, Pencil, Trash2 } from "lucide";
 
 const group = pref<"source" | "newest">("captures.group", "source");
 const show = pref<"all" | "passages" | "pictures">("captures.show", "all");
-const newest = (a: RecordInfo, b: RecordInfo) => (b.created ?? "").localeCompare(a.created ?? "");
 
 export function renderCaptures(host: HTMLElement, _params: Record<string, string>, ctx: PageContext): () => void {
   ctx.setTitle("Captures");
@@ -61,16 +60,15 @@ export function renderCaptures(host: HTMLElement, _params: Record<string, string
 
   const stop = effect(() => {
     const all = listRecords(KIND);
-    const words = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const words = searchWords(query());
     const g = group();
     const s = show();
     for (const b of groupSeg.querySelectorAll<HTMLElement>("button")) b.setAttribute("aria-checked", String(b.dataset.value === g));
     for (const b of showSeg.querySelectorAll<HTMLElement>("button")) b.setAttribute("aria-checked", String(b.dataset.value === s));
-    const hay = (c: RecordInfo) => [c.title, c.fields[F.quote], c.fields[F.locator], getRecord(sourceOf(c))?.title].filter(Boolean).join(" ").toLowerCase();
     const shown = all
       .filter((c) => s === "all" || (s === "pictures") === isPicture(c))
-      .filter((c) => words.every((w) => hay(c).includes(w)))
-      .sort(newest);
+      .filter((c) => matches(c, words))
+      .sort(newestFirst);
     count.textContent = shown.length === all.length ? `${all.length} ${all.length === 1 ? "capture" : "captures"}` : `${shown.length} of ${all.length}`;
     if (!all.length) return replace(list, h("p", { class: "empty" }, "No captures yet. In a book, article or PDF, select a passage (or drag a region) and choose Capture."));
     if (!shown.length) return replace(list, h("p", { class: "empty" }, "No captures match."));

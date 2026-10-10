@@ -4,7 +4,7 @@
  */
 import { createElement, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, exportToBlob, exportToSvg, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, Sidebar, exportToBlob, exportToSvg, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { passThrough } from "../ui/keys";
 import { RECORD_LINK, recordOf, UUID, type BoardElement, type BoardLink } from "./links";
@@ -39,6 +39,15 @@ interface EngineOptions {
   onLinkStart(elementId: string): void;
   /** A link on the board was clicked (with ⌘: in a new tab). */
   onOpenLink(link: string, newTab: boolean): void;
+  /** A panel of the page's own beside the drawing, opened by a button at the canvas's top right. */
+  sidebar?: {
+    title: string;
+    icon(): Element;
+    /** Draws the panel into `host`; returns how to stop. */
+    render(host: HTMLElement): () => void;
+    docked: boolean;
+    onDock(docked: boolean): void;
+  };
 }
 
 /** A record to put on the board. */
@@ -73,12 +82,14 @@ export interface BoardEngine {
   destroy(): void;
 }
 
-/** A card: the page's own DOM, held by React inside Excalidraw's embed element. */
-function Card(props: { id: string; render: (id: string, host: HTMLElement) => () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => props.render(props.id, ref.current!), [props.id, props.render]);
-  return createElement("div", { ref, className: "board-card-host" });
+/** The page's own DOM, held by React where Excalidraw puts it (a card, the sidebar, its button's icon). */
+function Host(props: { render: (host: HTMLElement) => (() => void) | void; className: string; tag?: string }) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => props.render(ref.current!) ?? undefined, [props.render]);
+  return createElement(props.tag ?? "div", { ref, className: props.className });
 }
+
+const SIDEBAR = "librarium";
 
 /** A gesture in progress: its step is counted when it ends. */
 const busy = (s: AppState) =>
@@ -141,8 +152,9 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
           event.preventDefault();
           o.onOpenLink(element.link, !!event.detail?.nativeEvent?.metaKey);
         },
-        // Saving, opening, exporting and pictures go through Librarium.
-        UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false }, tools: { image: false } },
+        // Saving, opening, exporting and pictures go through Librarium. Sidebars can dock beside
+        // the drawing on any window wider than a phone.
+        UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false }, tools: { image: false }, dockedSidebarBreakpoint: 700 },
         onPaste: (data: { files?: object; elements?: readonly { type: string }[] | null }, event: ClipboardEvent | null) => {
           const files = [...(event?.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
           if (files.length) {
@@ -156,10 +168,18 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
         validateEmbeddable: (link: string) => recordOf(link) !== null,
         renderEmbeddable: (element: { link: string | null }) => {
           const id = recordOf(element.link);
-          return id ? createElement(Card, { id, render: o.renderCard }) : null;
+          return id ? createElement(Host, { key: id, render: cardRender(id), className: "board-card-host" }) : null;
         },
-      }),
+        renderTopRightUI: side ? () => createElement(Sidebar.Trigger, { name: SIDEBAR, title: side.title, icon: createElement(Host, { render: sideIcon, className: "board-sidebar-icon", tag: "span" }) }) : undefined,
+      },
+      side ? createElement(Sidebar, { name: SIDEBAR, docked, onDock: (d: boolean) => ((docked = d), side.onDock(d), render()), className: "board-sidebar", children: [createElement(Sidebar.Header, { key: "head" }, side.title), createElement(Host, { key: "body", render: side.render, className: "board-sidebar-body" })] }) : null),
     );
+  // The same functions each time, so React keeps what they drew.
+  const cards = new Map<string, (host: HTMLElement) => () => void>();
+  const cardRender = (id: string) => cards.get(id) ?? cards.set(id, (host) => o.renderCard(id, host)).get(id)!;
+  const side = o.readOnly ? undefined : o.sidebar;
+  const sideIcon = (host: HTMLElement) => void host.append(side!.icon());
+  let docked = side?.docked ?? false;
   render();
 
   // Undo and redo are Excalidraw's own, reached by its key (it has no call for them). It
@@ -202,10 +222,13 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     }
   };
 
-  /** Where on the drawing a point on screen is (the middle of the view, by default). */
+  /** Where on the drawing a point on screen is (by default the middle of what is in view, left of
+   * an open sidebar). */
   const scenePoint = (at?: { x: number; y: number }) => {
     const s = api!.getAppState();
-    const p = at ?? { x: s.offsetLeft + s.width / 2, y: s.offsetTop + s.height / 2 };
+    const side = el.querySelector(".sidebar")?.getBoundingClientRect();
+    const right = side?.width ? side.left : s.offsetLeft + s.width;
+    const p = at ?? { x: (s.offsetLeft + right) / 2, y: s.offsetTop + s.height / 2 };
     return viewportCoordsToSceneCoords({ clientX: p.x, clientY: p.y }, s);
   };
 
