@@ -16,7 +16,7 @@ import { toast } from "../../ui/toast";
 import { actionList, runAction } from "../actions";
 import { here as hereSignal, type PageContext } from "../pages";
 import { kindName, openRecord, recordDetail, recordIcon } from "../records";
-import { recordActionsFor } from "../recordmenu";
+import { recordActionsFor, runRecordAction } from "../recordmenu";
 import { router } from "../router";
 import { badFolderName, folderId, isFolderId, join, keyOf, nameOf, parentOf, pathOfId, uniqueName, type Entry, type SortKey } from "./model";
 import { folderMenu, goFolder, manyMenu } from "./menus";
@@ -404,6 +404,15 @@ export function renderFolder(sp: Space, host: HTMLElement, params: Record<string
     const keep = focused;
     void place(sp, here, payload(sel), keyOf(a), back ? "before" : "after").then(() => focusEntry(keep ?? undefined));
   };
+  // Copying (⌘C, or Edit ▸ Copy) gives links to the records selected, for pasting into a note.
+  body.addEventListener("copy", (e) => {
+    if (renaming || (e.target as HTMLElement).tagName === "INPUT") return;
+    const rs = [...selection.ids.peek()].flatMap((id) => {
+      const en = entries.get(id);
+      return en?.type === "record" ? [en.record] : [];
+    });
+    if (runRecordAction("copy-link", rs)) e.preventDefault();
+  });
   body.addEventListener("keydown", (e) => {
     if (renaming || (e.target as HTMLElement).tagName === "INPUT") return;
     const mod = e.metaKey;

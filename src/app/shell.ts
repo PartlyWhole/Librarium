@@ -4,15 +4,17 @@
  */
 import { h, replace } from "../ui/dom";
 import { iconButton } from "../ui/icon";
+import { scrollLongText } from "../ui/longtext";
+import { resizeHandle } from "../ui/resize";
 import { count } from "../ui/format";
 import { effect, untracked } from "../ui/signal";
 import { actionList, runAction, startActions } from "./actions";
-import { defineGoActions, openToday, ribbon, sidebarOpen } from "./commands";
+import { defineGoActions, openToday, ribbon, sidebarOpen, sidebarWidth } from "./commands";
 import { jobsStatus } from "./jobs";
 import { isOpen, library, refreshLibrary, renderStart } from "./library";
 import { guardLinks } from "./links";
 import { fullPage, here, pages, type PageHandle } from "./pages";
-import { panelOpen, sidePanel } from "./panel";
+import { panelOpen, panelWidth, sidePanel } from "./panel";
 import { loadPrefs, pref } from "./prefs";
 import { getRecord, loadRecords, records } from "./records";
 import { placeOf, router, sameRoute, type Route, type SavedTabs } from "./router";
@@ -67,8 +69,16 @@ export function startApp(root: HTMLElement): void {
   const headerActions = h("div", { class: "ws-actions" });
   const pageScroll = h("div", { class: "page-scroll" });
   const panelToggle = iconButton(PanelRight, "Toggle side panel", () => runAction("app.togglePanel"), "Mod+Alt+\\");
-  const workspace = h("main", { class: "workspace" }, tabBar(), h("header", { class: "ws-header" }, h("div", { class: "ws-nav" }, back, fwd), titleEl, h("div", { class: "ws-end" }, headerActions, panelToggle)), pageScroll);
+  // The sidebar and side panel are resized from the page's edges (they scroll; the page area doesn't).
+  const sideHandle = resizeHandle({ label: "Resize the sidebar", width: sidebarWidth, min: 180, max: 480, usual: 260, grows: 1 });
+  const panelHandle = resizeHandle({ label: "Resize the side panel", width: panelWidth, min: 240, max: 640, usual: 320, grows: -1 });
+  sideHandle.classList.add("resize-start");
+  panelHandle.classList.add("resize-end");
+  const workspace = h("main", { class: "workspace" }, sideHandle, panelHandle, tabBar(), h("header", { class: "ws-header" }, h("div", { class: "ws-nav" }, back, fwd), titleEl, h("div", { class: "ws-end" }, headerActions, panelToggle)), pageScroll);
   const panel = sidePanel(() => (panelOpen.set(false), panelToggle.focus()));
+  // Long titles cut short in the sidebar and side panel scroll while the pointer rests on them.
+  scrollLongText(side);
+  scrollLongText(panel);
   const statusLeft = h("div", { class: "status-left", role: "status", "aria-live": "polite" });
   const statusRight = h("div", { class: "status-right" });
   const app = h("div", { class: "app" }, nav, side, workspace, panel, h("footer", { class: "status-bar" }, h("div", { class: "status-group" }, statusLeft, jobsStatus()), statusRight));
@@ -82,6 +92,10 @@ export function startApp(root: HTMLElement): void {
     app.classList.toggle("with-panel", panelOpen() && !full);
     side.hidden = !sidebarOpen() || full;
     panel.hidden = !panelOpen() || full;
+    sideHandle.hidden = side.hidden;
+    panelHandle.hidden = panel.hidden;
+    app.style.setProperty("--sidebar", `${sidebarWidth()}px`);
+    app.style.setProperty("--panel", `${panelWidth()}px`);
     panelToggle.setAttribute("aria-pressed", String(panelOpen()));
   });
   effect(() => {

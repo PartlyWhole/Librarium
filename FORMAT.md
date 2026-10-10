@@ -430,6 +430,7 @@ App data is per device and never synced.
 - `ui.theme`: `system` | `light` | `dark`
 - `ui.textSize`: 14 | 16 | 18
 - `ui.sidebar`, `ui.sidePanel`, `ui.panelView`, `ui.icloudNoted`
+- `ui.sidebarWidth`, `ui.panelWidth`, `boards.panelWidth`: widths in pixels
 - `ui.recent`, `ui.folded`, `ui.unfolded`
 - `ui.tabs`: `{"tabs": [{"stack": [{"page", "params"}], "index", "title"}], "active"}`
 - `folders.sort.<kind>`: `{key, dir}`

@@ -81,6 +81,11 @@ One window. Only regions scroll, never the window.
 - **Sidebar.** A Filter box, then one tree with **Notes** and **Library** sections. Captures sit
   under their item, folded. Empty sections say "No notes yet." / "No library items yet.", and
   "Nothing matches" while filtering. Folding is remembered.
+- **Resizing.** The sidebar (180–480 px), the side panel (240–640 px) and a board's panel
+  (240–640 px) are resized by dragging their inner edge, or with ← and → on it (⇧ for larger
+  steps); a double-click gives the usual width back. Widths are remembered.
+- **Long titles** cut short with "…" in the sidebar and side panel scroll to their end and back
+  while the pointer rests on them (with Reduce Motion, the whole title is the tooltip instead).
 - **Header.** Back and Forward on the left; the title centred, small and muted; the page's actions
   and the side-panel toggle on the right.
 - **Side panel.** Hidden at first. It shows one view at a time, chosen by icons along its top;
@@ -250,8 +255,10 @@ One window. Only regions scroll, never the window.
   - Dropping on an edge places the item there and switches the folder to As arranged.
 - **Menus.**
   - **Record:** Open, Open in new tab, Rename, Move to folder…, Move to the Library (attachments),
-    Remove older snapshots… (web pages), Archive, Restore from archive, Delete permanently…
-    (archived only). Destructive entries come last.
+    Remove older snapshots… (web pages), Copy link, Copy embed (not notes), Archive, Restore from
+    archive, Delete permanently… (archived only). Destructive entries come last.
+  - **Copy link / Copy embed** put `[[Title|id]]` (or `![[…]]`), one a line, on the clipboard, to
+    paste into a note; with several selected, one for each.
   - **Folder:** Open, Open in new tab, Rename…, New note inside and New board inside (Notes),
     New folder inside…, Move to…, Delete folder.
   - **Several selected:** "Move N items to…" plus the shared actions.
@@ -270,6 +277,7 @@ One window. Only regions scroll, never the window.
   | ⌘↩ | open in a new tab |
   | ⌘↑ | parent folder |
   | ⌘A | select all |
+  | ⌘C | copy links to what is selected |
   | Escape | clear the selection |
   | Space | toggle selection |
   | F2 | rename |
@@ -497,8 +505,8 @@ Boards use Excalidraw. React is used only here.
     newest first with one search box: **Captures** (searched by quote, name, source or place)
     and **Library** (by title, kind, folder, author or publication). Drag one onto the drawing,
     or Add (or Enter) puts it in the middle of what is in view. It docks beside the drawing on a
-    wide enough canvas; the docking and the tab are kept while the app runs. Not on read-only
-    boards.
+    wide enough canvas, and is resized from its left edge (its width is remembered); the docking
+    and the tab are kept while the app runs. Not on read-only boards.
     - A source with several captures is one group under its name and count, closed until
       opened (kept while the app runs). While searching, groups with matches open, and one
       closed stays closed for that search.
@@ -739,7 +747,8 @@ greys, one violet accent used sparingly, and small monochrome line icons (Lucide
     1.2.
 - **Space and shape.**
   - A 4 px grid. Radii 4, 8 and 12 px.
-  - Sizes: ribbon 44, sidebar 260, panel 320, header 40, status bar 24, page column 700.
+  - Sizes: ribbon 44, sidebar 260 and panel 320 (both resizable), header 40, status bar 24,
+    page column 700.
 - **Shadows** appear only on floating things:
   - dialogs: `0 2px 6px rgb(0 0 0 / 8%), 0 16px 48px rgb(0 0 0 / 16%)`
   - menus: `0 8px 24px rgb(0 0 0 / 22%)`

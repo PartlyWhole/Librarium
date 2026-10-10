@@ -109,3 +109,12 @@
 .link-url { font-family: var(--font-mono); font-size: 12px; padding: 6px 8px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--r1); word-break: break-all; max-height: 6em; overflow: auto; user-select: text; -webkit-user-select: text; }
 .panel-tabs { display: flex; gap: 2px; flex: 1; }
 .panel-tab.current { background: var(--active); color: var(--ink); }
+
+/* Resizing the sidebar and side panel, from the page area's edges. */
+.workspace { position: relative; }
+.resize-handle { position: absolute; top: 0; bottom: 0; z-index: 30; width: 7px; cursor: col-resize; touch-action: none; }
+.resize-handle[hidden] { display: none; }
+.resize-handle.resize-start { left: -4px; }
+.resize-handle.resize-end { right: -4px; }
+.resize-handle:hover, .resize-handle:focus-visible { background: linear-gradient(to right, transparent 2px, var(--accent) 2px, var(--accent) 5px, transparent 5px); outline: none; }
+body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; -webkit-user-select: none !important; }
