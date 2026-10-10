@@ -252,11 +252,12 @@ One window. Only regions scroll, never the window.
   - **Record:** Open, Open in new tab, Rename, Move to folder…, Move to the Library (attachments),
     Remove older snapshots… (web pages), Archive, Restore from archive, Delete permanently…
     (archived only). Destructive entries come last.
-  - **Folder:** Open, Open in new tab, Rename…, New folder inside…, Move to…, Delete folder.
+  - **Folder:** Open, Open in new tab, Rename…, New note inside and New board inside (Notes),
+    New folder inside…, Move to…, Delete folder.
   - **Several selected:** "Move N items to…" plus the shared actions.
   - **Background:** New folder, Select all, View as icons/list, Sort by….
   - **Sidebar:**
-    - Section headings: Open, Open in new tab, New folder….
+    - Section headings: Open, Open in new tab, New note and New board (Notes), New folder….
     - Empty space: go to Notes or Library, or make a new folder in either.
     - Capture rows: Open, Show in the source, Copy embed, Delete.
 - **Keys on a folder page:**

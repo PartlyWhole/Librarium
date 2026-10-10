@@ -31,11 +31,12 @@ pages.note = { title: "Note", icon: FileText, render: renderNote };
 
 const shownNote = () => (router.current().page === "note" ? router.current().params.id : undefined);
 
-/** New note: beside the note shown, or in the Notes folder being looked at; its title focused. */
-async function newNote(): Promise<void> {
+/** New note: in the folder given (from a folder's menu), else beside the note shown, or in the
+ * Notes folder being looked at; its title focused. */
+async function newNote(where?: { folder: string }): Promise<void> {
   const cur = getRecord(untracked(shownNote));
   const at = here.peek();
-  const folder = cur ? folderOf(cur) : at?.kind === "note" ? at.folder : "";
+  const folder = where ? where.folder : cur ? folderOf(cur) : at?.kind === "note" ? at.folder : "";
   try {
     const w = await call<Written>("notes.create", { folder: folder || null });
     putRecord(w.info);
