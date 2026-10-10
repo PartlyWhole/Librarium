@@ -7,6 +7,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
@@ -142,6 +143,15 @@ export function onFileDrop(handler: (paths: string[], at: { x: number; y: number
     })
     .then((u) => (off = u));
   return () => off?.();
+}
+
+/** Puts the window into macOS full screen, or out of it; says whether it was in full screen. */
+export async function setWindowFullscreen(on: boolean): Promise<boolean> {
+  if (!inTauri) return false;
+  const w = getCurrentWindow();
+  const was = await w.isFullscreen();
+  if (was !== on) await w.setFullscreen(on);
+  return was;
 }
 
 /** A library item's original file (or a file in its folder, `name`), as bytes. */

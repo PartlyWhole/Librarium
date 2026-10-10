@@ -27,16 +27,37 @@
 .embed-board figcaption { margin-top: 4px; font-size: var(--small); }
 .embed-board .embed-cite { color: var(--muted); text-decoration: none; }
 
-/* The Captures panel beside the drawing (Excalidraw's sidebar, holding the page's own list). */
+/* The Captures and Library panel beside the drawing (Excalidraw's sidebar, holding the page's own list). */
 .board-sidebar-icon { display: inline-flex; }
 .board-sidebar-body { display: flex; flex-direction: column; min-height: 0; height: 100%; font-family: var(--font-ui); color: var(--ink); }
-.board-captures-head { padding: 4px 12px 8px; border-bottom: 1px solid var(--border); }
-.board-captures-head .search-input { width: 100%; box-sizing: border-box; }
-.board-captures-hint { margin: 6px 0 0; }
-.board-captures { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 12px; display: grid; gap: 6px; align-content: start; }
-.board-capture { display: flex; gap: 6px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r2); background: var(--bg); cursor: grab; font-size: var(--small); line-height: 1.4; }
-.board-capture:hover, .board-capture:focus-visible { border-color: var(--border-strong); background: var(--hover); outline: none; }
-.board-capture-body { flex: 1; min-width: 0; }
-.board-capture-quote { margin: 0 0 4px; padding-left: 8px; border-left: 3px solid var(--accent); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
-.board-capture .capture-thumb { display: block; max-width: 100%; max-height: 90px; margin-bottom: 4px; border-radius: var(--r1); }
-.board-capture .icon-button { flex: none; }
+.board-panel-head { display: grid; gap: 8px; padding: 4px 12px 8px; border-bottom: 1px solid var(--border); }
+.board-panel-head .small-seg { justify-self: start; }
+.board-panel-head .search-input { width: 100%; box-sizing: border-box; }
+.board-panel-hint { margin: 0; }
+.board-panel-list { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 12px; display: grid; gap: 6px; align-content: start; }
+.board-panel-row { display: flex; gap: 6px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r2); background: var(--bg); cursor: grab; font-size: var(--small); line-height: 1.4; }
+.board-panel-row:hover, .board-panel-row:focus-visible { border-color: var(--border-strong); background: var(--hover); outline: none; }
+.board-panel-body { flex: 1; min-width: 0; }
+.board-panel-quote { margin: 0 0 4px; padding-left: 8px; border-left: 3px solid var(--accent); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.board-panel-title { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; font-weight: 500; overflow-wrap: anywhere; }
+.board-panel-title .icon { flex: none; }
+.board-panel-row .capture-thumb { display: block; max-width: 100%; max-height: 90px; margin-bottom: 4px; border-radius: var(--r1); }
+.board-panel-row .icon-button { flex: none; }
+
+/* Excalidraw's own Library (reusable shapes) isn't kept between visits, and its name clashes with
+   Librarium's Library, so its button is hidden. */
+.board-canvas .sidebar-trigger__label-element:has(> .default-sidebar-trigger) { display: none; }
+
+/* Full screen: the drawing alone fills the window. The button sits with Excalidraw's own. */
+.full-page .board-head { display: none; }
+.board-buttons { display: inline-flex; margin-right: 6px; }
+.board-full-button { display: inline-flex; align-items: center; justify-content: center; width: var(--lg-button-size, 2.25rem); height: var(--lg-button-size, 2.25rem); padding: 0; border: none; border-radius: var(--border-radius-lg, 0.5rem); background: var(--island-bg-color); box-shadow: var(--shadow-island); color: var(--icon-fill-color, currentColor); cursor: pointer; }
+.board-full-button:hover { background: var(--button-hover-bg, var(--island-bg-color)); }
+.board-panel-group { display: grid; gap: 6px; }
+.board-panel-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 4px; border: 0; border-radius: var(--r1); background: transparent; color: var(--ink); font: inherit; font-size: var(--small); font-weight: 600; text-align: left; cursor: pointer; }
+.board-panel-group-head:hover, .board-panel-group-head:focus-visible { background: var(--hover); outline: none; }
+.board-panel-group-head > span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.board-panel-group-head .icon { flex: none; transition: transform 0.12s; }
+.board-panel-group-head[aria-expanded="true"] .icon { transform: rotate(90deg); }
+.board-panel-group-items { display: grid; gap: 6px; padding-left: 12px; }
+.board-panel-group-items[hidden] { display: none; }

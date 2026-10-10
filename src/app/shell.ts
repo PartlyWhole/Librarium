@@ -11,7 +11,7 @@ import { defineGoActions, openToday, ribbon, sidebarOpen } from "./commands";
 import { jobsStatus } from "./jobs";
 import { isOpen, library, refreshLibrary, renderStart } from "./library";
 import { guardLinks } from "./links";
-import { here, pages, type PageHandle } from "./pages";
+import { fullPage, here, pages, type PageHandle } from "./pages";
 import { panelOpen, sidePanel } from "./panel";
 import { loadPrefs, pref } from "./prefs";
 import { getRecord, loadRecords, records } from "./records";
@@ -76,10 +76,12 @@ export function startApp(root: HTMLElement): void {
   guardLinks(() => titleEl.textContent || undefined);
 
   effect(() => {
-    app.classList.toggle("no-sidebar", !sidebarOpen());
-    app.classList.toggle("with-panel", panelOpen());
-    side.hidden = !sidebarOpen();
-    panel.hidden = !panelOpen();
+    const full = fullPage();
+    app.classList.toggle("full-page", full);
+    app.classList.toggle("no-sidebar", !sidebarOpen() || full);
+    app.classList.toggle("with-panel", panelOpen() && !full);
+    side.hidden = !sidebarOpen() || full;
+    panel.hidden = !panelOpen() || full;
     panelToggle.setAttribute("aria-pressed", String(panelOpen()));
   });
   effect(() => {

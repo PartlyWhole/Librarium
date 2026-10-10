@@ -31,3 +31,6 @@ export const pages: Record<string, Page> = {};
  * its kind go; null when no page shows a folder.
  */
 export const here = signal<{ kind: string; folder: string } | null>(null);
+
+/** The page shown fills the window (a board in full screen): the rest of the app is hidden. */
+export const fullPage = signal(false);

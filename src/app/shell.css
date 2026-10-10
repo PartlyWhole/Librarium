@@ -10,6 +10,9 @@
 .app.no-sidebar { grid-template-columns: var(--ribbon) 0 minmax(0, 1fr) 0; }
 .app.with-panel { grid-template-columns: var(--ribbon) var(--sidebar) minmax(0, 1fr) var(--panel); }
 .app.no-sidebar.with-panel { grid-template-columns: var(--ribbon) 0 minmax(0, 1fr) var(--panel); }
+/* A page filling the window (a board in full screen): only the page shows. */
+.app.full-page.no-sidebar { grid-template-columns: 0 0 minmax(0, 1fr) 0; grid-template-rows: minmax(0, 1fr) 0; }
+.app.full-page > .ribbon, .app.full-page > .status-bar, .app.full-page .tab-bar, .app.full-page .ws-header { display: none; }
 .ribbon {
   grid-area: ribbon;
   display: flex;

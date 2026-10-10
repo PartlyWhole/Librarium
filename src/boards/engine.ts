@@ -2,7 +2,7 @@
  * Excalidraw, mounted for a board: the only place React is used, loaded (with this module) the
  * first time a board is opened or drawn in a note. The page talks to it through `BoardEngine`.
  */
-import { createElement, useEffect, useRef } from "react";
+import { createElement, Fragment, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, Sidebar, exportToBlob, exportToSvg, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
@@ -39,6 +39,8 @@ interface EngineOptions {
   onLinkStart(elementId: string): void;
   /** A link on the board was clicked (with ⌘: in a new tab). */
   onOpenLink(link: string, newTab: boolean): void;
+  /** The page's own buttons at the canvas's top right (shown on read-only boards too). */
+  buttons?(host: HTMLElement): void;
   /** A panel of the page's own beside the drawing, opened by a button at the canvas's top right. */
   sidebar?: {
     title: string;
@@ -170,7 +172,10 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
           const id = recordOf(element.link);
           return id ? createElement(Host, { key: id, render: cardRender(id), className: "board-card-host" }) : null;
         },
-        renderTopRightUI: side ? () => createElement(Sidebar.Trigger, { name: SIDEBAR, title: side.title, icon: createElement(Host, { render: sideIcon, className: "board-sidebar-icon", tag: "span" }) }) : undefined,
+        renderTopRightUI: () =>
+          createElement(Fragment, null,
+            o.buttons ? createElement(Host, { render: o.buttons, className: "board-buttons" }) : null,
+            side ? createElement(Sidebar.Trigger, { name: SIDEBAR, title: side.title, icon: createElement(Host, { render: sideIcon, className: "board-sidebar-icon", tag: "span" }) }) : null),
       },
       side ? createElement(Sidebar, { name: SIDEBAR, docked, onDock: (d: boolean) => ((docked = d), side.onDock(d), render()), className: "board-sidebar", children: [createElement(Sidebar.Header, { key: "head" }, side.title), createElement(Host, { key: "body", render: side.render, className: "board-sidebar-body" })] }) : null),
     );
