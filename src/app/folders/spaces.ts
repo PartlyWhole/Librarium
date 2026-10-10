@@ -11,7 +11,7 @@ import { isOpen } from "../library";
 import { pref } from "../prefs";
 import { isArchived, kindName, records } from "../records";
 import { Contents, sortEntries, type Entry, type Sort } from "./model";
-import { FilePlus, Globe, Plus } from "lucide";
+import { FilePlus, Globe, Plus, Shapes } from "lucide";
 
 export interface Space {
   /** The kind the space is named for (its folders are under that kind's top folder). */
@@ -37,7 +37,10 @@ const space = (kind: string, page: string, title: string, emptyText: string, pag
 });
 
 export const SPACES: Space[] = [
-  space("note", "notes", "Notes", "No notes yet.", "No notes yet.", [["notes.new", FilePlus, "New note"]]),
+  space("note", "notes", "Notes", "No notes yet.", "No notes yet.", [
+    ["notes.new", FilePlus, "New note"],
+    ["boards.new", Shapes, "New board"],
+  ]),
   space("item", "library", "Library", "No library items yet.", "No library items yet. Add PDFs, images or EPUBs (or drop them on the window), or save web pages.", [
     ["library.savePages", Globe, "Save web pages"],
     ["library.add", Plus, "Add to library"],

@@ -241,8 +241,8 @@ One window. Only regions scroll, never the window.
   - A path bar and a Filter box.
   - List view (Name, Kind, Date added, size) or icon view.
   - Sort by Name, Kind, Date added (either direction), or **As arranged**.
-  - New folder (⇧⌘N), plus the header buttons: New note on Notes; Save web pages and Add to
-    library on Library.
+  - New folder (⇧⌘N), plus the header buttons: New note and New board on Notes; Save web pages
+    and Add to library on Library.
   - Empty-folder hints.
 - **Selection.** Click, ⌘-click, ⇧-click, box drag, or the keyboard.
 - **Moving and arranging.**
