@@ -53,3 +53,11 @@
 .board-buttons { display: inline-flex; margin-right: 6px; }
 .board-full-button { display: inline-flex; align-items: center; justify-content: center; width: var(--lg-button-size, 2.25rem); height: var(--lg-button-size, 2.25rem); padding: 0; border: none; border-radius: var(--border-radius-lg, 0.5rem); background: var(--island-bg-color); box-shadow: var(--shadow-island); color: var(--icon-fill-color, currentColor); cursor: pointer; }
 .board-full-button:hover { background: var(--button-hover-bg, var(--island-bg-color)); }
+.board-panel-group { display: grid; gap: 6px; }
+.board-panel-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 4px; border: 0; border-radius: var(--r1); background: transparent; color: var(--ink); font: inherit; font-size: var(--small); font-weight: 600; text-align: left; cursor: pointer; }
+.board-panel-group-head:hover, .board-panel-group-head:focus-visible { background: var(--hover); outline: none; }
+.board-panel-group-head > span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.board-panel-group-head .icon { flex: none; transition: transform 0.12s; }
+.board-panel-group-head[aria-expanded="true"] .icon { transform: rotate(90deg); }
+.board-panel-group-items { display: grid; gap: 6px; padding-left: 12px; }
+.board-panel-group-items[hidden] { display: none; }

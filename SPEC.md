@@ -499,6 +499,9 @@ Boards use Excalidraw. React is used only here.
     or Add (or Enter) puts it in the middle of what is in view. It docks beside the drawing on a
     wide enough canvas; the docking and the tab are kept while the app runs. Not on read-only
     boards.
+    - A source with several captures is one group under its name and count, closed until
+      opened (kept while the app runs). While searching, groups with matches open, and one
+      closed stays closed for that search.
   - Captures become cards with the quotation, the citation and Show in the source. They are
     redrawn when the capture changes.
   - Notes, items and boards become cards with their icon and name.
