@@ -476,6 +476,11 @@ Boards use Excalidraw. React is used only here.
   - A title (renaming is undoable) and Move to folder.
   - The canvas follows the app's light or dark look.
   - A screen-reader list of what is on the board.
+  - **Full screen** (⇧⌘↩, or the button at the canvas's top right): the drawing fills the screen
+    and the rest of the app is hidden; the window goes into full screen, and comes out only if it
+    wasn't there before. Pressed again, or on leaving the board, it ends.
+  - Excalidraw's own Library (reusable shapes) is hidden: it isn't kept, and its name clashes
+    with the Library.
 - **Saving.**
   - The board saves 1 s after you stop, and retries with a message if saving fails.
   - If the board changed elsewhere: with nothing unsaved, the new version is shown. Otherwise the
@@ -486,13 +491,17 @@ Boards use Excalidraw. React is used only here.
   - `[[` in a board text opens the title picker.
   - ⌥⌘K links the selection; ⌘K stays Excalidraw's web link.
   - Clicking a link opens the record (⌘-click: new tab). Web links ask first.
-- **Putting things on the board.** ⌥⌘I, dragging from the sidebar, a folder page or the Captures
+- **Putting things on the board.** ⌥⌘I, dragging from the sidebar, a folder page or the board's
   panel, pasting a picture, or dropping files.
-  - **The Captures panel.** A Captures button at the canvas's top right (beside Excalidraw's
-    Library) opens every capture, newest first, searchable by quote, name, source or place. Drag
-    one onto the drawing, or Add (or Enter) puts it in the middle of what is in view. It docks
-    beside the drawing on a wide enough canvas, and the choice is kept while the app runs. Not on
-    read-only boards.
+  - **The panel.** A button at the canvas's top right (Captures and Library) opens two tabs, each
+    newest first with one search box: **Captures** (searched by quote, name, source or place)
+    and **Library** (by title, kind, folder, author or publication). Drag one onto the drawing,
+    or Add (or Enter) puts it in the middle of what is in view. It docks beside the drawing on a
+    wide enough canvas; the docking and the tab are kept while the app runs. Not on read-only
+    boards.
+    - A source with several captures is one group under its name and count, closed until
+      opened (kept while the app runs). While searching, groups with matches open, and one
+      closed stays closed for that search.
   - Captures become cards with the quotation, the citation and Show in the source. They are
     redrawn when the capture changes.
   - Notes, items and boards become cards with their icon and name.
@@ -651,7 +660,7 @@ actions. Items are enabled only when they apply.
   - Link to a note or item… ⌥⌘K, Put a capture, note or item on the board… ⌥⌘I
 - **Format:** Bold, Italic, Strikethrough, Highlight, Code, Link, Task, Heading 1–6, Body text.
 - **View:** Command palette; Toggle sidebar; Toggle side panel; Theme (system / light / dark);
-  Single Page / Two Pages / Scrolling (books); Enter Full Screen.
+  Single Page / Two Pages / Scrolling (books); Board in Full Screen; Enter Full Screen.
 - **Go:** Today, Notes, Library, Captures, Search, Archive; Back, Forward.
 - **Window:** Minimize, Zoom; Next tab, Previous tab; Tab 1–8, Last tab.
 - **Help:** Keyboard shortcuts, Reveal logs.
@@ -686,6 +695,7 @@ composition.
 | ⌥⌘N | New board | ✓ |
 | ⌥⌘K | Board: link the selection | ✓ |
 | ⌥⌘I | Board: put something on it | ✓ |
+| ⇧⌘↩ | Board: full screen | ✓ |
 | ⇧⌘N | New folder | |
 | ⌥⌘Y | Show history | |
 | ⌘F | Find in this item | |

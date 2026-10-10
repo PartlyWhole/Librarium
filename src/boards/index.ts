@@ -7,7 +7,7 @@ import { call } from "../backend";
 import { defineAction } from "../app/actions";
 import { folderOf } from "../app/folders";
 import { isOpen } from "../app/library";
-import { here, pages } from "../app/pages";
+import { fullPage, here, pages } from "../app/pages";
 import { getRecord, listRecords, openRecord, putRecord, records } from "../app/records";
 import { router } from "../app/router";
 import { errorText } from "../ui/dom";
@@ -38,6 +38,17 @@ async function newBoard(where?: { folder: string }): Promise<void> {
 const onBoard = () => !!shownBoard();
 
 defineAction({ id: "boards.new", title: "New board", keys: ["Mod+Alt+N"], reserved: true, when: isOpen, run: newBoard, menu: { name: "file", group: 0.5 }, icon: Shapes });
+defineAction({
+  id: "boards.fullscreen",
+  get title() {
+    return fullPage() ? "Exit full screen" : "Full screen";
+  },
+  keys: ["Mod+Shift+Enter"],
+  reserved: true,
+  when: onBoard,
+  run: () => shownBoard()?.toggleFull(),
+  menu: { name: "view", group: 4, title: "Board in Full Screen" },
+});
 defineAction({ id: "boards.linkTo", title: "Link to…", keys: ["Mod+Alt+K"], reserved: true, when: onBoard, run: () => shownBoard()?.linkTo(), menu: { name: "edit", group: 3.1, title: "Link to a note or item…" } });
 defineAction({ id: "boards.insert", title: "Put on the board…", keys: ["Mod+Alt+I"], reserved: true, when: onBoard, run: () => shownBoard()?.insert(), menu: { name: "edit", group: 3.2, title: "Put a capture, note or item on the board…" } });
 for (const [as, title, n] of [["png", "Export board as a picture (PNG)…", 0.3], ["svg", "Export board as a picture (SVG)…", 0.4], ["excalidraw", "Export board as an Excalidraw file…", 0.5]] as const) {
