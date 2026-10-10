@@ -476,6 +476,11 @@ Boards use Excalidraw. React is used only here.
   - A title (renaming is undoable) and Move to folder.
   - The canvas follows the app's light or dark look.
   - A screen-reader list of what is on the board.
+  - **Full screen** (⇧⌘↩, or the button at the canvas's top right): the drawing fills the screen
+    and the rest of the app is hidden; the window goes into full screen, and comes out only if it
+    wasn't there before. Pressed again, or on leaving the board, it ends.
+  - Excalidraw's own Library (reusable shapes) is hidden: it isn't kept, and its name clashes
+    with the Library.
 - **Saving.**
   - The board saves 1 s after you stop, and retries with a message if saving fails.
   - If the board changed elsewhere: with nothing unsaved, the new version is shown. Otherwise the
@@ -651,7 +656,7 @@ actions. Items are enabled only when they apply.
   - Link to a note or item… ⌥⌘K, Put a capture, note or item on the board… ⌥⌘I
 - **Format:** Bold, Italic, Strikethrough, Highlight, Code, Link, Task, Heading 1–6, Body text.
 - **View:** Command palette; Toggle sidebar; Toggle side panel; Theme (system / light / dark);
-  Single Page / Two Pages / Scrolling (books); Enter Full Screen.
+  Single Page / Two Pages / Scrolling (books); Board in Full Screen; Enter Full Screen.
 - **Go:** Today, Notes, Library, Captures, Search, Archive; Back, Forward.
 - **Window:** Minimize, Zoom; Next tab, Previous tab; Tab 1–8, Last tab.
 - **Help:** Keyboard shortcuts, Reveal logs.
@@ -686,6 +691,7 @@ composition.
 | ⌥⌘N | New board | ✓ |
 | ⌥⌘K | Board: link the selection | ✓ |
 | ⌥⌘I | Board: put something on it | ✓ |
+| ⇧⌘↩ | Board: full screen | ✓ |
 | ⇧⌘N | New folder | |
 | ⌥⌘Y | Show history | |
 | ⌘F | Find in this item | |

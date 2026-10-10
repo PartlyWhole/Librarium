@@ -4,11 +4,11 @@
  * changes made elsewhere, ⌘Z through the board's place, and the board's own commands (link,
  * put on the board, export).
  */
-import { BackendError, call, onFileDrop, pickSavePath } from "../backend";
+import { BackendError, call, onFileDrop, pickSavePath, setWindowFullscreen } from "../backend";
 import { folderOf, spaceFor } from "../app/folders";
 import { moveTo } from "../app/folders/ops";
 import { askToOpen } from "../app/links";
-import type { PageContext, PageHandle } from "../app/pages";
+import { fullPage, type PageContext, type PageHandle } from "../app/pages";
 import { beforeQuit } from "../app/quit";
 import { canOpen, getRecord, isArchived, kindName, listRecords, openRecord, putRecord, recordIcon, records } from "../app/records";
 import { router } from "../app/router";
@@ -28,7 +28,7 @@ import { recordOf, type BoardElement, type BoardLink } from "./links";
 import { renderCapturePanel } from "./capturelist";
 import { renderCard } from "./cards";
 import { appTheme, isPicture, loadEngine, pictureData, portable } from "./shared";
-import { FolderInput, Quote } from "lucide";
+import { FolderInput, Maximize2, Minimize2, Quote } from "lucide";
 
 const SAVE_MS = 1000;
 const DRAFT_MS = 300;
@@ -40,7 +40,7 @@ type ExportAs = "png" | "svg" | "excalidraw";
 let capturesDocked = true;
 
 /** What the board's commands act on, for each board on screen. */
-const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void> }>();
+const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void>; toggleFull(): void }>();
 
 /** The board in the tab shown, if it is one. */
 export function shownBoard() {
@@ -194,6 +194,36 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     void save(dirty && engine ? engine.current() : null);
   });
 
+  // ---- Full screen: the drawing fills the screen, and the rest of the app is hidden ----
+  let full = false;
+  let wasFullscreen = false;
+  const fullButton = h("button", { class: "board-full-button", type: "button" });
+  const showFull = () => {
+    const label = full ? "Exit full screen" : "Full screen";
+    fullButton.setAttribute("aria-label", label);
+    fullButton.title = `${label} (⇧⌘↩)`;
+    fullButton.setAttribute("aria-pressed", String(full));
+    replace(fullButton, icon(full ? Minimize2 : Maximize2, 18));
+  };
+  const setFull = (on: boolean) => {
+    if (on === full) return;
+    full = on;
+    fullPage.set(on);
+    showFull();
+    // The window goes into macOS full screen, and comes out only if it wasn't there before.
+    if (on) void setWindowFullscreen(true).then((was) => (wasFullscreen = was), () => {});
+    else if (!wasFullscreen) void setWindowFullscreen(false).catch(() => {});
+    engine?.el.querySelector<HTMLElement>(".excalidraw")?.focus();
+  };
+  fullButton.addEventListener("click", () => setFull(!full));
+  showFull();
+  // Leaving the board (another page in its tab, or another tab) leaves full screen.
+  cleanup.push(effect(() => {
+    const r = router.current();
+    if (!(r.page === "board" && r.params.id === id)) untracked(() => setFull(false));
+  }));
+  cleanup.push(() => setFull(false));
+
   // ---- The drawing ----
   let module: Awaited<ReturnType<typeof loadEngine>>;
   try {
@@ -220,6 +250,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
       if (target) openRecord(target, {}, { newTab });
       else void askToOpen(link, { from: info.title });
     },
+    buttons: (bar) => bar.append(fullButton),
     sidebar: {
       title: "Captures",
       icon: () => icon(Quote, 20),
@@ -339,7 +370,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
       toast(`The board couldn’t be exported: ${errorText(e)}`);
     }
   };
-  shownBoards.set(id, { linkTo, insert: () => pickRecord(id, "Put on the board", (to) => insertRecords([to.id])), exportAs });
+  shownBoards.set(id, { linkTo, insert: () => pickRecord(id, "Put on the board", (to) => insertRecords([to.id])), exportAs, toggleFull: () => setFull(!full) });
   cleanup.push(() => shownBoards.delete(id));
 
   // ---- Changes made elsewhere ----
