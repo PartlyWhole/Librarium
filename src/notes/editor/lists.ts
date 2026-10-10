@@ -15,10 +15,25 @@ import type { SyntaxNode } from "@lezer/common";
 /** Tabs stop every four columns, as in indent.ts. */
 const TAB = 4;
 
+/** How many quotes a list item is in: its lines are indented after that many quote marks. */
+function quoteDepth(item: SyntaxNode): number {
+  let depth = 0;
+  for (let p = item.parent; p; p = p.parent) if (p.name === "Blockquote") depth++;
+  return depth;
+}
+
+/** A line's text after `depth` quote marks ("> "). */
+function unquoted(state: EditorState, lineNo: number, depth: number): string {
+  let text = state.doc.line(lineNo).text;
+  for (let i = 0, m; i < depth && (m = /^[ \t]*>[ \t]?/.exec(text)); i++) text = text.slice(m[0].length);
+  return text;
+}
+
 /** The list item starting on a line, if any. */
 function itemOn(state: EditorState, lineNo: number): SyntaxNode | null {
   const line = state.doc.line(lineNo);
-  const at = line.from + (/^\s*/.exec(line.text)![0].length);
+  const rest = unquoted(state, lineNo, Infinity);
+  const at = line.to - rest.length + /^\s*/.exec(rest)![0].length;
   for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(at, 1); n; n = n.parent) {
     if (n.name === "ListItem" && state.doc.lineAt(n.from).number === lineNo) return n;
   }
@@ -27,24 +42,30 @@ function itemOn(state: EditorState, lineNo: number): SyntaxNode | null {
 
 /** Where an item's text starts, as a column (its indentation, marker and the space after). */
 function contentColumn(state: EditorState, item: SyntaxNode): number {
-  const line = state.doc.lineAt(item.from);
-  const m = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(line.text);
+  const m = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(unquoted(state, state.doc.lineAt(item.from).number, quoteDepth(item)));
   return m ? countColumn(m[0], TAB) : 0;
 }
 
-/** A line's indentation, in columns. */
-function indentOf(state: EditorState, lineNo: number): number {
-  return countColumn(/^\s*/.exec(state.doc.line(lineNo).text)![0], TAB);
+/** The indentation of an item's first line (after its quote marks), in columns. */
+function indentOf(state: EditorState, item: SyntaxNode): number {
+  return columnsOf(unquoted(state, state.doc.lineAt(item.from).number, quoteDepth(item)));
 }
 
-/** Moves an item's lines by `by` columns, rewriting their indentation as spaces (blank lines are
- * left empty). */
+function columnsOf(text: string): number {
+  return countColumn(/^\s*/.exec(text)![0], TAB);
+}
+
+/** Moves an item's lines by `by` columns, rewriting their indentation (after the item's quote
+ * marks) as spaces. Blank lines are left empty. */
 function shift(state: EditorState, item: SyntaxNode, by: number, changes: ChangeSpec[]): void {
+  const depth = quoteDepth(item);
   for (const l of linesOf(state, item)) {
     const line = state.doc.line(l);
-    const ws = /^\s*/.exec(line.text)![0];
-    const insert = ws.length === line.length ? "" : " ".repeat(Math.max(0, indentOf(state, l) + by));
-    if (insert !== ws) changes.push({ from: line.from, to: line.from + ws.length, insert });
+    const rest = unquoted(state, l, depth);
+    const from = line.to - rest.length;
+    const ws = /^\s*/.exec(rest)![0];
+    const insert = ws.length === rest.length ? "" : " ".repeat(Math.max(0, columnsOf(rest) + by));
+    if (insert !== ws) changes.push({ from, to: from + ws.length, insert });
   }
 }
 
@@ -84,14 +105,11 @@ const indentListItem: Command = (view) => {
   for (const it of items) {
     const prev = previousSibling(it);
     if (!prev) continue; // the first item has nothing to go under
-    const by = contentColumn(state, prev) - indentOf(state, state.doc.lineAt(it.from).number);
+    const by = contentColumn(state, prev) - indentOf(state, it);
     if (by <= 0) continue;
     shift(state, it, by, changes);
   }
-  if (changes.length) {
-    view.dispatch({ changes, userEvent: "input.indent" });
-    renumber(view);
-  }
+  if (changes.length) move(view, changes);
   return true;
 };
 
@@ -104,14 +122,11 @@ const outdentListItem: Command = (view) => {
   for (const it of items) {
     const parentItem = it.parent?.parent;
     if (parentItem?.name !== "ListItem") continue; // already at the top
-    const by = indentOf(state, state.doc.lineAt(it.from).number) - indentOf(state, state.doc.lineAt(parentItem.from).number);
+    const by = indentOf(state, it) - indentOf(state, parentItem);
     if (by <= 0) continue;
     shift(state, it, -by, changes);
   }
-  if (changes.length) {
-    view.dispatch({ changes, userEvent: "input.indent" });
-    renumber(view);
-  }
+  if (changes.length) move(view, changes);
   return true;
 };
 
@@ -149,10 +164,16 @@ const continueMarkup: Command = (view) => {
   return true;
 };
 
+/** Moves items and renumbers the lists they leave and join, as one change (one undo). */
+function move(view: EditorView, changes: ChangeSpec[]): void {
+  const moved = view.state.update({ changes });
+  const all = moved.changes.compose(moved.state.changes(renumbering(moved.state)));
+  view.dispatch({ changes: all, userEvent: "input.indent" });
+}
+
 /** Numbers every numbered list in order: a top-level list keeps its first number, a nested
  * one starts at 1. */
-function renumber(view: EditorView): void {
-  const { state } = view;
+function renumbering(state: EditorState): ChangeSpec[] {
   const changes: ChangeSpec[] = [];
   syntaxTree(state).iterate({
     enter(n) {
@@ -174,7 +195,7 @@ function renumber(view: EditorView): void {
       return undefined;
     },
   });
-  if (changes.length) view.dispatch({ changes, userEvent: "input.indent" });
+  return changes;
 }
 
 /** The width of one character of the monospace font, in em (measured once; 0.6 without layout). */
@@ -226,8 +247,15 @@ export const hangingIndent = ViewPlugin.fromClass(
             const editing = state.selection.ranges.some((r) => r.from <= line.to && r.to >= line.from);
             const task = !!m[4];
             const em = !editing && task ? m[1]!.length * mono + CHECKBOX_EM + (m[5] ? mono : 0) : m[0].length * mono;
+            // Under a task, items line up with its text: a checkbox (and the space after it) is
+            // wider than the two columns of "- " that the indentation counts.
+            let under = 0;
+            for (let p = itemOn(state, line.number)?.parent?.parent; p?.name === "ListItem"; p = p.parent?.parent) {
+              if (p.getChild("Task")) under += CHECKBOX_EM - mono;
+            }
             const w = `${em.toFixed(3)}em`;
-            b.add(line.from, line.from, Decoration.line({ attributes: { style: `padding-left: ${w}; text-indent: -${w}` } }));
+            const pad = `${(em + under).toFixed(3)}em`;
+            b.add(line.from, line.from, Decoration.line({ attributes: { style: `padding-left: ${pad}; text-indent: -${w}` } }));
             b.add(line.from, line.from + m[0].length, prefix);
           }
           pos = line.to + 1;
