@@ -9,6 +9,7 @@ import { folderOf, spaceFor } from "../app/folders";
 import { moveTo } from "../app/folders/ops";
 import { askToOpen } from "../app/links";
 import { fullPage, type PageContext, type PageHandle } from "../app/pages";
+import { pref } from "../app/prefs";
 import { beforeQuit } from "../app/quit";
 import { canOpen, getRecord, isArchived, kindName, listRecords, openRecord, putRecord, recordIcon, records } from "../app/records";
 import { router } from "../app/router";
@@ -19,6 +20,7 @@ import { comboboxDialog } from "../ui/combobox";
 import { dropTarget } from "../ui/dnd";
 import { errorText, h, replace } from "../ui/dom";
 import { icon, iconButton } from "../ui/icon";
+import { resizeHandle } from "../ui/resize";
 import { effect, untracked } from "../ui/signal";
 import { toast } from "../ui/toast";
 import type { BoardLoaded, BoardSaved, Draft, ImportResult, Written } from "../types";
@@ -38,6 +40,9 @@ type ExportAs = "png" | "svg" | "excalidraw";
 
 /** Whether the Captures and Library panel docks beside the drawing (kept while the app runs). */
 let panelDocked = true;
+/** Its width, in pixels: Excalidraw's sidebar width, which also moves its controls when docked. */
+const PANEL_USUAL = 302;
+const panelWidth = pref("boards.panelWidth", PANEL_USUAL);
 
 /** What the board's commands act on, for each board on screen. */
 const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void>; toggleFull(): void }>();
@@ -254,13 +259,18 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     sidebar: {
       title: "Captures and Library",
       icon: () => icon(Quote, 20),
-      render: (panel) => renderBoardPanel(panel, (rid) => insertRecords([rid])),
+      render: (panel) => {
+        const stop = renderBoardPanel(panel, (rid) => insertRecords([rid]));
+        panel.append(resizeHandle({ label: "Resize the panel", width: panelWidth, min: 240, max: 640, usual: PANEL_USUAL, grows: -1 }));
+        return stop;
+      },
       docked: panelDocked,
       onDock: (d) => void (panelDocked = d),
     },
   });
   if (!alive()) return ready.destroy();
   engine = ready;
+  cleanup.push(effect(() => canvasHost.style.setProperty("--board-panel-width", `${panelWidth()}px`)));
   tellOutline();
   const detach = attachEditor(engine.el, scope, { undo: () => ready.undo(), redo: () => ready.redo(), canUndo: () => true, canRedo: () => true, isolate() {} });
   cleanup.push(() => {

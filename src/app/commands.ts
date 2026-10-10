@@ -22,6 +22,8 @@ import { lastStep, nextStep, redo, redoHere, redoLast, undo, undoHere, undoLast 
 import { Archive, CalendarDays, Command, Files, Keyboard, Library, Plus, Quote, Search, Settings } from "lucide";
 
 export const sidebarOpen = pref("ui.sidebar", true);
+/** The sidebar's width, in pixels. */
+export const sidebarWidth = pref("ui.sidebarWidth", 260);
 
 let todayRunning: Promise<void> | null = null;
 /** Opens today's note, which the backend makes if it is missing (a double press makes one). */

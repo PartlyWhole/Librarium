@@ -61,3 +61,7 @@
 .board-panel-group-head[aria-expanded="true"] .icon { transform: rotate(90deg); }
 .board-panel-group-items { display: grid; gap: 6px; padding-left: 12px; }
 .board-panel-group-items[hidden] { display: none; }
+/* The panel's width: Excalidraw sets its own on its element, so it is taken over here. */
+.board-canvas .excalidraw { --right-sidebar-width: var(--board-panel-width, 302px) !important; }
+/* The panel's resize handle, on its left edge. */
+.board-sidebar .resize-handle { position: absolute; top: 0; bottom: 0; left: -3px; }

@@ -30,6 +30,8 @@ export function addPanelView(v: PanelView): void {
 }
 
 export const panelOpen = pref("ui.sidePanel", false);
+/** The side panel's width, in pixels. */
+export const panelWidth = pref("ui.panelWidth", 320);
 const chosen = pref("ui.panelView", "links");
 
 /** Opens the panel at a view (e.g. "jobs"), and focuses it. */
