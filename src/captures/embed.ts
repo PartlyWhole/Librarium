@@ -9,7 +9,7 @@
 import { h } from "../ui/dom";
 import { icon } from "../ui/icon";
 import type { RecordInfo } from "../types";
-import { anchorOf, citation, F, isRegion, partQuote, quoteOf, quoteParts, regionImage, showInSource, type ShownPart } from "./common";
+import { anchorOf, citation, F, isRegion, partQuote, partsAsQuoted, quoteOf, quoteParts, regionImage, showInSource, type ShownPart } from "./common";
 import { flowQuote } from "./anchor";
 import { Heading, Pencil } from "lucide";
 import "./captures.css";
@@ -32,7 +32,8 @@ export function captureEmbed(r: RecordInfo, open: (id: string, e: MouseEvent) =>
   // Several parts, or a picture: each part in order, pictures as pictures.
   if (Number(r.fields[F.parts] ?? 1) > 1 || !quote) {
     void anchorOf(r.id).then((a) => {
-      const parts = a.parts.map((p, i): ShownPart => (isRegion(p) ? { picture: regionImage(r.id, i + 1, "capture-region embed-region") } : { text: flowQuote(partQuote(p)), joined: !!p.continues }));
+      const quoted = partsAsQuoted(quote, a.parts.map((p) => ({ text: isRegion(p) ? null : flowQuote(partQuote(p)), continues: p.continues })));
+      const parts = a.parts.map((p, i): ShownPart => (isRegion(p) ? { picture: regionImage(r.id, i + 1, "capture-region embed-region") } : { text: quoted[i] ?? "", joined: !!p.continues }));
       block.querySelector(":scope > .embed-quote")?.remove();
       block.querySelector(":scope > figcaption")!.before(...quoteParts(parts, "embed-quote"));
     }, () => {});

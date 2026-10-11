@@ -5,7 +5,7 @@ use super::frontmatter::{self, FmError, FmValue, Frontmatter};
 use super::Library;
 use crate::error::{Context, Error, Result};
 use crate::types::{RecordInfo, RecordText, StoredText, TextSegment};
-use crate::util::{now_ms, parse_id, sha256, slugify, Id};
+use crate::util::{mend_symbols, now_ms, parse_id, sha256, slugify, Id};
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -261,7 +261,7 @@ pub fn stored_text(lib: &Library, e: &Entry, part: Option<&str>) -> Option<Store
         let file = format!("snapshots/{at}/text.json");
         let v = read(&file)?;
         let origin = json!({ "file": file, "extractor": v["extractor"], "version": v["version"], "snapshot": at });
-        return Some(one(v["text"].as_str().unwrap_or("").to_string(), Some(origin)));
+        return Some(one(mend_symbols(v["text"].as_str().unwrap_or("")).into_owned(), Some(origin)));
     }
     let file = e.field_str("library.text")?;
     let v = read(file)?;
@@ -276,7 +276,8 @@ pub fn stored_text(lib: &Library, e: &Entry, part: Option<&str>) -> Option<Store
             text.push_str("\n\n");
         }
         let start = text.chars().count() as u64;
-        text.push_str(p["text"].as_str().unwrap_or(""));
+        // Text stored before symbols were mended is mended as it's read (one character for one).
+        text.push_str(&mend_symbols(p["text"].as_str().unwrap_or("")));
         let label = if pages {
             format!("p. {}", p["page"].as_u64().unwrap_or(i as u64 + 1))
         } else {

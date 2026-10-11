@@ -279,6 +279,10 @@ Stored text is never regenerated if it is present. Anchors point into it.
 - **`extracted/text-v1.json`:**
   - **pdf:** `{"extractor": "pdfkit", "version": 1, "pages": [{"page": 1, "text"}]}`.
     - The fallback extractor is `"pdf-extract 0.12"`.
+    - Characters PDFKit reports from a Symbol font as U+F020–U+F0FE are written as the
+      characters Adobe's Symbol encoding gives them ("−", "γ", "≤"…), one for one; codes with no
+      character of their own stay. Text stored before is read the same way, so offsets don't
+      change.
     - Pages with fewer than 16 non-space characters are recognised. They gain `"lines"` and
       `"recognized": true`, and the extractor becomes `"pdfkit + apple-vision 1"`.
   - **epub:** `{"extractor": "librarium-epub 1", "version": 1, "title", "creator", "publisher",

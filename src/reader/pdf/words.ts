@@ -127,6 +127,8 @@ function mendItems<T>(items: (T | TextItem)[], known: Set<string>): (T | TextIte
 
 /** A PDF.js font's data (with `fontExtraProperties`), as far as advances go. */
 interface FontData {
+  /** The font's own name ("SymbolMT", or with a subset prefix: "ABCDEF+SymbolMT"). */
+  name?: string;
   widths?: Record<number, number> | number[];
   defaultWidth?: number;
   toUnicode?: { _map?: (string | undefined)[]; firstChar?: number; lastChar?: number };
@@ -157,6 +159,33 @@ function advancesOf(font: FontData | null | undefined): Advance | null {
   };
 }
 
+/**
+ * Adobe's Symbol encoding, for codes 0x20–0x7E and 0xA0–0xFE ("\0": no character of its own).
+ * A PDF that embeds a Symbol font without saying what its glyphs are reads as the codes
+ * themselves: "-/-g" where the page shows "−/−γ".
+ */
+const SYMBOL_LOW = [..." !∀#∃%&∋()∗+,−./0123456789:;<=>?≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_\0αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼"];
+const SYMBOL_HIGH = [..."€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…\0\0↵ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓◊〈®©™∑\0\0\0\0\0\0\0\0\0\0\0〉∫⌠\0⌡\0\0\0\0\0\0\0\0\0"];
+
+/** Whether a font is Adobe's Symbol (by its name; not Dingbats or Wingdings). */
+const isSymbolFont = (f: FontData | null) => !!f?.name && /symbol/i.test(f.name) && !/dingbat|wingding/i.test(f.name);
+
+/** Text in a Symbol font, as what its codes stand for. */
+function symbolText(s: string): string {
+  return [...s]
+    .map((c) => {
+      const n = c.codePointAt(0)!;
+      const to = n >= 0x20 && n <= 0x7e ? SYMBOL_LOW[n - 0x20] : n >= 0xa0 && n <= 0xfe ? SYMBOL_HIGH[n - 0xa0] : undefined;
+      return to && to !== "\0" ? to : c;
+    })
+    .join("");
+}
+
+/** Items in a Symbol font read as their symbols ("γ", not "g"). */
+function symbolItems<T>(items: (T | TextItem)[], fontOf: (name: string) => FontData | null): (T | TextItem)[] {
+  return items.map((it) => (isText(it) && isSymbolFont(fontOf(it.fontName)) ? { ...it, str: symbolText(it.str) } : it));
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any -- PDF.js's page proxies are untyped here */
 const wrapped = new WeakSet<object>();
 /**
@@ -171,24 +200,24 @@ export function placeWords(page: any, known: Promise<Set<string>>): void {
   const stream = page.streamTextContent.bind(page);
   page.streamTextContent = (params: unknown) => {
     const reader = stream(params).getReader();
-    const fonts = new Map<string, Advance | null>();
-    const advanceFor = (name: string) => {
+    const fonts = new Map<string, FontData | null>();
+    const fontOf = (name: string) => {
       if (!fonts.has(name)) {
-        let font: FontData | null;
         try {
-          font = page.commonObjs?.has(name) ? page.commonObjs.get(name) : null;
+          fonts.set(name, page.commonObjs?.has(name) ? page.commonObjs.get(name) : null);
         } catch {
-          font = null;
+          fonts.set(name, null);
         }
-        fonts.set(name, advancesOf(font));
       }
       return fonts.get(name)!;
     };
+    const advances = new Map<string, Advance | null>();
+    const advanceFor = (name: string) => (advances.has(name) ? advances.get(name)! : advances.set(name, advancesOf(fontOf(name))).get(name)!);
     return new ReadableStream({
       async pull(ctl) {
         const { value, done } = await reader.read();
         if (done) return ctl.close();
-        ctl.enqueue({ ...value, items: splitIntoWords(mendItems(value.items, await known), advanceFor) });
+        ctl.enqueue({ ...value, items: splitIntoWords(mendItems(symbolItems(value.items, fontOf), await known), advanceFor) });
       },
       cancel: (why) => reader.cancel(why),
     });

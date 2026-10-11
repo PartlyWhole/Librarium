@@ -357,6 +357,8 @@ One window. Only regions scroll, never the window.
     widths. Drags snap to whole words.
   - Words whose ligatures PDF.js misreads ("diSerent", common in saved web pages) are corrected
     from the stored text, so find, selection and copying see "different".
+  - Text in a Symbol font (named so) reads as its symbols: a PDF that embeds the font without
+    saying what its glyphs are reads "-/-g" for "−/−γ" otherwise.
   - Multi-line highlights are one band per line.
   - Before going to a place, the reader measures the pages up to it, so mixed page sizes never
     shift the target.
@@ -437,8 +439,12 @@ dragged out for capture.
 - **The capture page.**
   - The archived notice, with **Restore**.
   - The title, wrapping onto more lines when long (Enter still ends it).
-  - The quotation, with a Show button per part, "moved — check it" / "lost" badges, and
-    **This is the place** for a moved part.
+  - The quotation, each part a link to its place in the source (Show in the source, in the
+    header, goes to the first), with "moved — check it" / "lost" badges, and **This is the
+    place** for a moved part.
+  - **Symbols** read as the page shows them: a quote takes the page's symbol where the stored
+    text has an unreadable character, a plain letter or a hyphen in its place (the anchor keeps
+    the stored text, so the capture finds its place again).
   - The "— citation" link.
   - **Your words** ("Write why this matters…").
   - **Used in**: each note and each place in it ("After “…”", "At the start"); clicking one opens

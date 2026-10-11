@@ -20,7 +20,7 @@ import { toast } from "../ui/toast";
 import type { CapturePart, SavedMarks, StoredText, Written } from "../types";
 import { onReaderOpen, type Box, type EditedPart, type EditPart, type OpenReader, type PartsEditor, type ReaderRegion, type ReaderSelection } from "../reader";
 import { CFI, describe, flowQuote, locateSelection, MEDIA, PDF_PAGE, sliceCp, type Selector } from "./anchor";
-import { anchorOf, capturesOf, cite, isRegion, partQuote, placeParams, quoteParts, runsOn, type ShownPart } from "./common";
+import { anchorOf, capturesOf, cite, isRegion, partQuote, placeParams, quoteParts, runsOn, symbolsFrom, type ShownPart } from "./common";
 import { deleteCapture } from "./delete";
 import { Crop, Highlighter, Pencil, Quote, Trash2, X } from "lucide";
 
@@ -119,7 +119,7 @@ function partFromSelection(sel: ReaderSelection, st: StoredText | null, key = `p
     part: {
       key,
       selector,
-      quote: flowQuote(at && st ? sliceCp(st.text, at.start, at.end) : sel.text),
+      quote: flowQuote(at && st ? symbolsFrom(sliceCp(st.text, at.start, at.end), sel.text) : sel.text),
       locator: seg?.label || (sel.page ? `p. ${sel.page}` : null),
       region_png: null,
       order: [first?.page ?? sel.page ?? sel.chapter ?? 0, first?.y ?? 0, at?.start ?? 0],

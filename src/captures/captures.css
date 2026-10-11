@@ -148,3 +148,8 @@ button.quote-gap:hover, .quote-join:hover, button.quote-gap:focus-visible, .quot
 .picker-bar { display: flex; align-items: center; gap: 6px; }
 .picker-bar.idle { visibility: hidden; }
 .picker-bar .muted { margin-right: auto; }
+/* A capture's parts link to their places: the quote reads as text, underlined on hover. */
+.quote-part-link { color: inherit; text-decoration: none; border-radius: 2px; }
+.quote-part-link:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+.quote-part-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a.quote-part-link > img { display: block; }
