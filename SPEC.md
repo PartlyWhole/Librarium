@@ -524,7 +524,8 @@ Boards use Excalidraw. React is used only here.
 - **Putting things on the board.** ⌥⌘I, dragging from the sidebar, a folder page or the board's
   panel, pasting a picture, or dropping files.
   - **The panel.** A button at the canvas's top right (Captures and Library) opens two tabs, each
-    newest first with one search box: **Captures** (searched by quote, name, source or place)
+    newest first with one search box: **Captures** (each with its name above the quotation, if
+    it was given one; searched by quote, name, source or place)
     and **Library** (by title, kind, folder, author or publication). Drag one onto the drawing,
     or Add (or Enter) puts it in the middle of what is in view; several can be selected and
     added at once, as in a note's Captures view. It docks beside the drawing on a
