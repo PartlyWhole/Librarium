@@ -4,7 +4,8 @@
  *
  * Each text is a paragraph, in reading order (rows top to bottom, each left to right). Links
  * are written `[[label|id]]` with the records' names now, so a rename shows at the next save:
- * - a text's own links where their names are in it, else after it;
+ * - a text's own links where their names are in it, else after it (a shape's words, its
+ *   shape's links, if any of their names are in them);
  * - a text linked as a whole, or the words of a linked shape, around those words;
  * - a linked shape without words, a card or a picture, on a line of its own (`![[…]]` when it
  *   is an embed).
@@ -44,9 +45,11 @@ export function boardPage(id: string, elements: readonly BoardElement[], titleOf
   const paragraphs: { x: number; y: number; text: string }[] = [];
   for (const e of live) {
     if (e.type === "text") {
-      const words = e.text?.trim();
+      const words = (e.originalText ?? e.text)?.trim();
       if (!words) continue;
-      const own = linksOf(e);
+      // A shape's words with its links' names in them are linked where the names are.
+      const shape = e.containerId ? byId.get(e.containerId) : undefined;
+      const own = linksOf(e).length ? linksOf(e) : shape && linksOf(shape).some((l) => words.includes(l.label)) ? linksOf(shape) : [];
       let text = words;
       if (own.length) text = linkedText(words, own, label);
       else {

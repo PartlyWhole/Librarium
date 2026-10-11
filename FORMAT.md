@@ -168,9 +168,12 @@ daily.date: "2026-10-02"
     ```
   - The body has one paragraph per element, joined by `\n\n`, ending in `\n`. Elements are in
     reading order: rows by `round(y/24)`, then by `x`.
-    - A text element: its words, with each of its links written `[[label|id]]` where the label
-      appears, or appended after it.
-    - A text linked as a whole, or the bound text of a linked shape: `[[words|id]]`.
+    - A text element: its words as written (`originalText`, not as wrapped in a shape), with each
+      of its links written `[[label|id]]` where the label appears, or appended after it.
+    - The bound text of a linked shape, when some of the shape's link labels appear in it: the
+      same, with the shape's links.
+    - A text linked as a whole, or the bound text of a linked shape (none of its labels in it):
+      `[[words|id]]`.
     - A linked shape, card or picture without words: `[[Name|id]]`, or `![[Name|id]]` when it is
       an embed.
 - **The `.excalidraw` file** is Excalidraw's `serializeAsJSON(elements, appState, files,
@@ -181,6 +184,8 @@ daily.date: "2026-10-02"
     ```
   - **A link to a record.** The element's `link` is `librarium://record/<id>`. Its `customData`
     is `{"librarium": {"links": [{"id", "label"}], "embed": true?}}`.
+    - The words in a shape are linked through the shape: its links are kept on the shape (older
+      boards may keep them on the bound text).
   - **Cards** are `embeddable` elements with that link and a transparent stroke and fill.
   - **Pictures** are `image` elements whose `fileId` is a library item's ID. Files keyed by a
     UUID are not stored in `files`.
