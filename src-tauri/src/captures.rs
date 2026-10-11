@@ -11,7 +11,7 @@ use crate::error::{Error, Result};
 use crate::store::frontmatter::FmValue;
 use crate::store::{files, record, relocate, save, Library};
 use crate::types::{
-    AnchorUpdated, CaptureParams, CapturePart, CaptureUpdateParams, MarkPart, OrphanSidecar, SavedMarks, Written,
+    AnchorUpdated, CaptureParams, CapturePart, CaptureQuoteParams, CaptureUpdateParams, MarkPart, OrphanSidecar, SavedMarks, Written,
 };
 use crate::util::{json_bytes, new_id, parse_id, Id};
 use base64::Engine as _;
@@ -144,6 +144,24 @@ pub fn update(lib: &Library, p: CaptureUpdateParams) -> Result<Written> {
         (LOCATOR.to_string(), locator.map(FmValue::Str)),
     ];
     let mut e = save::set_fields(&w, p.id, None, &edits)?;
+    if let Some(t) = title.filter(|t| *t != e.title) {
+        e = relocate::relocate(&w, p.id, None, Some(&t), None)?;
+    }
+    Ok(Written { info: record::info(lib, &e), seq: w.seq() })
+}
+
+/// A quote saved before its symbols could be read, as the page shows them: the same characters
+/// but for the symbols, so nothing else changes. The title follows if it was the automatic one.
+pub fn mend_quote(lib: &Library, p: CaptureQuoteParams) -> Result<Written> {
+    let w = lib.write();
+    let e = capture(lib, p.id)?;
+    let old = e.field_str(QUOTE).unwrap_or("");
+    if old.chars().count() != p.quote.chars().count() {
+        return Err(Error::invalid("Only a quote’s symbols can be mended."));
+    }
+    let source = source_title(lib, &e);
+    let title = (e.title == auto_title(old, &source)).then(|| auto_title(&p.quote, &source));
+    let mut e = save::set_fields(&w, p.id, None, &[(QUOTE.to_string(), Some(FmValue::Str(p.quote)))])?;
     if let Some(t) = title.filter(|t| *t != e.title) {
         e = relocate::relocate(&w, p.id, None, Some(&t), None)?;
     }

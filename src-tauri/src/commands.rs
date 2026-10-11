@@ -239,6 +239,7 @@ fn library_call(lib: &Library, method: &str, params: Value) -> Result<Value> {
         "library.removeSnapshots" => ok(library::snapshots::remove(lib, &p::<TokenParams>(params)?.token)?),
         "captures.create" => ok(captures::create(lib, p(params)?)?),
         "captures.update" => ok(captures::update(lib, p(params)?)?),
+        "captures.mendQuote" => ok(captures::mend_quote(lib, p(params)?)?),
         "captures.anchor" => ok(captures::anchor(lib, p::<IdParams>(params)?.id)?),
         "captures.updateAnchor" => {
             let a: AnchorUpdateParams = p(params)?;

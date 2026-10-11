@@ -20,7 +20,7 @@ import { toast } from "../ui/toast";
 import type { CapturePart, SavedMarks, StoredText, Written } from "../types";
 import { onReaderOpen, type Box, type EditedPart, type EditPart, type OpenReader, type PartsEditor, type ReaderRegion, type ReaderSelection } from "../reader";
 import { CFI, describe, flowQuote, locateSelection, MEDIA, PDF_PAGE, sliceCp, type Selector } from "./anchor";
-import { anchorOf, capturesOf, cite, isRegion, partQuote, placeParams, quoteParts, runsOn, symbolsFrom, type ShownPart } from "./common";
+import { anchorOf, capturesOf, cite, isRegion, joinParts, partQuote, placeParams, quoteOf, quoteParts, runsOn, symbolsFrom, symbolsIn, type ShownPart } from "./common";
 import { deleteCapture } from "./delete";
 import { Crop, Highlighter, Pencil, Quote, Trash2, X } from "lucide";
 
@@ -266,6 +266,34 @@ onReaderOpen((r) => {
     if (!mine.length) return saved.set([]);
     void call<SavedMarks[]>("captures.forSource", { source: source.id, snapshot: r.snapshot ?? null }).then((list) => ask === asked && saved.set(list.filter((c) => visible.has(c.id))), () => {});
   }));
+
+  // ---- Captures saved before their symbols could be read ("-/-g" for "−/−γ"): once their
+  // pages are laid out, the quote takes the symbols the page shows ----
+  const pageText = new Map<number, string>();
+  const looked = new Set<string>();
+  const mendSymbols = async () => {
+    for (const c of saved.peek()) {
+      const pages = [...new Set(c.parts.flatMap((p) => p.boxes.map((b) => b.page ?? 0)))];
+      const rec = getRecord(c.id);
+      const quote = rec && quoteOf(rec);
+      if (looked.has(c.id) || !quote || !pages.length || pages.some((n) => !pageText.has(n))) continue;
+      looked.add(c.id);
+      try {
+        const text = pages.map((n) => pageText.get(n)).join(" ");
+        const parts = (await anchorOf(c.id)).parts.map((p) => ({ text: isRegion(p) ? null : symbolsIn(flowQuote(partQuote(p)), text), continues: p.continues }));
+        const next = symbolsFrom(quote, joinParts(parts));
+        if (next === quote) continue;
+        putRecord((await call<Written>("captures.mendQuote", { id: c.id, quote: next })).info);
+        showStatus("A capture’s symbols were mended from the page.");
+      } catch {
+        // Left as it was.
+      }
+    }
+  };
+  cleanup.push(
+    view.onPageText?.((n, t) => (pageText.set(n, t), void mendSymbols())) ?? (() => {}),
+    effect(() => (saved(), void mendSymbols())),
+  );
 
   const markPop = popup("Capture");
   cleanup.push(view.onMarkClick?.((ids, at) => {

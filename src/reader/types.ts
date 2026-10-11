@@ -61,6 +61,8 @@ export interface ReaderView {
   pickRegion?(): Promise<ReaderRegion | null>;
   /** Draws these marks (saved captures, a capture being made), replacing earlier ones. */
   setMarks?(marks: Mark[]): void;
+  /** Each page's text as drawn (PDF), when it is laid out: symbols as the page shows them. */
+  onPageText?(cb: (page: number, text: string) => void): () => void;
   /** Calls `cb` with the saved marks under a plain click (not the end of a selection). */
   onMarkClick?(cb: (ids: string[], at: { x: number; y: number }) => void): () => void;
   /** Goes to a place given by W3C selectors (page, quote, region, CFI); centres and shows it. */

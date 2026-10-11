@@ -458,6 +458,11 @@ title?: string | null, };
 export type CaptureUpdateParams = { id: string, parts: Array<CapturePart>, };
 
 /**
+ * A capture's quote with its symbols as the page shows them (made before they could be read).
+ */
+export type CaptureQuoteParams = { id: string, quote: string, };
+
+/**
  * The user confirmed where moved parts are now: the anchor's `parts`, as the anchor holds them.
  */
 export type AnchorUpdateParams = { id: string, parts: unknown[], };

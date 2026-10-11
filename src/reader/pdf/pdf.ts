@@ -282,6 +282,14 @@ export const openPdf: Engine = async (host, src, events) => {
       marks = m;
       for (let n = 1; n <= doc.numPages; n++) if (pageDiv(n)?.isConnected) drawPageMarks(n);
     },
+    onPageText(cb) {
+      const laid = (e: { pageNumber: number }) => {
+        const t = pageDiv(e.pageNumber)?.querySelector(".textLayer")?.textContent;
+        if (t) cb(e.pageNumber, t);
+      };
+      eventBus.on("textlayerrendered", laid);
+      return () => eventBus.off("textlayerrendered", laid);
+    },
     async pickRegion() {
       const r = await dragRect(container);
       if (!r) return null;
