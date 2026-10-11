@@ -31,6 +31,8 @@
 .capture-draft p { margin: 0; }
 .words-input { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; font: inherit; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: var(--r1); background: var(--bg); color: var(--ink); }
 .words-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--selection); }
+.draft-title-input { width: 100%; box-sizing: border-box; margin-bottom: 6px; font: inherit; font-weight: 600; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: var(--r1); background: var(--bg); color: var(--ink); }
+.draft-title-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--selection); }
 .capture-draft .ask-buttons { margin-top: 0; }
 
 /* Editing a capture: a pill over the document, and the parts in the panel's row. */

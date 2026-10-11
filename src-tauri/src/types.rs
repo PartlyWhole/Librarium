@@ -643,6 +643,10 @@ pub struct CaptureParams {
     /// The user's own words.
     #[serde(default)]
     pub words: String,
+    /// A name the user gave it; blank or missing, it is named from its quote.
+    #[ts(optional, type = "string | null")]
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 /// A capture's new parts (its selection edited); the user's words and title stay.

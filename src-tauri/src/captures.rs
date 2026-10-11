@@ -90,7 +90,8 @@ pub fn create(lib: &Library, p: CaptureParams) -> Result<Written> {
     let source = lib.index.get(p.source).ok_or_else(|| Error::not_found("The source can’t be found."))?;
     let (parts, regions) = anchor_parts(&p.parts)?;
     let quote = quote_of(&p.parts);
-    let title = auto_title(&quote, &source.title);
+    let given = p.title.as_deref().map(|t| t.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|t| !t.is_empty());
+    let title = given.unwrap_or_else(|| auto_title(&quote, &source.title));
     let id = new_id();
     let anchor = json!({ "id": id, "source": p.source, "snapshot": p.snapshot, "text": p.text, "parts": parts });
     let mut sidecars = vec![(ANCHOR.to_string(), json_bytes(&anchor, false))];

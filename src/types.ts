@@ -441,7 +441,11 @@ text: { file: string, extractor: string, version: number, snapshot?: string } | 
 /**
  * The user's own words.
  */
-words: string, };
+words: string, 
+/**
+ * A name the user gave it; blank or missing, it is named from its quote.
+ */
+title?: string | null, };
 
 /**
  * A capture's new parts (its selection edited); the user's words and title stay.

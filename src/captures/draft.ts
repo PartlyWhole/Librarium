@@ -38,6 +38,8 @@ interface DraftPart extends CapturePart {
 export interface Draft {
   parts: DraftPart[];
   words: string;
+  /** A name for a new capture; blank, it is named from its quote. */
+  title?: string;
   /** Editing a saved capture's parts (not making a new one); its name may change too. */
   editing?: { id: string; title: string; original: string };
 }
@@ -48,7 +50,7 @@ export const draftKey = (source: string, snapshot?: string | null) => `${source}
 
 export function setDraft(k: string, d: Draft | null): void {
   const m = new Map(drafts.peek());
-  if (d && (d.parts.length || d.words || d.editing)) m.set(k, d);
+  if (d && (d.parts.length || d.words || d.title || d.editing)) m.set(k, d);
   else m.delete(k);
   drafts.set(m);
 }
@@ -208,7 +210,7 @@ onReaderOpen((r) => {
         toast("Capture updated.", { action: { label: "Open", run: () => openRecord(w.info.id) } });
       } else {
         const st = await r.text();
-        const w = await call<Written>("captures.create", { source: source.id, snapshot: r.snapshot ?? null, text: st?.origin ?? null, parts: d.parts.map(toPart), words: d.words });
+        const w = await call<Written>("captures.create", { source: source.id, snapshot: r.snapshot ?? null, text: st?.origin ?? null, parts: d.parts.map(toPart), words: d.words, title: d.title?.trim() || null });
         putRecord(w.info);
         setDraft(k, null);
         toast("Captured.", { action: { label: "Open", run: () => openRecord(w.info.id) } });
@@ -368,24 +370,30 @@ onReaderOpen((r) => {
     const parts = quoteParts(d.parts.map((p): ShownPart => (p.preview
       ? { picture: h("div", { class: "draft-picture" }, h("img", { class: "capture-region", src: p.preview, alt: "The captured picture" }), remove(p)) }
       : { text: p.quote, after: remove(p) })), "capture-quote");
+    const title = h("input", { class: "draft-title-input", type: "text", placeholder: "Title (optional)", "aria-label": "Title", spellcheck: true });
+    title.value = d.title ?? "";
     const words = h("textarea", { class: "words-input", rows: 3, placeholder: "Your words (optional)", "aria-label": "Your words" });
     words.value = d.words;
     // Kept in the draft without drawing the panel again (which would take the focus away).
-    words.addEventListener("input", () => {
+    const keep = () => {
       const cur = draft();
-      if (cur) drafts.peek().set(k, { ...cur, words: words.value });
-    });
-    const hadFocus = document.activeElement?.classList.contains("words-input") && panel.contains(document.activeElement);
+      if (cur) drafts.peek().set(k, { ...cur, words: words.value, title: title.value });
+    };
+    words.addEventListener("input", keep);
+    title.addEventListener("input", keep);
+    title.addEventListener("keydown", (e) => e.key === "Enter" && !e.isComposing && (e.preventDefault(), words.focus()));
+    const focused = [title, words].find((el) => el === document.activeElement && panel.contains(el));
     replace(panel,
       h("h3", { class: "capture-draft-head" }, d.parts.length > 1 ? `New capture · ${d.parts.length} parts` : "New capture"),
       h("div", { class: "draft-part" }, parts),
       h("p", { class: "draft-hint" }, view.pickRegion ? "Select more text, or drag a region (⇧⌘R), to add to it." : "Select more text to add to it."),
       h("p", { class: "muted small" }, `From ${cite(source.title, d.parts.map((p) => p.locator))}`),
+      title,
       words,
       h("div", { class: "ask-buttons" },
         h("button", { class: "button", type: "button", onclick: () => setDraft(k, null) }, "Discard"),
         h("button", { class: "button primary", type: "button", title: "Save capture (⌘↩)", onclick: () => void save() }, "Save capture")));
-    if (hadFocus) words.focus();
+    focused?.focus();
   }
 
   // ---- The toolbar's buttons ----
