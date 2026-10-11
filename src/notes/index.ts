@@ -21,7 +21,7 @@ import type { Draft, RecordInfo, RecordText, Written } from "../types";
 import { activeEditor } from "./editor/editor";
 import { FORMATS } from "./editor/format";
 import { formatLink, parseLinks } from "./editor/links";
-import { embedMarkdown } from "./embeds";
+import { embedMarkdown, TITLE, titledAt } from "./embeds";
 import { flushNote, renderNote } from "./page";
 import "./history";
 import "./panels";
@@ -54,9 +54,10 @@ function expandEmbeds(body: string): string {
   for (const l of parseLinks(body)) {
     if (!l.embed) continue;
     const r = l.id ? getRecord(l.id) : undefined;
-    out += body.slice(last, l.from) + (r ? embedMarkdown(r) : l.label);
-    // A picture's width goes with it.
-    last = /^\{width=\d{1,5}\}/.exec(body.slice(l.to, l.to + 16)) ? body.indexOf("}", l.to) + 1 : l.to;
+    const titled = titledAt(body, l.to);
+    out += body.slice(last, l.from) + (r ? embedMarkdown(r, titled) : l.label);
+    // A picture's width, or a capture's title, goes with it.
+    last = titled ? l.to + TITLE.length : /^\{width=\d{1,5}\}/.exec(body.slice(l.to, l.to + 16)) ? body.indexOf("}", l.to) + 1 : l.to;
   }
   return out + body.slice(last);
 }

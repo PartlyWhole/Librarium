@@ -108,3 +108,6 @@
 button.quote-gap, .quote-join { border: 0; padding: 0; background: none; font: inherit; color: var(--muted); cursor: pointer; border-radius: var(--r1); }
 .quote-join { color: var(--accent-text); }
 button.quote-gap:hover, .quote-join:hover, button.quote-gap:focus-visible, .quote-join:focus-visible { background: var(--hover); color: var(--ink); outline: none; }
+/* A capture's title above its quotation in a note, when `{title}` follows the embed. */
+.embed-capture-title { margin: 0 0 6px; font-weight: 650; color: var(--ink); }
+.embed-capture figcaption .embed-edit + .embed-edit { margin-left: 0; }

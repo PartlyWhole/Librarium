@@ -196,7 +196,7 @@ One window. Only regions scroll, never the window.
 
   | Kind | Shows as | Click opens |
   |---|---|---|
-  | Capture | the quotation and "— Source, place" ("[…]" between parts, pictures on their own) | the quotation: the capture; the citation: the source at the place; a pencil on hover: the capture |
+  | Capture | the quotation and "— Source, place" ("[…]" between parts, pictures on their own), with its title above when `{title}` follows | the quotation: the capture; the citation: the source at the place; on hover, a pencil: the capture, and H: show or hide the title |
   | Image item | the image, resizable from its corner | it in the reader |
   | PDF, EPUB or web item | a card with icon and title | the item |
   | Board | a picture of the board, captioned with its name | the board |

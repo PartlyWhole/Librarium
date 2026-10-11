@@ -346,7 +346,7 @@ Stored text is never regenerated if it is present. Anchors point into it.
 
 - **Syntax.** A link is `[[label|<uuid>]]`; an embed is `![[label|<uuid>]]`. An image or board
   embed may be followed by `{width=N}`, in pixels (`^\{width=(\d{1,5})\}`, shown at least 48 px
-  wide).
+  wide). A capture embed may be followed by `{title}`: its title is shown above the quotation.
 - **Parsing.**
   1. Find `[[`, skipping escaped positions.
   2. The link ends at the first `]]` on the same line. A newline, `[` or lone `]` before it
