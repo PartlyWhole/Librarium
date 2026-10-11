@@ -24,10 +24,13 @@ import { icon, iconButton } from "../ui/icon";
 import { resizeHandle } from "../ui/resize";
 import { effect, untracked } from "../ui/signal";
 import { toast } from "../ui/toast";
-import type { BoardLoaded, BoardSaved, Draft, ImportResult, Written } from "../types";
+import type { BoardLoaded, BoardSaved, Draft, ImportResult, RecordInfo, Written } from "../types";
 import type { BoardEngine, BoardInsert } from "./engine";
 import { boardOutline, boardPage } from "./mirror";
-import { recordOf, type BoardElement, type BoardLink } from "./links";
+import { recordOf, wordsAndLinks, type BoardElement, type BoardLink } from "./links";
+import { parseLinks } from "../notes/editor/links";
+import { isNamed } from "../captures/common";
+import { contextMenu } from "../ui/menu";
 import { renderPicker } from "../captures/picker";
 import { renderCard } from "./cards";
 import { appTheme, isPicture, loadEngine, pictureData, portable } from "./shared";
@@ -63,10 +66,13 @@ const elementsOf = (scene: string): BoardElement[] => {
 };
 const titleOf = (id: string) => untracked(() => getRecord(id))?.title || null;
 
+/** A record's name as words on the board: a capture named from its quote without the "…". */
+const nameOf = (r: RecordInfo) => (r.kind === "capture" && !isNamed(r) ? r.title.replace(/…$/, "") : r.title) || "Untitled";
+
 /** Asks which record (anything that opens, but this board). */
-function pickRecord(self: string, label: string, picked: (to: BoardLink) => void): void {
-  const choices = untracked(listRecords).filter((r) => r.id !== self && canOpen(r)).map((r) => ({ id: r.id, label: r.title || "Untitled", detail: r.kind === "note" ? undefined : kindName(r), icon: recordIcon(r) }));
-  comboboxDialog({ label, placeholder: "Type a title", emptyText: "Nothing has that title.", choices, onPick: (c) => picked({ id: c.id, label: c.label }) });
+function pickRecord(self: string, label: string, picked: (to: BoardLink) => void, cancelled?: () => void): void {
+  const choices = untracked(listRecords).filter((r) => r.id !== self && canOpen(r)).map((r) => ({ id: r.id, label: nameOf(r), detail: r.kind === "note" ? undefined : kindName(r), icon: recordIcon(r) }));
+  comboboxDialog({ label, placeholder: "Type a title", emptyText: "Nothing has that title.", choices, onPick: (c) => picked({ id: c.id, label: c.label }), onCancel: cancelled });
 }
 
 export function renderBoard(host: HTMLElement, params: Record<string, string>, ctx: PageContext): PageHandle {
@@ -225,12 +231,16 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     onFiles: (files) => void pasted(files),
     renderCard,
     imageOf: pictureData,
-    onLinkStart: (elementId) => pickRecord(id, "Link this text to", (to) => engine?.link([elementId], to, { replaceTyped: true })),
-    onOpenLink: (link, newTab) => {
+    onLinkStart: (elementId, at, byKeys) =>
+      pickRecord(id, "Link these words to", (to) => engine?.link([elementId], to, { at, typed: byKeys }), () => byKeys && engine?.untype(elementId, at)),
+    onOpenLink: (link, newTab, more) => {
+      // Words with several links offer each.
+      if (more.links.length > 1) return void contextMenu(more.links.map((l) => ({ label: `Open “${titleOf(l.id) ?? l.label}”`, run: () => openRecord(l.id, {}, { newTab }) })), more.at, "Open a link");
       const target = recordOf(link);
       if (target) openRecord(target, {}, { newTab });
       else void askToOpen(link, { from: info.title });
     },
+    onPasteLinks: (text, at) => pasteLinks(text, at),
     buttons: (bar) => bar.append(full.button),
     sidebar: {
       title: "Captures and Library",
@@ -277,12 +287,36 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
 
   // ---- Putting things on it ----
   /** Records put on the board: pictures as pictures, the rest as cards. */
+  const itemFor = (rid: string): BoardInsert[] => {
+    const r = untracked(() => getRecord(rid));
+    if (!r || rid === id) return [];
+    return [{ id: rid, label: r.title || "Untitled", picture: isPicture(r), embed: r.kind === "capture" || isPicture(r) }];
+  };
   const insertRecords = (ids: string[], at?: { x: number; y: number }) => {
-    const items: BoardInsert[] = ids.flatMap((rid) => {
-      const r = untracked(() => getRecord(rid));
-      if (!r || rid === id) return [];
-      return [{ id: rid, label: r.title || "Untitled", picture: isPicture(r), embed: r.kind === "capture" || isPicture(r) }];
-    });
+    const items = ids.flatMap(itemFor);
+    if (items.length) void ready.insert(items, at);
+  };
+  /**
+   * Pasted links and embeds (copied from a note or the Library): an embed on a line of its own
+   * becomes its card or picture; the other lines are words, each link written as its name and
+   * linked (to records that are here).
+   */
+  const pasteLinks = (text: string, at?: { x: number; y: number }) => {
+    const items: BoardInsert[] = [];
+    let lines: string[] = [];
+    const flush = () => {
+      const { words, links } = wordsAndLinks(lines.join("\n").trim());
+      if (words) items.push({ words, links: links.filter((l) => untracked(() => getRecord(l.id))) });
+      lines = [];
+    };
+    for (const line of text.split(/\r?\n/)) {
+      const t = line.trim();
+      const [l, ...more] = parseLinks(t);
+      const card = l?.embed && l.id && !more.length && l.from === 0 && /^(\{(?:width=\d{1,5}|title)\})?$/.test(t.slice(l.to)) ? itemFor(l.id) : [];
+      if (!card.length) lines.push(line);
+      else (flush(), items.push(...card));
+    }
+    flush();
     if (items.length) void ready.insert(items, at);
   };
   /** Pasted pictures become library items in Attachments, then go on the board. */

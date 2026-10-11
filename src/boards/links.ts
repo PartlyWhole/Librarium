@@ -3,6 +3,8 @@
  * use these without loading Excalidraw.
  */
 
+import { parseLinks } from "../notes/editor/links";
+
 /** A link to a record, as kept on a drawing element (`customData.librarium.links`). */
 export interface BoardLink {
   id: string;
@@ -16,6 +18,8 @@ export interface BoardElement {
   x: number;
   y: number;
   text?: string;
+  /** A text's words as written (`text` is as wrapped in its shape). */
+  originalText?: string;
   link?: string | null;
   isDeleted?: boolean;
   containerId?: string | null;
@@ -29,3 +33,22 @@ export const recordOf = (link: string | null | undefined) => (link?.startsWith(R
 
 /** Pictures and cards are kept by record ID (a UUID), not as data in the drawing. */
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Whether text has a link or embed to a record in it (`[[label|id]]`, `![[label|id]]`). */
+export const hasRefs = (text: string): boolean => parseLinks(text).some((l) => l.id);
+
+/**
+ * Text as it reads, each link and embed written as its name (an embed's `{width=…}` or
+ * `{title}` left out), with the links to records in it, each record once.
+ */
+export function wordsAndLinks(text: string): { words: string; links: BoardLink[] } {
+  let words = "";
+  let last = 0;
+  const links: BoardLink[] = [];
+  for (const l of parseLinks(text)) {
+    words += text.slice(last, l.from) + l.label;
+    last = l.to + (/^\{(?:width=\d{1,5}|title)\}/.exec(text.slice(l.to))?.[0].length ?? 0);
+    if (l.id && !links.some((x) => x.id === l.id)) links.push({ id: l.id, label: l.label });
+  }
+  return { words: words + text.slice(last), links };
+}

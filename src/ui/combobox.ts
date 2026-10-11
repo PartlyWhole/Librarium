@@ -22,6 +22,8 @@ interface ComboboxOptions {
   emptyText: string;
   choices: Choice[];
   onPick: (c: Choice) => void;
+  /** Closed without a choice (Escape, the backdrop). */
+  onCancel?: () => void;
   /** Ranks choices for a query; fuzzy matching on the label and detail by default. */
   filter?: (choices: Choice[], query: string) => Choice[];
 }
@@ -34,6 +36,7 @@ export function comboboxDialog(opts: ComboboxOptions): Modal {
   const filter = opts.filter ?? ((cs, q) => fuzzyFilter(cs, q, (c) => `${c.label} ${c.detail ?? ""}`));
   let shown: Choice[] = [];
   let active = 0;
+  let picked = false;
 
   const optionId = (i: number) => `${listId}-o${i}`;
   const paintActive = () => {
@@ -62,6 +65,7 @@ export function comboboxDialog(opts: ComboboxOptions): Modal {
   const pick = (i: number) => {
     const c = shown[i];
     if (!c) return;
+    picked = true;
     m.close();
     opts.onPick(c);
   };
@@ -75,7 +79,7 @@ export function comboboxDialog(opts: ComboboxOptions): Modal {
     e.preventDefault();
     paintActive();
   });
-  const m = modal(h("div", { class: "combo" }, input, list, empty), { label: opts.label, className: "combo-dialog" });
+  const m = modal(h("div", { class: "combo" }, input, list, empty), { label: opts.label, className: "combo-dialog", onClose: () => !picked && opts.onCancel?.() });
   render();
   input.focus();
   return m;

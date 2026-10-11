@@ -522,13 +522,21 @@ Boards use Excalidraw. React is used only here.
 - **Undo.** ⌘Z / ⇧⌘Z undo drawing steps and renames, in order. Drawing steps are forgotten on
   leaving the board.
 - **Linking.**
-  - `[[` in a board text opens the title picker.
+  - `[[` in a board text opens the title picker; the name chosen takes the place of the `[[`
+    (spaced from the words beside it), and Escape takes the `[[` back. A capture named from its
+    quote goes in without the "…".
+  - While a text is written, a **Link… `[[`** button under it does the same at the caret.
+  - Words in a shape link the shape (Excalidraw follows a shape's link, not its text's).
+  - A text keeps a link while its name is in it: taking the name out removes the link, in the
+    same undo step.
   - ⌥⌘K links the selection; ⌘K stays Excalidraw's web link.
-  - Clicking a link opens the record (⌘-click: new tab). Web links ask first.
+  - Clicking a link opens the record (⌘-click: new tab); with several links, a menu offers each.
+    Web links ask first.
 - **Putting things on the board.** ⌥⌘I, dragging from the sidebar, a folder page or the board's
   panel, pasting a picture, or dropping files.
   - **The panel.** A button at the canvas's top right (Captures and Library) opens two tabs, each
-    newest first with one search box: **Captures** (searched by quote, name, source or place)
+    newest first with one search box: **Captures** (each with its name above the quotation, if
+    it was given one; searched by quote, name, source or place)
     and **Library** (by title, kind, folder, author or publication). Drag one onto the drawing,
     or Add (or Enter) puts it in the middle of what is in view; several can be selected and
     added at once, as in a note's Captures view. It docks beside the drawing on a
@@ -540,6 +548,9 @@ Boards use Excalidraw. React is used only here.
   - Captures become cards with the quotation, the citation and Show in the source. They are
     redrawn when the capture changes.
   - Notes, items and boards become cards with their icon and name.
+  - **Pasting** links and embeds (copied from a note or the Library): an embed on a line of its
+    own becomes its card or picture, and other lines become words with each link written as its
+    name, linked. Pasted into a text being written, they go in as their names, linked.
   - Pictures are library items (pasted ones go to Attachments).
   - A card's buttons work after selecting it and clicking again.
 - **Export.** PNG, SVG, or an Excalidraw file (with its pictures embedded). Cards are written out

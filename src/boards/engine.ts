@@ -7,7 +7,7 @@ import { createRoot } from "react-dom/client";
 import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, Sidebar, exportToBlob, exportToSvg, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { passThrough } from "../ui/keys";
-import { RECORD_LINK, recordOf, UUID, type BoardElement, type BoardLink } from "./links";
+import { hasRefs, RECORD_LINK, recordOf, UUID, wordsAndLinks, type BoardElement, type BoardLink } from "./links";
 
 type Api = Parameters<NonNullable<Parameters<typeof Excalidraw>[0]["excalidrawAPI"]>>[0];
 type AppState = ReturnType<Api["getAppState"]>;
@@ -35,10 +35,13 @@ interface EngineOptions {
   renderCard(id: string, host: HTMLElement): () => void;
   /** A picture's data (a library item, by ID). */
   imageOf(id: string): Promise<Picture | null>;
-  /** `[[` was typed in a text (this element): the page offers what to link to. */
-  onLinkStart(elementId: string): void;
-  /** A link on the board was clicked (with ⌘: in a new tab). */
-  onOpenLink(link: string, newTab: boolean): void;
+  /** A link was asked for in a text being written (this element), at `at` in its words: by
+   * typing `[[` (just before `at`), or by its Link button. The page offers what to link to. */
+  onLinkStart(elementId: string, at: number, typed: boolean): void;
+  /** A link on the board was clicked (with ⌘: in a new tab); `links` when it holds several. */
+  onOpenLink(link: string, newTab: boolean, more: { links: BoardLink[]; at: { x: number; y: number } }): void;
+  /** Text pasted onto the drawing that holds links or embeds (`[[…]]`, `![[…]]`). */
+  onPasteLinks(text: string, at: { x: number; y: number } | undefined): void;
   /** The page's own buttons at the canvas's top right (shown on read-only boards too). */
   buttons?(host: HTMLElement): void;
   /** A panel of the page's own beside the drawing, opened by a button at the canvas's top right. */
@@ -52,14 +55,16 @@ interface EngineOptions {
   };
 }
 
-/** A record to put on the board. */
-export interface BoardInsert {
-  id: string;
-  label: string;
-  picture: boolean;
-  /** Written `![[…]]` in the readable page (a capture's quotation, a picture). */
-  embed: boolean;
-}
+/** A record to put on the board, or words with links in them. */
+export type BoardInsert =
+  | {
+      id: string;
+      label: string;
+      picture: boolean;
+      /** Written `![[…]]` in the readable page (a capture's quotation, a picture). */
+      embed: boolean;
+    }
+  | { words: string; links: BoardLink[] };
 
 export interface BoardEngine {
   /** The element holding the canvas (keys and focus). */
@@ -76,10 +81,13 @@ export interface BoardEngine {
    * being made, a menu or dialog open. (It doesn't let go of a selection.) */
   busy(): boolean;
   /**
-   * Links elements to a record (one step). In a text, a `[[` just typed is replaced by the
-   * record's name; a text keeps each of its links (Excalidraw follows the first).
+   * Links elements to a record (one step); a shape's text links its shape. In a text, the
+   * record's name goes in at `at` (in place of the `[[` typed just before it, if `typed`). An
+   * element keeps each of its links; a click on one with several offers them all.
    */
-  link(ids: string[], to: BoardLink, opts?: { replaceTyped?: boolean }): boolean;
+  link(ids: string[], to: BoardLink, opts?: { at?: number; typed?: boolean }): boolean;
+  /** Takes back a `[[` typed just before `at` in a text (the link wasn't chosen). */
+  untype(id: string, at: number): void;
   /** Excalidraw's own undo and redo. */
   undo(): boolean;
   redo(): boolean;
@@ -110,6 +118,32 @@ function parse(scene: string) {
 
 const cardId = () => `card-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+type Drawn = BoardElement & { version: number };
+const linksOf = (e: { customData?: unknown } | undefined): BoardLink[] => (e?.customData as BoardElement["customData"])?.librarium?.links ?? [];
+const touched = (e: { version: number }) => ({ version: e.version + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() });
+/** An element with these links, Excalidraw's own link following the first. */
+function withLinks<E extends Drawn>(e: E, links: BoardLink[]): E {
+  const mine = e.customData?.librarium;
+  return { ...e, ...touched(e), link: links[0] ? `${RECORD_LINK}${links[0].id}` : recordOf(e.link) ? null : e.link, customData: { ...(e.customData ?? {}), librarium: { ...(mine ?? {}), links } } };
+}
+
+/**
+ * Words with a name put in at `at`: in place of a `[[` typed just before it (or the last `[[`,
+ * if the words changed since), else at `at`, else at the end; spaced from the words beside it.
+ */
+function putName(words: string, name: string, at: number | undefined, typed: boolean): string {
+  let to = Math.min(at ?? words.length, words.length);
+  let from = to;
+  if (typed) {
+    if (words.slice(to - 2, to) === "[[") from = to - 2;
+    else if (words.includes("[[")) [from, to] = [words.lastIndexOf("[["), words.lastIndexOf("[[") + 2];
+  }
+  // A space either side where it would run into a word.
+  const before = /[\p{L}\p{N}]$/u.test(words.slice(0, from)) ? " " : "";
+  const after = /^[\p{L}\p{N}]/u.test(words.slice(to)) ? " " : "";
+  return words.slice(0, from) + before + name + after + words.slice(to);
+}
+
 export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEngine> {
   const el = document.createElement("div");
   el.className = "board-canvas";
@@ -126,6 +160,8 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
   let stepPending = false;
 
   const onChange = (elements: Parameters<typeof getSceneVersion>[0], state: AppState) => {
+    keepLinks(state);
+    placeChip();
     const v = getSceneVersion(elements);
     if (performance.now() < quietUntil) {
       if (v !== version && quiet === "replay") o.onChange();
@@ -152,18 +188,25 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
         viewModeEnabled: o.readOnly,
         aiEnabled: false,
         onChange,
-        onLinkOpen: (element: { link: string | null }, event: CustomEvent<{ nativeEvent: MouseEvent | { metaKey?: boolean } }>) => {
+        onLinkOpen: (element: { link: string | null; customData?: unknown }, event: CustomEvent<{ nativeEvent: MouseEvent | { metaKey?: boolean; clientX?: number; clientY?: number } }>) => {
           if (!element.link) return;
           event.preventDefault();
-          o.onOpenLink(element.link, !!event.detail?.nativeEvent?.metaKey);
+          const n = event.detail?.nativeEvent;
+          o.onOpenLink(element.link, !!n?.metaKey, { links: linksOf(element), at: { x: n?.clientX ?? 0, y: n?.clientY ?? 0 } });
         },
         // Saving, opening, exporting and pictures go through Librarium. Sidebars can dock beside
         // the drawing on any window wider than a phone.
         UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false }, tools: { image: false }, dockedSidebarBreakpoint: 700 },
-        onPaste: (data: { files?: object; elements?: readonly { type: string }[] | null }, event: ClipboardEvent | null) => {
+        onPaste: (data: { files?: object; elements?: readonly { type: string }[] | null; text?: string }, event: ClipboardEvent | null) => {
           const files = [...(event?.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
           if (files.length) {
             o.onFiles(files);
+            return false;
+          }
+          // Links and embeds copied from a note or the Library become linked words and cards.
+          const text = data.text ?? event?.clipboardData?.getData("text/plain") ?? "";
+          if (!data.elements?.length && hasRefs(text)) {
+            o.onPasteLinks(text, pointer);
             return false;
           }
           // Pictures copied from another board come back by their IDs (their data isn't copied).
@@ -201,18 +244,91 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     return true;
   };
 
-  // `[[` typed in a text being edited: the text is finished (so it can be linked), and the
-  // page offers what to link to.
+  // ---- Links in a text being written ----
+  /** The text being written, and its box. */
+  const writing = () => {
+    const ta = el.querySelector<HTMLTextAreaElement>("textarea.excalidraw-wysiwyg");
+    const editing = api?.getAppState().editingTextElement;
+    return ta && editing ? { ta, id: editing.id } : null;
+  };
+  /** The page asks what to link to, at the caret; the text is finished first (so it can be linked). */
+  const startLink = (typed: boolean) => {
+    const w = writing();
+    if (!w) return;
+    const at = w.ta.selectionEnd ?? w.ta.value.length;
+    w.ta.blur();
+    setTimeout(() => o.onLinkStart(w.id, at, typed), 0);
+  };
   el.addEventListener("input", (e) => {
     const ta = e.target as HTMLTextAreaElement;
-    if (!ta.classList?.contains("excalidraw-wysiwyg") || !api) return;
+    if (!ta.classList?.contains("excalidraw-wysiwyg")) return;
     const at = ta.selectionStart ?? ta.value.length;
-    if (ta.value.slice(Math.max(0, at - 2), at) !== "[[") return;
-    const editing = api.getAppState().editingTextElement;
-    if (!editing) return;
-    ta.blur();
-    setTimeout(() => o.onLinkStart(editing.id), 0);
+    if (ta.value.slice(Math.max(0, at - 2), at) === "[[") startLink(true);
+    else placeChip();
   }, true);
+
+  // Under a text being written, a Link button does what `[[` does, and says so.
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = "board-link-chip";
+  chip.hidden = true;
+  chip.title = "Link these words to a note, item or capture (or type [[)";
+  chip.append("Link…", Object.assign(document.createElement("kbd"), { textContent: "[[" }));
+  // Pressed without taking the caret from the text, so the link goes where it was.
+  chip.addEventListener("mousedown", (e) => (e.preventDefault(), startLink(false)));
+  host.appendChild(chip);
+  function placeChip() {
+    const w = writing();
+    chip.hidden = !w;
+    if (!w) return;
+    const r = w.ta.getBoundingClientRect();
+    const b = host.getBoundingClientRect();
+    chip.style.left = `${Math.max(4, r.left - b.left)}px`;
+    chip.style.top = `${r.bottom - b.top + 6}px`;
+  }
+
+  /**
+   * A text's links follow its words as they are written: a link whose name is taken out goes
+   * (as part of the same step), one pasted in comes. Links on a text that never had their
+   * names in it (a text linked as a whole) stay.
+   */
+  let written: { id: string; words: string; links: BoardLink[]; pasted: BoardLink[] } | null = null;
+  /** Where a text's links are kept: on its shape, if it is a shape's (as Excalidraw follows them). */
+  const holderOf = (t: Drawn, all: readonly Drawn[]) => {
+    const shape = t.containerId ? all.find((e) => e.id === t.containerId && !e.isDeleted) : undefined;
+    return shape && !linksOf(t).length ? shape : t;
+  };
+  function keepLinks(state: AppState) {
+    const id = state.editingTextElement?.id;
+    if (!id || !api) return void (written = null);
+    const all = api.getSceneElementsIncludingDeleted() as unknown as readonly Drawn[];
+    const t = all.find((e) => e.id === id);
+    if (!t) return;
+    const holder = holderOf(t, all);
+    const now = t.originalText ?? t.text ?? "";
+    if (written?.id !== id) written = { id, words: now, links: linksOf(holder), pasted: [] };
+    const w = written;
+    const keep = [...w.links.filter((l) => !w.words.includes(l.label) || now.includes(l.label)), ...w.pasted.filter((l) => now.includes(l.label))]
+      .filter((l, i, ls) => ls.findIndex((x) => x.id === l.id) === i);
+    const have = linksOf(holder);
+    if (keep.length === have.length && keep.every((l, i) => l.id === have[i]!.id && l.label === have[i]!.label)) return;
+    api.updateScene({ elements: all.map((e) => (e.id === holder.id ? withLinks(e, keep) : e)) as never, captureUpdate: CaptureUpdateAction.EVENTUALLY });
+  }
+  // Links pasted into a text being written go in as their names, linked.
+  el.addEventListener("paste", (e) => {
+    const ta = e.target as HTMLTextAreaElement;
+    const text = e.clipboardData?.getData("text/plain") ?? "";
+    if (!ta.classList?.contains("excalidraw-wysiwyg") || !written || !hasRefs(text)) return;
+    e.preventDefault();
+    const { words, links } = wordsAndLinks(text);
+    written.pasted.push(...links);
+    document.execCommand("insertText", false, words);
+  }, true);
+
+  /** Where the pointer last was over the drawing (a paste goes there). */
+  let pointer: { x: number; y: number } | undefined;
+  el.addEventListener("pointermove", (e) => (pointer = { x: e.clientX, y: e.clientY }));
+  el.addEventListener("pointerleave", () => (pointer = undefined));
 
   /** Pictures on the board whose data isn't loaded yet: from the library, by ID. */
   const loading = new Set<string>();
@@ -249,6 +365,12 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
       // The first is centred on the point; any others follow to its right.
       let dx = 0;
       for (const it of items) {
+        if ("words" in it) {
+          const [t] = convertToExcalidrawElements([{ type: "text", text: it.words, x: 0, y: 0 }] as never) as unknown as (Drawn & { width: number; height: number })[];
+          made.push(withLinks({ ...t!, x: origin.x + dx - (dx ? 0 : t!.width / 2), y: origin.y - t!.height / 2 }, it.links));
+          dx += t!.width + 24;
+          continue;
+        }
         const customData = { librarium: { links: [{ id: it.id, label: it.label }], ...(it.embed ? { embed: true } : {}) } };
         const link = `${RECORD_LINK}${it.id}`;
         if (it.picture) {
@@ -281,31 +403,32 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     },
     link(ids, to, opts = {}) {
       if (!api || !ids.length) return false;
-      let changed = false;
-      const next = api.getSceneElementsIncludingDeleted().map((e) => {
-        if (!ids.includes(e.id) || e.isDeleted) return e;
-        changed = true;
-        const mine = (e.customData as BoardElement["customData"])?.librarium;
-        const links = [...(mine?.links ?? []).filter((l) => l.id !== to.id), to];
-        const patch: Record<string, unknown> = {
-          link: `${RECORD_LINK}${links[0]!.id}`,
-          customData: { ...(e.customData ?? {}), librarium: { ...(mine ?? {}), links } },
-          version: e.version + 1,
-          versionNonce: Math.floor(Math.random() * 2 ** 31),
-          updated: Date.now(),
-        };
-        if (e.type === "text" && opts.replaceTyped) {
-          const t = e as unknown as { text: string; originalText: string };
-          const cut = (s: string) => (s.endsWith("[[") ? s.slice(0, -2) : s) + to.label;
-          patch.text = cut(t.text);
-          patch.originalText = cut(t.originalText ?? t.text);
+      const all = api.getSceneElementsIncludingDeleted() as unknown as readonly Drawn[];
+      const texts = new Set(opts.at !== undefined ? ids : []);
+      const holders = new Set(ids.map((id) => all.find((e) => e.id === id)).filter((e) => !!e && !e.isDeleted).map((e) => holderOf(e!, all).id));
+      if (!holders.size) return false;
+      const next = all.map((e) => {
+        let out = e;
+        if (holders.has(e.id)) out = withLinks(e, [...linksOf(e).filter((l) => l.id !== to.id), to]);
+        if (texts.has(e.id) && e.type === "text") {
+          const words = putName(e.originalText ?? e.text ?? "", to.label, opts.at, !!opts.typed);
+          out = { ...out, ...touched(e), text: words, originalText: words };
         }
-        return { ...e, ...patch };
+        return out;
       });
-      if (!changed) return false;
-      // Texts are measured again (their words changed).
+      // Texts are measured (and a shape's wrapped) again: their words changed.
       api.updateScene({ elements: restoreElements(next as never, null, { refreshDimensions: true, repairBindings: true }), captureUpdate: CaptureUpdateAction.IMMEDIATELY });
       return true;
+    },
+    untype(id, at) {
+      if (!api) return;
+      const all = api.getSceneElementsIncludingDeleted() as unknown as readonly Drawn[];
+      const t = all.find((e) => e.id === id && e.type === "text");
+      const words = t?.originalText ?? t?.text ?? "";
+      if (!t || words.slice(at - 2, at) !== "[[") return;
+      const back = words.slice(0, at - 2) + words.slice(at);
+      const next = all.map((e) => (e === t ? { ...e, ...touched(e), text: back, originalText: back } : e));
+      api.updateScene({ elements: restoreElements(next as never, null, { refreshDimensions: true, repairBindings: true }), captureUpdate: CaptureUpdateAction.IMMEDIATELY });
     },
     current() {
       const a = api!;
@@ -331,6 +454,7 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     destroy() {
       root.unmount();
       el.remove();
+      chip.remove();
     },
   };
   // Ready once Excalidraw has handed over its API.

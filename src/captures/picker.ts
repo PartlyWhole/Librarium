@@ -16,7 +16,7 @@ import { icon, iconButton } from "../ui/icon";
 import { effect, signal } from "../ui/signal";
 import { toast } from "../ui/toast";
 import type { RecordInfo } from "../types";
-import { F, isPicture, KIND, matches, newestFirst, quoteOf, regionImage, searchWords, sourceOf } from "./common";
+import { F, isNamed, isPicture, KIND, matches, newestFirst, quoteOf, regionImage, searchWords, sourceOf } from "./common";
 import { ChevronRight, Plus } from "lucide";
 
 export type Tab = "captures" | "library";
@@ -62,10 +62,13 @@ const LISTS: Record<Tab, List> = {
     empty: "No captures yet. In a book, article or PDF, select a passage and choose Capture.",
     none: "No captures match.",
     matches,
+    // A name the user gave goes above (one made from the quote would only repeat it).
     body: (c) =>
-      isPicture(c)
-        ? (thumbs.get(c.id) ?? thumbs.set(c.id, regionImage(c.id, 1, "capture-thumb", c.title || "A captured picture")).get(c.id)!)
-        : h("blockquote", { class: "picker-quote" }, quoteOf(c)),
+      h("div", null,
+        isNamed(c) ? h("div", { class: "picker-title" }, h("span", null, c.title)) : null,
+        isPicture(c)
+          ? (thumbs.get(c.id) ?? thumbs.set(c.id, regionImage(c.id, 1, "capture-thumb", c.title || "A captured picture")).get(c.id)!)
+          : h("blockquote", { class: "picker-quote" }, quoteOf(c))),
     meta: (c, grouped) => [grouped ? null : getRecord(sourceOf(c))?.title, c.fields[F.locator] as string | undefined].filter(Boolean).join(" · "),
     group: sourceOf,
   },
