@@ -11,7 +11,7 @@ import { shortDate } from "../ui/format";
 import { iconButton } from "../ui/icon";
 import { effect, signal } from "../ui/signal";
 import type { RecordInfo } from "../types";
-import { copyEmbed, F, isPicture, KIND, matches, newestFirst, quoteOf, regionImage, searchWords, showInSource, sourceOf } from "./common";
+import { copyEmbed, F, isNamed, isPicture, KIND, matches, newestFirst, quoteOf, regionImage, searchWords, showInSource, sourceOf } from "./common";
 import { captureMenu, deleteCapture } from "./delete";
 import { Copy, LocateFixed, Pencil, Trash2 } from "lucide";
 
@@ -42,7 +42,7 @@ export function renderCaptures(host: HTMLElement, _params: Record<string, string
   const card = (c: RecordInfo, withSource: boolean): HTMLElement => {
     const quote = quoteOf(c);
     // A name the user gave (not the quote's first words) is shown.
-    const named = quote && !quote.startsWith(c.title.replace(/…$/, ""));
+    const named = quote && isNamed(c);
     const body = isPicture(c) ? (thumbs.get(c.id) ?? thumbs.set(c.id, regionImage(c.id, 1, "capture-thumb", c.title || "A captured picture")).get(c.id)!) : h("blockquote", { class: "capture-card-quote" }, quote);
     const meta = [named ? c.title : null, withSource ? getRecord(sourceOf(c))?.title : null, c.fields[F.locator] as string | undefined, c.created ? shortDate(c.created) : null].filter(Boolean).join(" · ");
     const el = h("article", { class: "capture-card", tabindex: "0", "aria-label": c.title || "Capture" },

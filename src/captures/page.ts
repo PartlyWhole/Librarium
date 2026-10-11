@@ -73,13 +73,21 @@ function mount(host: HTMLElement, ctx: PageContext, t: RecordText, anchor: Ancho
   const cite = h("p", { class: "capture-cite muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: MouseEvent) => (e.preventDefault(), openRecord(src, placeParams(anchor), { again: true, newTab: e.metaKey })) }, citation(info)));
 
   // ---- The name: renaming is a step of this page's undo ----
-  const titleInput = h("input", { class: "title-input", value: info.title, "aria-label": "Title", spellcheck: true, placeholder: "Capture" });
+  // A long name wraps (it grows a line at a time); Enter still ends it.
+  const titleInput = h("textarea", { class: "title-input wrapping", rows: 1, value: info.title, "aria-label": "Title", spellcheck: true, placeholder: "Capture" });
+  const fit = () => ((titleInput.style.height = "auto"), (titleInput.style.height = `${titleInput.scrollHeight}px`));
+  titleInput.addEventListener("input", () => {
+    if (/\n/.test(titleInput.value)) titleInput.value = titleInput.value.replace(/\s*\n\s*/g, " ");
+    fit();
+  });
+  requestAnimationFrame(fit);
   const retitle = async (title: string, base?: string) => {
     const w = await call<Written>("records.relocate", { id, title, ...(base ? { base_version: base } : {}) });
     putRecord(w.info);
     info = w.info;
     session.rebase(w.info.version, session.savedBody);
     if (document.activeElement !== titleInput) titleInput.value = title;
+    fit();
     ctx.setTitle(title);
     return w.info.version;
   };

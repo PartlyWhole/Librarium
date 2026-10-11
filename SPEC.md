@@ -421,7 +421,7 @@ dragged out for capture.
 - **The citation** is "Source, place". A place equal to the source's title is omitted.
 - **The capture page.**
   - The archived notice, with **Restore**.
-  - The title.
+  - The title, wrapping onto more lines when long (Enter still ends it).
   - The quotation, with a Show button per part, "moved — check it" / "lost" badges, and
     **This is the place** for a moved part.
   - The "— citation" link.
@@ -439,7 +439,8 @@ dragged out for capture.
     **Cancel** / **Save changes** (⌘↩), and the toast is "Capture updated."
   - Your words and a user-given title are kept.
   - Editing parts is not undoable.
-- **The Captures panel** shows the draft, then the source's captures, oldest first, with the open
+- **The Captures panel** shows the draft, then the source's captures, oldest first, each by its
+  name (or, while the title is still the automatic one, its whole quote), wrapping, with the open
   one marked and moved/lost badges. Each row offers Show, Edit selection, Copy embed and Delete.
 - **The Captures page** (⇧⌘K).
   - Search by quote, name, source or place.

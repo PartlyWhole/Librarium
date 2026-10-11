@@ -14,6 +14,13 @@ export const F = { source: "captures.source", quote: "captures.quote", parts: "c
 
 export const sourceOf = (c: RecordInfo | undefined): string => String(c?.fields[F.source] ?? "");
 export const quoteOf = (c: RecordInfo): string => flowQuote(String(c.fields[F.quote] ?? ""));
+/** Whether a capture's title is one the user gave (not the quote's first words, as made). */
+export const isNamed = (c: RecordInfo): boolean => {
+  const quote = quoteOf(c);
+  return !quote || !quote.startsWith(c.title.replace(/…$/, ""));
+};
+/** What a capture is called in lists: its own name, else its whole quote (never cut short). */
+export const shownName = (c: RecordInfo): string => (isNamed(c) ? c.title : quoteOf(c)) || "Capture";
 /** A capture of a picture only (no quoted text). */
 export const isPicture = (c: RecordInfo): boolean => !String(c.fields[F.quote] ?? "").trim();
 const byCreated = (a: RecordInfo, b: RecordInfo) => (a.created ?? "").localeCompare(b.created ?? "");

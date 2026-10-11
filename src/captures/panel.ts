@@ -11,7 +11,7 @@ import { recordScope } from "../app/undo";
 import { h, replace } from "../ui/dom";
 import { icon, iconButton } from "../ui/icon";
 import { effect } from "../ui/signal";
-import { anchorOf, capturesOf, copyEmbed, showInSource, sourceOf, statuses, storedText, worst } from "./common";
+import { anchorOf, capturesOf, copyEmbed, showInSource, shownName, sourceOf, statuses, storedText, worst } from "./common";
 import type { Anchor } from "./anchor";
 import type { StoredText } from "../types";
 import { captureMenu, deleteCapture } from "./delete";
@@ -56,7 +56,7 @@ addPanelView({
         const status = h("span", { class: `badge ${statusOf.get(c.id) ?? ""}` }, statusOf.get(c.id) ?? "");
         const mine = editing?.[1].editing?.id === c.id ? editing : null;
         const li = h("li", { class: `capture-row${c.id === open ? " current" : ""}${mine ? " editing" : ""}`, "aria-current": c.id === open ? "true" : undefined },
-          mine ? titleField(mine[0], mine[1]) : h("a", { href: "#", class: "list-link", onclick: (e: MouseEvent) => (e.preventDefault(), openRecord(c.id, {}, { newTab: e.metaKey })) }, c.title || "Capture"),
+          mine ? titleField(mine[0], mine[1]) : h("a", { href: "#", class: "list-link", onclick: (e: MouseEvent) => (e.preventDefault(), openRecord(c.id, {}, { newTab: e.metaKey })) }, shownName(c)),
           " ", status,
           mine ? editingControls(mine[0], mine[1]) : h("div", { class: "row tight capture-tools" },
             iconButton(LocateFixed, "Show in the source", () => showInSource(c), undefined, 15),
