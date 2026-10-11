@@ -72,6 +72,9 @@ export interface BoardEngine {
   insert(items: BoardInsert[], at?: { x: number; y: number }): Promise<void>;
   /** The IDs of the elements selected. */
   selected(): string[];
+  /** Whether Escape has something to do on the board first: a tool to leave, text or a line
+   * being made, a menu or dialog open. (It doesn't let go of a selection.) */
+  busy(): boolean;
   /**
    * Links elements to a record (one step). In a text, a `[[` just typed is replaced by the
    * record's name; a text keeps each of its links (Excalidraw follows the first).
@@ -267,6 +270,10 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
         }
       }
       if (made.length) api.updateScene({ elements: [...api.getSceneElementsIncludingDeleted(), ...(made as never[])], captureUpdate: CaptureUpdateAction.IMMEDIATELY });
+    },
+    busy() {
+      const s = api?.getAppState();
+      return !!s && (s.activeTool.type !== "selection" || !!(s.editingTextElement || s.newElement || s.multiElement || s.editingLinearElement || s.openMenu || s.openPopup || s.openDialog));
     },
     selected() {
       const s = api?.getAppState().selectedElementIds ?? {};

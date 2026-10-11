@@ -1,7 +1,8 @@
 /**
  * Full screen for a page (a board, a PDF or saved page): the page fills the window, the rest of
  * the app is hidden, and the window goes into macOS full screen (and comes out only if it
- * wasn't there before). ⇧⌘↩ or the page's button turns it on and off; leaving the page ends it.
+ * wasn't there before). ⇧⌘↩ or the page's button turns it on and off; Escape or leaving the
+ * page ends it.
  */
 import { setWindowFullscreen } from "../backend";
 import { h, replace } from "../ui/dom";
@@ -15,6 +16,7 @@ import { Maximize2, Minimize2 } from "lucide";
 interface Toggle {
   here(r: Route): boolean;
   toggle(): void;
+  busy?(): boolean;
 }
 
 /** The pages that can go full screen now, so the key finds the one shown. */
@@ -28,8 +30,9 @@ export interface FullScreen {
   stop(): void;
 }
 
-/** Full screen for the page that `here` says is shown; `focus` puts the keys back after. */
-export function fullScreen(here: (r: Route) => boolean, focus?: () => void): FullScreen {
+/** Full screen for the page that `here` says is shown; `focus` puts the keys back after, and
+ * `busy` says when Escape has something else to do on the page first. */
+export function fullScreen(here: (r: Route) => boolean, focus?: () => void, busy?: () => boolean): FullScreen {
   let on = false;
   let wasFullscreen = false;
   const button = h("button", { type: "button" });
@@ -49,7 +52,7 @@ export function fullScreen(here: (r: Route) => boolean, focus?: () => void): Ful
     else if (!wasFullscreen) void setWindowFullscreen(false).catch(() => {});
     focus?.();
   };
-  const t: Toggle = { here, toggle: () => set(!on) };
+  const t: Toggle = { here, toggle: () => set(!on), busy };
   toggles.add(t);
   button.addEventListener("click", t.toggle);
   show();
@@ -70,6 +73,15 @@ export function fullScreen(here: (r: Route) => boolean, focus?: () => void): Ful
 }
 
 const shownIn = (r: Route) => [...toggles].find((t) => t.here(r));
+
+// Escape ends it too, unless it is typed in a field (the find box, a board's text) or the page
+// has something else to do with it. A board takes every Escape for itself, so this comes first.
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || !fullPage.peek()) return;
+  const t = shownIn(router.current.peek());
+  if (!t || t.busy?.() || (e.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable='true']")) return;
+  t.toggle();
+}, true);
 
 defineAction({
   id: "app.fullscreen",

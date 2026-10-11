@@ -83,7 +83,8 @@ export function renderItem(host: HTMLElement, params: Record<string, string>, ct
   let alive = true;
   const cleanup: (() => void)[] = [];
   // Full screen: the item fills the screen, with its toolbar, and the rest of the app is hidden.
-  const full = fullScreen((to) => to.page === "item" && to.params.id === id);
+  // Escape first closes a capture's buttons, if they are showing.
+  const full = fullScreen((to) => to.page === "item" && to.params.id === id, undefined, () => !!document.querySelector(".selection-pop:not([hidden])"));
   full.button.classList.add("icon-button");
   zoomGroup.append(full.button);
   cleanup.push(full.stop);

@@ -201,7 +201,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   });
 
   // ---- Full screen: the drawing fills the screen, and the rest of the app is hidden ----
-  const full = fullScreen((r) => r.page === "board" && r.params.id === id, () => engine?.el.querySelector<HTMLElement>(".excalidraw")?.focus());
+  const full = fullScreen((r) => r.page === "board" && r.params.id === id, () => engine?.el.querySelector<HTMLElement>(".excalidraw")?.focus(), () => !!engine?.busy());
   full.button.classList.add("board-full-button");
   cleanup.push(full.stop);
 
