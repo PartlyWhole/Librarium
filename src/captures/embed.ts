@@ -25,7 +25,7 @@ export function captureEmbed(r: RecordInfo, open: (id: string, e: MouseEvent) =>
   // Several parts, or a picture: each part in order, pictures as pictures.
   if (Number(r.fields[F.parts] ?? 1) > 1 || !quote) {
     void anchorOf(r.id).then((a) => {
-      const parts = a.parts.map((p, i): ShownPart => (isRegion(p) ? { picture: regionImage(r.id, i + 1, "capture-region embed-region") } : { text: flowQuote(partQuote(p)) }));
+      const parts = a.parts.map((p, i): ShownPart => (isRegion(p) ? { picture: regionImage(r.id, i + 1, "capture-region embed-region") } : { text: flowQuote(partQuote(p)), joined: !!p.continues }));
       block.querySelector(":scope > .embed-quote")?.remove();
       block.prepend(...quoteParts(parts, "embed-quote"));
     }, () => {});

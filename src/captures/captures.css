@@ -104,3 +104,7 @@
 .ref-after { margin: 6px 0 0; }
 
 @media (prefers-reduced-motion: reduce) { .capture-card .capture-tools, .embed-edit, .cm-embed.embed { transition: none; } }
+/* In the draft, the gap between passages is a button: "[…]" or a join "⁀" (the words run on). */
+button.quote-gap, .quote-join { border: 0; padding: 0; background: none; font: inherit; color: var(--muted); cursor: pointer; border-radius: var(--r1); }
+.quote-join { color: var(--accent-text); }
+button.quote-gap:hover, .quote-join:hover, button.quote-gap:focus-visible, .quote-join:focus-visible { background: var(--hover); color: var(--ink); outline: none; }

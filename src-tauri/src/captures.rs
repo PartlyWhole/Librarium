@@ -48,9 +48,17 @@ fn auto_title(quote: &str, source_title: &str) -> String {
     }
 }
 
-/// The parts' quotes, each trimmed, the empty ones left out, joined with " […] ".
+/// The parts' quotes, each trimmed, the empty ones left out, joined with " […] ", or with a
+/// space before a part that continues the sentence of the one before.
 fn quote_of(parts: &[CapturePart]) -> String {
-    parts.iter().map(|p| p.quote.trim()).filter(|q| !q.is_empty()).collect::<Vec<_>>().join(" […] ")
+    let mut out = String::new();
+    for p in parts.iter().filter(|p| !p.quote.trim().is_empty()) {
+        if !out.is_empty() {
+            out.push_str(if p.continues == Some(true) { " " } else { " […] " });
+        }
+        out.push_str(p.quote.trim());
+    }
+    out
 }
 
 /// The anchor's parts, and the region pictures to write beside them (`.region-<N>.png`,
@@ -63,6 +71,9 @@ fn anchor_parts(parts: &[CapturePart]) -> Result<(Vec<Value>, Sidecars)> {
     let mut regions = vec![];
     for (i, part) in parts.iter().enumerate() {
         let mut v = json!({ "selector": part.selector });
+        if part.continues == Some(true) {
+            v["continues"] = json!(true);
+        }
         if !part.boxes.is_empty() {
             v["boxes"] = json!(part.boxes);
         }
@@ -259,4 +270,22 @@ pub fn region(lib: &Library, id: Id, n: u32) -> Result<String> {
     let bytes = fs::read(lib.root.join(FOLDER).join(format!("{id}.region-{n}.png")))
         .map_err(|_| Error::not_found("That region’s picture can’t be found."))?;
     Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn part(quote: &str, continues: Option<bool>) -> CapturePart {
+        CapturePart { selector: vec![], quote: quote.into(), locator: None, region_png: None, boxes: vec![], continues }
+    }
+
+    #[test]
+    fn parts_join_with_a_gap_or_run_on() {
+        let parts = [part("more their logic becomes", None), part("our own logic", Some(true)), part("over ends.", None)];
+        assert_eq!(quote_of(&parts), "more their logic becomes our own logic […] over ends.");
+        // A region between (no quote) neither joins nor leaves a double gap.
+        let parts = [part("one", None), part("", None), part("two", None)];
+        assert_eq!(quote_of(&parts), "one […] two");
+    }
 }

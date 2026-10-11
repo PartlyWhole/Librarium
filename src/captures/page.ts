@@ -68,7 +68,7 @@ function mount(host: HTMLElement, ctx: PageContext, t: RecordText, anchor: Ancho
     const confirm = status === "moved" ? h("button", { class: "link-button", onclick: () => void confirmMoved(anchor!, i).then(redraw) }, "This is the place") : null;
     const show = many ? iconButton(LocateFixed, `Show part ${i + 1} in the source`, () => openRecord(src, placeParams(anchor, p), { again: true }), undefined, 15) : null;
     const tools = show || status ? h("span", { class: `capture-tools ${isRegion(p) ? "row tight" : "inline-tools"}` }, show, badge(status), confirm) : null;
-    return isRegion(p) ? { picture: h("div", { class: "capture-part" }, regionImage(id, i + 1), tools) } : { text: flowQuote(partQuote(p)), after: tools };
+    return isRegion(p) ? { picture: h("div", { class: "capture-part" }, regionImage(id, i + 1), tools) } : { text: flowQuote(partQuote(p)), after: tools, joined: !!p.continues };
   });
   const cite = h("p", { class: "capture-cite muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: MouseEvent) => (e.preventDefault(), openRecord(src, placeParams(anchor), { again: true, newTab: e.metaKey })) }, citation(info)));
 

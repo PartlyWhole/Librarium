@@ -20,7 +20,7 @@ import { toast } from "../ui/toast";
 import type { CapturePart, SavedMarks, StoredText, Written } from "../types";
 import { onReaderOpen, type Box, type EditedPart, type EditPart, type OpenReader, type PartsEditor, type ReaderRegion, type ReaderSelection } from "../reader";
 import { CFI, describe, flowQuote, locateSelection, MEDIA, PDF_PAGE, sliceCp, type Selector } from "./anchor";
-import { anchorOf, capturesOf, cite, isRegion, partQuote, placeParams, quoteParts, type ShownPart } from "./common";
+import { anchorOf, capturesOf, cite, isRegion, partQuote, placeParams, quoteParts, runsOn, type ShownPart } from "./common";
 import { deleteCapture } from "./delete";
 import { Crop, Highlighter, Pencil, Quote, Trash2, X } from "lucide";
 
@@ -83,7 +83,22 @@ const byOrder = (a: DraftPart, b: DraftPart) => {
   return 0;
 };
 
-const toPart = ({ selector, quote, locator, region_png, boxes }: DraftPart): CapturePart => ({ selector, quote, locator, region_png, boxes });
+/**
+ * Whether each part continues the text part before it: as the user marked it, else when the
+ * words run on (no part before, or a picture between, never).
+ */
+function joins(parts: DraftPart[]): boolean[] {
+  return parts.map((p, i) => {
+    const before = parts[i - 1];
+    if (!before || p.region || before.region || !p.quote.trim() || !before.quote.trim()) return false;
+    return p.continues ?? runsOn(before.quote, p.quote);
+  });
+}
+
+const toParts = (parts: DraftPart[]): CapturePart[] => {
+  const joined = joins(parts);
+  return parts.map(({ selector, quote, locator, region_png, boxes }, i) => ({ selector, quote, locator, region_png, boxes, ...(joined[i] ? { continues: true } : {}) }));
+};
 
 /** A part from a selection (text, or a picture on its own), anchored in the stored text. */
 function partFromSelection(sel: ReaderSelection, st: StoredText | null, key = `p${++n}`): { part: DraftPart; found: boolean } {
@@ -145,6 +160,7 @@ async function partsOf(id: string): Promise<DraftPart[] | null> {
       boxes: p.boxes ?? (xywh ? [{ ...(page ? { page } : {}), x: xywh[0]!, y: xywh[1]!, w: xywh[2]!, h: xywh[3]! }] : []),
       region,
       cfi: frag("epubcfi("),
+      continues: p.continues,
     });
   }
   return parts;
@@ -200,7 +216,7 @@ onReaderOpen((r) => {
     if (!d?.parts.length) return;
     try {
       if (d.editing) {
-        let w = await call<Written>("captures.update", { id: d.editing.id, parts: d.parts.map(toPart) });
+        let w = await call<Written>("captures.update", { id: d.editing.id, parts: toParts(d.parts) });
         // Recorded now, so a failed rename below doesn't hide the new parts.
         putRecord(w.info);
         const title = d.editing.title.replace(/\s+/g, " ").trim();
@@ -210,7 +226,7 @@ onReaderOpen((r) => {
         toast("Capture updated.", { action: { label: "Open", run: () => openRecord(w.info.id) } });
       } else {
         const st = await r.text();
-        const w = await call<Written>("captures.create", { source: source.id, snapshot: r.snapshot ?? null, text: st?.origin ?? null, parts: d.parts.map(toPart), words: d.words, title: d.title?.trim() || null });
+        const w = await call<Written>("captures.create", { source: source.id, snapshot: r.snapshot ?? null, text: st?.origin ?? null, parts: toParts(d.parts), words: d.words, title: d.title?.trim() || null });
         putRecord(w.info);
         setDraft(k, null);
         toast("Captured.", { action: { label: "Open", run: () => openRecord(w.info.id) } });
@@ -367,9 +383,19 @@ onReaderOpen((r) => {
 
   function renderPanel(d: Draft) {
     const remove = (p: DraftPart, size = 12) => h("button", { class: "icon-button inline-remove", type: "button", "aria-label": "Remove this part", title: "Remove this part", onclick: () => setDraft(k, { ...d, parts: d.parts.filter((x) => x !== p) }) }, icon(X, size));
-    const parts = quoteParts(d.parts.map((p): ShownPart => (p.preview
+    // Between two passages: a join where the words run on, else "[…]"; a click turns one into the
+    // other (kept on the part, over the guess).
+    const joined = joins(d.parts);
+    const gap = (p: DraftPart, i: number) => {
+      const on = joined[i]!;
+      const flip = () => setDraft(k, { ...d, parts: d.parts.map((x) => (x === p ? { ...x, continues: !on } : x)) });
+      return on
+        ? h("button", { class: "quote-join", type: "button", title: "Joined: the text runs on across a page break or a note. Click to show a gap […] instead.", "aria-label": "Joined to the passage before; show a gap instead", onclick: flip }, " ⁀ ")
+        : h("button", { class: "quote-gap", type: "button", title: "A passage left out. Click to join, if the text runs on.", "aria-label": "A gap; join to the passage before instead", onclick: flip }, " […] ");
+    };
+    const parts = quoteParts(d.parts.map((p, i): ShownPart => (p.preview
       ? { picture: h("div", { class: "draft-picture" }, h("img", { class: "capture-region", src: p.preview, alt: "The captured picture" }), remove(p)) }
-      : { text: p.quote, after: remove(p) })), "capture-quote");
+      : { text: p.quote, after: remove(p), gap: gap(p, i) })), "capture-quote");
     const title = h("input", { class: "draft-title-input", type: "text", placeholder: "Title (optional)", "aria-label": "Title", spellcheck: true });
     title.value = d.title ?? "";
     const words = h("textarea", { class: "words-input", rows: 3, placeholder: "Your words (optional)", "aria-label": "Your words" });

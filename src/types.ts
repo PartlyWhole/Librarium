@@ -431,7 +431,12 @@ region_png: string | null,
  * Where the part is drawn: boxes in percent of their page (with a 1-based `page` in a PDF)
  * or of the image.
  */
-boxes: { page?: number, x: number, y: number, w: number, h: number }[], };
+boxes: { page?: number, x: number, y: number, w: number, h: number }[], 
+/**
+ * This part continues the sentence of the part before (split by a page break or a
+ * footnote), so the quote joins them with a space instead of " […] ".
+ */
+continues?: boolean, };
 
 export type CaptureParams = { source: string, snapshot: string | null, 
 /**

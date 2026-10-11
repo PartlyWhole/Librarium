@@ -628,6 +628,11 @@ pub struct CapturePart {
     #[ts(type = "{ page?: number, x: number, y: number, w: number, h: number }[]")]
     #[serde(default)]
     pub boxes: Vec<Value>,
+    /// This part continues the sentence of the part before (split by a page break or a
+    /// footnote), so the quote joins them with a space instead of " […] ".
+    #[ts(optional)]
+    #[serde(default)]
+    pub continues: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, TS)]

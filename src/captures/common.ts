@@ -94,12 +94,23 @@ export function copyEmbed(c: RecordInfo): void {
   void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note."), () => toast("The embed couldn’t be copied."));
 }
 
-/** A part as shown: its text (with anything to show after it), or a picture. */
-export type ShownPart = { text: string; after?: Node | null } | { picture: HTMLElement };
+/**
+ * Whether a part runs on from the one before as one sentence (split by a page break or a
+ * footnote): the first ends mid-sentence and the next starts in lower case.
+ */
+export const runsOn = (before: string, after: string): boolean =>
+  !/[.!?…:;]["'”’)\]]*$/u.test(before.trim()) && /^["'“‘(]*\p{Ll}/u.test(after.trim());
+
+/**
+ * A part as shown: its text (with anything to show after it, and whether it continues the one
+ * before, or what to show between them), or a picture.
+ */
+export type ShownPart = { text: string; after?: Node | null; joined?: boolean; gap?: Node } | { picture: HTMLElement };
 
 /**
  * Parts as they read: each run of text parts one quotation, joined by an inline "[…]" (a
- * passage left out); a picture between them stands on its own.
+ * passage left out), or by a space where a part continues the sentence; a picture between them
+ * stands on its own.
  */
 export function quoteParts(parts: ShownPart[], cls: string): HTMLElement[] {
   const out: HTMLElement[] = [];
@@ -110,7 +121,7 @@ export function quoteParts(parts: ShownPart[], cls: string): HTMLElement[] {
       out.push(p.picture);
       continue;
     }
-    if (quote) quote.append(h("span", { class: "quote-gap", title: "A passage left out" }, " […] "));
+    if (quote) quote.append(p.gap ?? (p.joined ? " " : h("span", { class: "quote-gap", title: "A passage left out" }, " […] ")));
     else out.push((quote = h("blockquote", { class: cls })));
     quote.append(p.text, p.after ?? "");
   }

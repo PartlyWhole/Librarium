@@ -408,9 +408,14 @@ dragged out for capture.
     capture. Escape cancels."
   - Clicking a picture in an EPUB captures it.
 - **The draft** sits at the top of the side panel's Captures view, which opens by itself.
-  - It shows the parts as one quotation ("[…]" between them, × removes one), the hint "Select
-    more text, or drag a region (⇧⌘R), to add to it", "From <citation>", "Title (optional)" (blank,
-    the title is the quote's first words), and "Your words (optional)".
+  - It shows the parts as one quotation ("[…]" between them, × removes one). Where a part runs
+    on from the one before (it ends mid-sentence and the next starts in lower case, as across a
+    page break or a footnote), they are joined with a space instead, shown "⁀"; clicking the
+    "⁀" or the "[…]" turns one into the other. The capture page and embeds read joined parts as
+    one sentence.
+  - Then the hint "Select more text, or drag a region (⇧⌘R), to add to it", "From <citation>",
+    "Title (optional)" (blank, the title is the quote's first words), and "Your words
+    (optional)".
   - **Discard** / **Save capture** (⌘↩).
   - There is one draft per source and snapshot. It survives leaving and returning, and its parts
     are highlighted in place.
