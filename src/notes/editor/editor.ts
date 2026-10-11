@@ -8,7 +8,7 @@ import { defaultKeymap, history, historyField, indentWithTab, isolateHistory, re
 import { bracketMatching, indentOnInput, indentUnit } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { EditorState, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
-import { crosshairCursor, drawSelection, EditorView, keymap, placeholder, rectangularSelection } from "@codemirror/view";
+import { crosshairCursor, drawSelection, EditorView, keymap, placeholder, rectangularSelection, tooltips } from "@codemirror/view";
 import { editorChanged, type TextHistory } from "../../app/undo";
 import { embedExtension, embedShown } from "../embeds";
 import { clipboard, clipboardKeymap } from "./clipboard";
@@ -42,6 +42,8 @@ interface EditorOptions {
   /** Typing made a new undo step (not undoing or redoing). */
   onHistoryStep?: () => void;
   placeholder?: string;
+  /** Suggestions and other pop-ups go on the page itself (the editor sits in a clipped box). */
+  popupsOnPage?: boolean;
 }
 
 let active: EditorView | null = null;
@@ -187,6 +189,7 @@ export function createEditor(o: EditorOptions): EditorView {
     }),
   ];
   if (o.placeholder) extensions.push(placeholder(o.placeholder));
+  if (o.popupsOnPage) extensions.push(tooltips({ parent: document.body, position: "fixed" }));
   let state: EditorState | null = null;
   if (o.history) {
     try {

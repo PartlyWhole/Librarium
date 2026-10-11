@@ -4,10 +4,10 @@
  */
 import { createElement, Fragment, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, Sidebar, exportToBlob, exportToSvg, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, FONT_FAMILY, sceneCoordsToViewportCoords, Sidebar, exportToBlob, exportToSvg, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { passThrough } from "../ui/keys";
-import { hasRefs, RECORD_LINK, recordOf, UUID, wordsAndLinks, type BoardElement, type BoardLink } from "./links";
+import { boxText, hasRefs, isTextBox, RECORD_LINK, recordOf, TEXT_BOX, UUID, wordsAndLinks, type BoardElement, type BoardLink } from "./links";
 
 type Api = Parameters<NonNullable<Parameters<typeof Excalidraw>[0]["excalidrawAPI"]>>[0];
 type AppState = ReturnType<Api["getAppState"]>;
@@ -33,6 +33,8 @@ interface EngineOptions {
   onFiles(files: File[]): void;
   /** Draws a record's card into `host`; returns how to stop. */
   renderCard(id: string, host: HTMLElement): () => void;
+  /** Draws a text box's editor into `host`, written in as a note is. */
+  renderTextBox(host: HTMLElement, box: TextBoxHost): TextBoxView;
   /** A picture's data (a library item, by ID). */
   imageOf(id: string): Promise<Picture | null>;
   /** A link was asked for in a text being written (this element), at `at` in its words: by
@@ -53,6 +55,25 @@ interface EngineOptions {
     docked: boolean;
     onDock(docked: boolean): void;
   };
+}
+
+/** What a text box's editor is given: its Markdown, and where its changes go. */
+export interface TextBoxHost {
+  text: string;
+  readOnly: boolean;
+  /** The words changed (kept, not yet a step to undo). */
+  changed(text: string): void;
+  /** Writing ended (the editor was left): a step to undo, if anything changed. */
+  done(): void;
+}
+
+export interface TextBoxView {
+  /** Puts the cursor in it: at a point on screen, or where it was. */
+  focus(at?: { x: number; y: number }): void;
+  /** Shows other words (undo, redo, or a drawing changed elsewhere). */
+  set(text: string): void;
+  hasFocus(): boolean;
+  stop(): void;
 }
 
 /** A record to put on the board, or words with links in them. */
@@ -88,6 +109,8 @@ export interface BoardEngine {
   link(ids: string[], to: BoardLink, opts?: { at?: number; typed?: boolean }): boolean;
   /** Takes back a `[[` typed just before `at` in a text (the link wasn't chosen). */
   untype(id: string, at: number): void;
+  /** A new text box in the middle of what is in view, ready to write in. */
+  addTextBox(): void;
   /** Excalidraw's own undo and redo. */
   undo(): boolean;
   redo(): boolean;
@@ -162,6 +185,9 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
   const onChange = (elements: Parameters<typeof getSceneVersion>[0], state: AppState) => {
     keepLinks(state);
     placeChip();
+    drawNames(state);
+    syncBoxes(state);
+    if (wanted.size && !busy(state)) queueMicrotask(fit);
     const v = getSceneVersion(elements);
     if (performance.now() < quietUntil) {
       if (v !== version && quiet === "replay") o.onChange();
@@ -188,9 +214,11 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
         viewModeEnabled: o.readOnly,
         aiEnabled: false,
         onChange,
-        onLinkOpen: (element: { link: string | null; customData?: unknown }, event: CustomEvent<{ nativeEvent: MouseEvent | { metaKey?: boolean; clientX?: number; clientY?: number } }>) => {
+        onLinkOpen: (element: { id: string; link: string | null; customData?: unknown }, event: CustomEvent<{ nativeEvent: MouseEvent | { metaKey?: boolean; clientX?: number; clientY?: number } }>) => {
           if (!element.link) return;
           event.preventDefault();
+          // A text box's corner button writes in it.
+          if (element.link === TEXT_BOX) return writeInBox(element.id);
           const n = event.detail?.nativeEvent;
           o.onOpenLink(element.link, !!n?.metaKey, { links: linksOf(element), at: { x: n?.clientX ?? 0, y: n?.clientY ?? 0 } });
         },
@@ -212,11 +240,12 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
           // Pictures copied from another board come back by their IDs (their data isn't copied).
           return !(Object.keys(data.files ?? {}).length > 0 && !data.elements?.length);
         },
-        // Cards are Librarium's records only (no web pages, videos or posts).
-        validateEmbeddable: (link: string) => recordOf(link) !== null,
-        renderEmbeddable: (element: { link: string | null }) => {
+        // Cards are Librarium's records only (no web pages, videos or posts), and text boxes.
+        validateEmbeddable: (link: string) => recordOf(link) !== null || link === TEXT_BOX,
+        renderEmbeddable: (element: { id: string; link: string | null }) => {
+          if (element.link === TEXT_BOX) return createElement(Host, { key: element.id, render: boxRender(element.id), className: "board-text-host" });
           const id = recordOf(element.link);
-          return id ? createElement(Host, { key: id, render: cardRender(id), className: "board-card-host" }) : null;
+          return id ? createElement(Host, { key: element.id, render: cardRender(element.id, id), className: "board-card-host" }) : null;
         },
         renderTopRightUI: () =>
           createElement(Fragment, null,
@@ -227,7 +256,145 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     );
   // The same functions each time, so React keeps what they drew.
   const cards = new Map<string, (host: HTMLElement) => () => void>();
-  const cardRender = (id: string) => cards.get(id) ?? cards.set(id, (host) => o.renderCard(id, host)).get(id)!;
+  const cardRender = (elementId: string, id: string) => cards.get(elementId) ?? cards.set(elementId, (host) => fitted(elementId, host, (inner) => o.renderCard(id, inner))).get(elementId)!;
+
+  // ---- Text boxes: written in as a note is, with links and embeds ----
+  /** Each box shown: its editor, and the words it last had. */
+  const boxes = new Map<string, { view: TextBoxView; text: string; dirty: boolean; host: HTMLElement }>();
+  /** A box just made, to write in as soon as it is shown. */
+  let writeIn: string | null = null;
+  const boxRender = (elementId: string) =>
+    cards.get(elementId) ??
+    cards.set(elementId, (host) =>
+      fitted(elementId, host, (inner) => {
+        const e = api?.getSceneElementsIncludingDeleted().find((x) => x.id === elementId);
+        const box = { view: null as unknown as TextBoxView, text: e ? boxText(e) : "", dirty: false, host: inner };
+        box.view = o.renderTextBox(inner, {
+          text: box.text,
+          readOnly: o.readOnly,
+          changed: (text) => ((box.text = text), (box.dirty = true), setBoxText(elementId, text, false)),
+          done: () => {
+            if (box.dirty || !box.text.trim()) setBoxText(elementId, box.text, true);
+            box.dirty = false;
+          },
+        });
+        boxes.set(elementId, box);
+        // Keys and the clipboard are the editor's while it is written in, not the drawing's;
+        // Escape leaves it, the box selected.
+        const own = (ev: Event) => ev.stopPropagation();
+        const keys = (ev: KeyboardEvent) => {
+          if (ev.key === "Escape" && !ev.defaultPrevented) {
+            (document.activeElement as HTMLElement | null)?.blur();
+            api?.updateScene({ appState: { activeEmbeddable: null, selectedElementIds: { [elementId]: true } } as never });
+          }
+          ev.stopPropagation();
+        };
+        inner.addEventListener("keydown", keys);
+        for (const t of ["keyup", "paste", "copy", "cut"]) inner.addEventListener(t, own);
+        if (writeIn === elementId) ((writeIn = null), requestAnimationFrame(() => box.view.focus()));
+        return () => {
+          boxes.delete(elementId);
+          box.view.stop();
+        };
+      }),
+    ).get(elementId)!;
+  /** Writes in a box (as Excalidraw does for a text: a double-click, or Enter when it is selected). */
+  function writeInBox(id: string, at?: { x: number; y: number }) {
+    const e = api?.getSceneElements().find((x) => x.id === id);
+    const box = boxes.get(id);
+    if (!api || !e || !box || o.readOnly) return;
+    api.updateScene({ appState: { activeEmbeddable: { element: e, state: "active" }, selectedElementIds: { [id]: true } } as never });
+    requestAnimationFrame(() => box.view.focus(at));
+  }
+  const boxAt = (x: number, y: number) =>
+    [...boxes].find(([, b]) => {
+      const r = b.host.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    })?.[0];
+  el.addEventListener("dblclick", (ev) => {
+    const id = boxAt(ev.clientX, ev.clientY);
+    if (!id) return;
+    ev.stopPropagation();
+    writeInBox(id, { x: ev.clientX, y: ev.clientY });
+  }, true);
+  el.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" || ev.metaKey || ev.altKey || !api || (ev.target as HTMLElement).closest(".board-text-box, textarea, input")) return;
+    const sel = Object.keys(api.getAppState().selectedElementIds);
+    if (sel.length !== 1 || !boxes.has(sel[0]!)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    writeInBox(sel[0]!);
+  }, true);
+
+  /** A box's words into the drawing: kept while writing (saved, not yet a step), then a step
+   * when writing ends. A box left empty goes. */
+  function setBoxText(id: string, text: string, commit: boolean) {
+    if (!api) return;
+    const all = api.getSceneElementsIncludingDeleted();
+    if (!all.some((e) => e.id === id && !e.isDeleted)) return;
+    const gone = commit && !text.trim();
+    const next = all.map((e) => (e.id !== id ? e : gone ? { ...e, ...touched(e), isDeleted: true } : { ...e, ...touched(e), customData: { ...(e.customData ?? {}), librarium: { ...((e.customData as BoardElement["customData"])?.librarium ?? {}), text } } }));
+    if (!commit) {
+      quiet = "replay";
+      quietUntil = performance.now() + 50;
+    }
+    api.updateScene({ elements: next as never, captureUpdate: commit ? CaptureUpdateAction.IMMEDIATELY : CaptureUpdateAction.EVENTUALLY });
+  }
+  /** Boxes show their words as the drawing has them (after undo, redo or a load), and the box
+   * made active (selected, then clicked) is written in. */
+  function syncBoxes(state: AppState) {
+    if (!api || !boxes.size) return;
+    for (const e of api.getSceneElements()) {
+      const box = boxes.get(e.id);
+      if (!box || box.view.hasFocus()) continue;
+      const text = boxText(e);
+      if (text !== box.text) ((box.text = text), box.view.set(text));
+    }
+    const active = state.activeEmbeddable;
+    if (active?.state === "active") {
+      const box = boxes.get(active.element.id);
+      if (box && !box.view.hasFocus()) box.view.focus();
+    }
+  }
+
+  // ---- Cards are as tall as what they show (no empty space, nothing to scroll) ----
+  /** Heights wanted, by element, kept while a card is being resized or the drawing is busy. */
+  const wanted = new Map<string, number>();
+  /** Draws into `host` through a box whose height the card's element follows. */
+  const fitted = (elementId: string, host: HTMLElement, render: (inner: HTMLElement) => () => void): (() => void) => {
+    const inner = document.createElement("div");
+    inner.className = "board-fit";
+    host.appendChild(inner);
+    const stop = render(inner);
+    const watch = new ResizeObserver(() => {
+      if (!inner.offsetHeight) return;
+      wanted.set(elementId, inner.offsetHeight);
+      fit();
+    });
+    watch.observe(inner);
+    return () => {
+      watch.disconnect();
+      stop();
+      inner.remove();
+    };
+  };
+  /** Gives cards their wanted heights (with Excalidraw's padding of the stroke width each side),
+   * saved but not a step to undo. */
+  function fit() {
+    if (!api || !wanted.size || busy(api.getAppState())) return;
+    const all = api.getSceneElementsIncludingDeleted();
+    const next = all.map((e) => {
+      const h = wanted.get(e.id);
+      if (h === undefined) return e;
+      const height = Math.ceil(h + 2 * e.strokeWidth);
+      return Math.abs(e.height - height) > 1 ? { ...e, height, ...touched(e) } : e;
+    });
+    wanted.clear();
+    if (next.every((e, i) => e === all[i])) return;
+    quiet = "replay";
+    quietUntil = performance.now() + 50;
+    api.updateScene({ elements: next as never, captureUpdate: CaptureUpdateAction.NEVER });
+  }
   const side = o.readOnly ? undefined : o.sidebar;
   const sideIcon = (host: HTMLElement) => void host.append(side!.icon());
   let docked = side?.docked ?? false;
@@ -325,6 +492,91 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     document.execCommand("insertText", false, words);
   }, true);
 
+  // ---- Linked names in texts, underlined over them: a click on one opens it, as in a note ----
+  const names = document.createElement("div");
+  names.className = "board-names";
+  host.appendChild(names);
+  const measure = document.createElement("canvas").getContext("2d")!;
+  const fontName = (id: number) => Object.entries(FONT_FAMILY).find(([, n]) => n === id)?.[0] ?? "Excalifont";
+  /** Where each linked name is, on screen, and its record. */
+  let shown: { id: string; label: string; box: DOMRect }[] = [];
+  function drawNames(state: AppState) {
+    if (!api) return;
+    const all = api.getSceneElements() as unknown as readonly (Drawn & { width: number; height: number; angle: number; fontSize: number; fontFamily: number; lineHeight: number; textAlign: string })[];
+    const b = host.getBoundingClientRect();
+    const zoom = state.zoom.value;
+    const out: HTMLElement[] = [];
+    // A card or box drawn over a text hides its names (they are drawn above everything).
+    const covered = (t: (typeof all)[number], i: number) =>
+      all.slice(i + 1).some((c) => c.type === "embeddable" && c.x < t.x + t.width && c.x + c.width > t.x && c.y < t.y + t.height && c.y + c.height > t.y);
+    for (const [i, t] of all.entries()) {
+      if (t.type !== "text" || t.id === state.editingTextElement?.id || !t.text || covered(t, i)) continue;
+      const links = linksOf(holderOf(t, all));
+      if (!links.length) continue;
+      measure.font = `${t.fontSize}px ${fontName(t.fontFamily)}`;
+      const lines = t.text.split("\n");
+      const lineH = t.fontSize * t.lineHeight;
+      const at = sceneCoordsToViewportCoords({ sceneX: t.x, sceneY: t.y }, state);
+      const frame = document.createElement("div");
+      frame.className = "board-names-frame";
+      Object.assign(frame.style, { left: `${at.x - b.left}px`, top: `${at.y - b.top}px`, width: `${t.width * zoom}px`, height: `${t.height * zoom}px`, transform: t.angle ? `rotate(${t.angle}rad)` : "" });
+      // A name may be wrapped onto several lines: each line's part is underlined.
+      const flat = lines.join(" ");
+      for (const l of links) {
+        const pattern = new RegExp(l.label.trim().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"), "g");
+        for (const m of flat.matchAll(pattern)) {
+          let start = m.index!;
+          const end = start + m[0].length;
+          let lineStart = 0;
+          lines.forEach((line, i) => {
+            const lineEnd = lineStart + line.length;
+            const from = Math.max(start, lineStart);
+            const to = Math.min(end, lineEnd);
+            if (from < to) {
+              const width = measure.measureText(line).width;
+              const left = t.textAlign === "center" ? (t.width - width) / 2 : t.textAlign === "right" ? t.width - width : 0;
+              const x = left + measure.measureText(line.slice(0, from - lineStart)).width;
+              const w = measure.measureText(line.slice(from - lineStart, to - lineStart)).width;
+              const name = document.createElement("span");
+              name.className = "board-name";
+              name.dataset.id = l.id;
+              name.dataset.label = l.label;
+              Object.assign(name.style, { left: `${x * zoom}px`, top: `${i * lineH * zoom}px`, width: `${w * zoom}px`, height: `${lineH * zoom}px` });
+              frame.appendChild(name);
+            }
+            lineStart = lineEnd + 1;
+          });
+          start = end;
+        }
+      }
+      if (frame.childElementCount) out.push(frame);
+    }
+    names.replaceChildren(...out);
+    shown = [...names.querySelectorAll<HTMLElement>(".board-name")].map((n) => ({ id: n.dataset.id!, label: n.dataset.label!, box: n.getBoundingClientRect() }));
+  }
+  // The drawing's fonts load after it is first drawn: names are measured again then.
+  document.fonts?.addEventListener("loadingdone", () => api && drawNames(api.getAppState()));
+  const nameAt = (x: number, y: number) => shown.find((n) => x >= n.box.left && x <= n.box.right && y >= n.box.top && y <= n.box.bottom);
+  // A click on a name opens it (⌘: in a new tab), once it is clear it isn't the start of a
+  // double-click (which edits the text). Pressing still selects and drags the text as before.
+  let down: { x: number; y: number } | null = null;
+  let opening: ReturnType<typeof setTimeout> | undefined;
+  el.addEventListener("pointerdown", (e) => {
+    clearTimeout(opening);
+    down = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+  }, true);
+  el.addEventListener("pointerup", (e) => {
+    const d = down;
+    down = null;
+    if (!d || !api || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || api.getAppState().activeTool.type !== "selection") return;
+    const n = nameAt(e.clientX, e.clientY);
+    if (!n) return;
+    const newTab = e.metaKey;
+    opening = setTimeout(() => o.onOpenLink(`${RECORD_LINK}${n.id}`, newTab, { links: [], at: { x: e.clientX, y: e.clientY } }), 300);
+  }, true);
+  el.addEventListener("dblclick", () => clearTimeout(opening), true);
+  el.addEventListener("pointermove", (e) => host.classList.toggle("over-name", !!nameAt(e.clientX, e.clientY)));
+
   /** Where the pointer last was over the drawing (a paste goes there). */
   let pointer: { x: number; y: number } | undefined;
   el.addEventListener("pointermove", (e) => (pointer = { x: e.clientX, y: e.clientY }));
@@ -420,6 +672,17 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
       api.updateScene({ elements: restoreElements(next as never, null, { refreshDimensions: true, repairBindings: true }), captureUpdate: CaptureUpdateAction.IMMEDIATELY });
       return true;
     },
+    addTextBox() {
+      if (!api || o.readOnly) return;
+      const p = scenePoint();
+      const [w, h] = [320, 48];
+      const [e] = restoreElements([{ type: "embeddable", id: cardId(), link: TEXT_BOX, x: p.x - w / 2, y: p.y - h / 2, width: w, height: h, strokeColor: "transparent", backgroundColor: "transparent", roundness: null, customData: { librarium: { text: "" } } }] as never, null);
+      writeIn = e!.id;
+      // Made as part of the step its first words make (or not at all, if it is left empty).
+      quiet = "replay";
+      quietUntil = performance.now() + 50;
+      api.updateScene({ elements: [...api.getSceneElementsIncludingDeleted(), e!] as never, appState: { selectedElementIds: { [e!.id]: true }, activeEmbeddable: { element: e, state: "active" } } as never, captureUpdate: CaptureUpdateAction.EVENTUALLY });
+    },
     untype(id, at) {
       if (!api) return;
       const all = api.getSceneElementsIncludingDeleted() as unknown as readonly Drawn[];
@@ -455,6 +718,7 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
       root.unmount();
       el.remove();
       chip.remove();
+      names.remove();
     },
   };
   // Ready once Excalidraw has handed over its API.
@@ -479,12 +743,15 @@ async function portableScene(scene: string, p: Portable) {
   const out: unknown[] = [];
   for (const e of d.elements) {
     const id = e.type === "embeddable" && !e.isDeleted ? recordOf(e.link) : null;
-    if (!id) {
+    const box = !e.isDeleted && isTextBox(e);
+    if (!id && !box) {
       out.push(e);
       continue;
     }
+    // A text box becomes its words (each link and embed as its name); a card, a box with its words.
+    const label = box ? wordsAndLinks(boxText(e)).words : p.cardText(id!);
     out.push(...convertToExcalidrawElements([
-      { type: "rectangle", x: e.x, y: e.y, width: e.width, height: e.height, strokeColor: "#868e96", backgroundColor: "transparent", roundness: { type: 3 }, label: { text: p.cardText(id), fontSize: 16, textAlign: "left", verticalAlign: "top" }, link: e.link },
+      { type: box ? "text" : "rectangle", x: e.x, y: e.y, ...(box ? { text: label, fontSize: 16 } : { width: e.width, height: e.height, strokeColor: "#868e96", backgroundColor: "transparent", roundness: { type: 3 }, label: { text: label, fontSize: 16, textAlign: "left", verticalAlign: "top" }, link: e.link }) },
     ] as never));
   }
   const files: Record<string, unknown> = { ...(d.files ?? {}) };

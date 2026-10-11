@@ -24,8 +24,13 @@ export interface BoardElement {
   isDeleted?: boolean;
   containerId?: string | null;
   /** `embed`: a card or picture written `![[…]]` (a capture's quotation, a picture). */
-  customData?: { librarium?: { links?: BoardLink[]; embed?: boolean } } & Record<string, unknown>;
+  customData?: { librarium?: { links?: BoardLink[]; embed?: boolean; text?: string } } & Record<string, unknown>;
 }
+
+/** A text box: an `embeddable` with this link, its Markdown in `customData.librarium.text`. */
+export const TEXT_BOX = "librarium://text";
+export const isTextBox = (e: { type: string; link?: string | null }) => e.type === "embeddable" && e.link === TEXT_BOX;
+export const boxText = (e: { customData?: unknown }): string => (e.customData as BoardElement["customData"])?.librarium?.text ?? "";
 
 /** An element's link to a record (Excalidraw keeps one link per element). */
 export const RECORD_LINK = "librarium://record/";

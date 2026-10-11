@@ -14,9 +14,13 @@ import { parseLinks, type Link } from "./links";
 /** Marks hidden while their construct isn't being edited. */
 const MARKS = new Set(["HeaderMark", "EmphasisMark", "CodeMark", "StrikethroughMark", "HighlightMark", "QuoteMark"]);
 
+/** Whether the editor being drawn has the focus: only then do the cursor's constructs show
+ * their Markdown (an editor left reads as it is shown). */
+let writing = true;
+
 /** Whether any selection touches [from, to] (a cursor at either edge counts). */
 function touches(state: EditorState, from: number, to: number): boolean {
-  return state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+  return writing && state.selection.ranges.some((r) => r.from <= to && r.to >= from);
 }
 
 /** Whether any selection touches the lines of [from, to]. */
@@ -117,6 +121,7 @@ const dim = Decoration.mark({ class: "cm-mark-dim" });
 
 function build(view: EditorView, opts: LivePreviewOptions): Built {
   const { state } = view;
+  writing = view.hasFocus;
   const ranges: Range<Decoration>[] = [];
   const atomic: Range<Decoration>[] = [];
   const tree = syntaxTree(state);
@@ -245,7 +250,7 @@ export function livePreview(opts: LivePreviewOptions) {
         ({ decorations: this.decorations, atomic: this.atomic } = build(view, opts));
       }
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged || u.selectionSet || syntaxTree(u.startState) !== syntaxTree(u.state) || refreshed(u)) ({ decorations: this.decorations, atomic: this.atomic } = build(u.view, opts));
+        if (u.docChanged || u.viewportChanged || u.selectionSet || u.focusChanged || syntaxTree(u.startState) !== syntaxTree(u.state) || refreshed(u)) ({ decorations: this.decorations, atomic: this.atomic } = build(u.view, opts));
       }
     },
     {

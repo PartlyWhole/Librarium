@@ -25,7 +25,8 @@ import { resizeHandle } from "../ui/resize";
 import { effect, untracked } from "../ui/signal";
 import { toast } from "../ui/toast";
 import type { BoardLoaded, BoardSaved, Draft, ImportResult, RecordInfo, Written } from "../types";
-import type { BoardEngine, BoardInsert } from "./engine";
+import type { BoardEngine, BoardInsert, TextBoxHost, TextBoxView } from "./engine";
+import { createEditor, replaceDoc, textHistory } from "../notes/editor/editor";
 import { boardOutline, boardPage } from "./mirror";
 import { recordOf, wordsAndLinks, type BoardElement, type BoardLink } from "./links";
 import { parseLinks } from "../notes/editor/links";
@@ -34,7 +35,7 @@ import { contextMenu } from "../ui/menu";
 import { renderPicker } from "../captures/picker";
 import { renderCard } from "./cards";
 import { appTheme, isPicture, loadEngine, pictureData, portable } from "./shared";
-import { FolderInput, Quote } from "lucide";
+import { FolderInput, NotebookPen, Quote } from "lucide";
 
 const SAVE_MS = 1000;
 const DRAFT_MS = 300;
@@ -241,7 +242,9 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
       else void askToOpen(link, { from: info.title });
     },
     onPasteLinks: (text, at) => pasteLinks(text, at),
-    buttons: (bar) => bar.append(full.button),
+    renderTextBox: (host, box) => textBox(host, box),
+    // A text box, for writing with links and embeds as in a note (not on read-only boards).
+    buttons: (bar) => bar.append(...(readOnly ? [] : [h("button", { type: "button", class: "board-full-button", "aria-label": "Text box", title: "Text box: write as in a note, with [[ links and ![[ embeds", onclick: () => engine?.addTextBox() }, icon(NotebookPen, 18))]), full.button),
     sidebar: {
       title: "Captures and Library",
       icon: () => icon(Quote, 20),
@@ -284,6 +287,46 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     notices.append(bar);
     changed();
   } else if (loaded.stale_page && !readOnly) changed(); // The page was written from another drawing.
+
+  /** A text box's editor: a note's, with links and embeds; an unresolved link's note is made
+   * beside the board. */
+  function textBox(host: HTMLElement, box: TextBoxHost): TextBoxView {
+    host.classList.add("board-text-box");
+    const view = createEditor({
+      parent: host,
+      doc: box.text,
+      readOnly: box.readOnly,
+      label: "Text on the board",
+      popupsOnPage: true,
+      placeholder: "Write here. [[ links a note or capture; ![[ shows a capture’s quotation.",
+      targets: () => listRecords().filter((r) => canOpen(r) && r.id !== id).map((r) => ({ id: r.id, title: r.title, detail: r.kind === "note" ? undefined : r.kind, embeddable: r.kind === "capture" || r.kind === "item" || r.kind === "board" })),
+      open: (target, o) => openRecord(target, {}, o),
+      titleOf: (target) => untracked(() => getRecord(target))?.title ?? null,
+      onChange: () => box.changed(view.state.doc.toString()),
+      onBlur: () => box.done(),
+      create: async (label) => {
+        try {
+          const w = await call<Written>("notes.create", { title: label, folder: folderOf(info) || null });
+          putRecord(w.info);
+          return w.info.id;
+        } catch (e) {
+          toast(errorText(e));
+          return null;
+        }
+      },
+    });
+    const detach = attachEditor(view.dom, null, textHistory(view));
+    return {
+      focus: (at) => {
+        const pos = at ? view.posAtCoords(at) : null;
+        if (pos !== null) view.dispatch({ selection: { anchor: pos } });
+        view.focus();
+      },
+      set: (text) => replaceDoc(view, text),
+      hasFocus: () => view.hasFocus,
+      stop: () => (detach(), view.destroy()),
+    };
+  }
 
   // ---- Putting things on it ----
   /** Records put on the board: pictures as pictures, the rest as cards. */

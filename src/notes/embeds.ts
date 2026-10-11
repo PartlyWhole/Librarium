@@ -218,7 +218,8 @@ function sizable(view: EditorView, el: HTMLElement, width: number | null, name: 
 function build(view: EditorView): DecorationSet {
   const st = view.state;
   const active = new Set<number>();
-  for (const r of st.selection.ranges) for (let n = st.doc.lineAt(r.from).number; n <= st.doc.lineAt(r.to).number; n++) active.add(n);
+  // The cursor's lines show their Markdown, while the text is being written.
+  if (view.hasFocus) for (const r of st.selection.ranges) for (let n = st.doc.lineAt(r.from).number; n <= st.doc.lineAt(r.to).number; n++) active.add(n);
   const b = new RangeSetBuilder<Decoration>();
   const text = st.doc.toString();
   const all = untracked(records);
@@ -254,7 +255,7 @@ export function embedExtension() {
         });
       }
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged || u.selectionSet || refreshed(u)) this.decorations = build(u.view);
+        if (u.docChanged || u.viewportChanged || u.selectionSet || u.focusChanged || refreshed(u)) this.decorations = build(u.view);
       }
       destroy() {
         this.stop();
