@@ -661,6 +661,13 @@ pub struct CaptureUpdateParams {
     pub parts: Vec<CapturePart>,
 }
 
+/// A capture's quote with its symbols as the page shows them (made before they could be read).
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct CaptureQuoteParams {
+    pub id: Id,
+    pub quote: String,
+}
+
 /// The user confirmed where moved parts are now: the anchor's `parts`, as the anchor holds them.
 #[derive(Clone, Debug, Deserialize, TS)]
 pub struct AnchorUpdateParams {
@@ -837,6 +844,7 @@ pub fn typescript() -> String {
         CapturePart,
         CaptureParams,
         CaptureUpdateParams,
+        CaptureQuoteParams,
         AnchorUpdateParams,
         AnchorUpdated,
         ForSourceParams,

@@ -7,6 +7,7 @@ import { getRecord, listRecords, openRecord, records } from "../app/records";
 import { h } from "../ui/dom";
 import { toast } from "../ui/toast";
 import type { RecordInfo, StoredText } from "../types";
+import { symbolText } from "../reader/pdf/words";
 import { flowQuote, locate, type Anchor, type AnchorPart, type TextQuoteSelector } from "./anchor";
 
 export const KIND = "capture";
@@ -99,12 +100,31 @@ const UNREADABLE = /[\uE000-\uF8FF\uFFFD\p{Cc}]/u;
 /** A Greek letter or a mathematical sign (minus, ±, ×, ≤, ∞, primes…). */
 const SYMBOL = /[\p{Script=Greek}\p{Sm}\u2032-\u2037\u00B0\u00B5]/u;
 
+type QuotedPart = { text: string | null; continues?: boolean };
+
+/** Parts' text joined as a capture's quote joins them, and where each one is in it. */
+function joining(parts: QuotedPart[]): { joined: string; spans: ([number, number] | null)[] } {
+  let joined = "";
+  const spans = parts.map((p): [number, number] | null => {
+    const t = p.text?.trim();
+    if (!t) return null;
+    if (joined) joined += p.continues ? " " : " […] ";
+    const start = [...joined].length;
+    joined += t;
+    return [start, [...joined].length];
+  });
+  return { joined, spans };
+}
+
+export const joinParts = (parts: QuotedPart[]): string => joining(parts).joined;
+
 /**
  * A quote from the stored text with its symbols as the page shows them. Some PDFs don't say
- * what their symbol glyphs are, and the stored text then has a box, a plain letter ("g" for "γ")
- * or a hyphen (for "−") where the reader's own text has the symbol. The two are matched letter by letter,
- * spaces aside, and only where they line up; then the page's symbol is taken where the stored
- * text has something unreadable, a plain letter or a hyphen.
+ * what their symbol glyphs are, and the stored text then has a box, a plain letter ("g" for "γ"),
+ * a hyphen (for "−") or another code ("³" for "≥") where the reader's own text has the symbol.
+ * The two are matched letter by letter, spaces aside, and only where they line up; then the
+ * page's symbol is taken where the stored text has something unreadable, a plain letter, a
+ * hyphen, or the symbol's code.
  */
 export function symbolsFrom(stored: string, shown: string): string {
   const a = [...stored];
@@ -115,9 +135,34 @@ export function symbolsFrom(stored: string, shown: string): string {
     .map((c) => {
       if (/\s/u.test(c)) return c;
       const p = b[j++]!;
-      return p !== c && SYMBOL.test(p) && (UNREADABLE.test(c) || /[A-Za-z-]/.test(c)) ? p : c;
+      return p !== c && SYMBOL.test(p) && (UNREADABLE.test(c) || /[A-Za-z-]/.test(c) || symbolText(c) === p) ? p : c;
     })
     .join("");
+}
+
+/**
+ * A quote saved before its symbols could be read, with them as `text` (a page's) has them. The
+ * quote is found in the text letter by letter, spaces and line-end hyphens aside, a symbol there
+ * standing for an unreadable character or for its code ("g" for "γ", "³" for "≥"). Unchanged
+ * where it isn't found.
+ */
+export function symbolsIn(quote: string, text: string): string {
+  const q = [...quote];
+  const at = q.flatMap((c, i) => (/\s/u.test(c) ? [] : [i]));
+  const t = [...text].filter((c) => !/\s/u.test(c));
+  if (!at.length || t.join("").includes(at.map((i) => q[i]).join(""))) return quote;
+  const like = (a: string, b: string) => a === b || (SYMBOL.test(b) && (UNREADABLE.test(a) || symbolText(a) === b));
+  for (let s = 0; s < t.length; s++) {
+    const took: string[] = [];
+    for (let j = s; took.length < at.length && j < t.length; j++) {
+      if (like(q[at[took.length]!]!, t[j]!)) took.push(t[j]!);
+      else if (!took.length || !/[-­]/.test(t[j]!)) break;
+    }
+    if (took.length < at.length) continue;
+    at.forEach((i, n) => SYMBOL.test(took[n]!) && (q[i] = took[n]!));
+    return q.join("");
+  }
+  return quote;
 }
 
 /**
@@ -126,16 +171,8 @@ export function symbolsFrom(stored: string, shown: string): string {
  * the page showed them. Every symbol stands in for one character, so the parts, joined as the
  * quote joins them, line up with it, and each part is cut back out.
  */
-export function partsAsQuoted(quote: string, parts: { text: string | null; continues?: boolean }[]): (string | null)[] {
-  let joined = "";
-  const spans: ([number, number] | null)[] = parts.map((p) => {
-    const t = p.text?.trim();
-    if (!t) return null;
-    if (joined) joined += p.continues ? " " : " […] ";
-    const start = [...joined].length;
-    joined += t;
-    return [start, [...joined].length];
-  });
+export function partsAsQuoted(quote: string, parts: QuotedPart[]): (string | null)[] {
+  const { joined, spans } = joining(parts);
   const mended = [...symbolsFrom(joined, quote)];
   return parts.map((p, i) => (spans[i] ? mended.slice(spans[i]![0], spans[i]![1]).join("") : p.text));
 }

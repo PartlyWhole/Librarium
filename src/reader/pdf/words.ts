@@ -171,7 +171,7 @@ const SYMBOL_HIGH = [..."€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″�
 const isSymbolFont = (f: FontData | null) => !!f?.name && /symbol/i.test(f.name) && !/dingbat|wingding/i.test(f.name);
 
 /** Text in a Symbol font, as what its codes stand for. */
-function symbolText(s: string): string {
+export function symbolText(s: string): string {
   return [...s]
     .map((c) => {
       const n = c.codePointAt(0)!;

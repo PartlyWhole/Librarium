@@ -444,7 +444,9 @@ dragged out for capture.
     place** for a moved part.
   - **Symbols** read as the page shows them: a quote takes the page's symbol where the stored
     text has an unreadable character, a plain letter or a hyphen in its place (the anchor keeps
-    the stored text, so the capture finds its place again).
+    the stored text, so the capture finds its place again). A capture saved before its symbols
+    could be read is mended the same way once its pages are shown in a PDF: its quote (and its
+    title, if automatic) takes the page's symbols, and nothing else changes.
   - The "— citation" link.
   - **Your words** ("Write why this matters…").
   - **Used in**: each note and each place in it ("After “…”", "At the start"); clicking one opens
