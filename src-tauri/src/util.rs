@@ -129,3 +129,34 @@ fn sorted(v: &Value) -> Value {
         other => other.clone(),
     }
 }
+
+/// Characters of the Symbol font as PDFKit reports them when a PDF doesn't say what its symbol
+/// glyphs are (common in scientific papers): U+F000 plus the font's code. Adobe's Symbol
+/// encoding says what each code is; codes with no character of their own (pieces of brackets
+/// and radicals) are left alone. Indexed by code − 0x20.
+const SYMBOL_FONT: [char; 0xDF] = [
+    ' ', '!', '∀', '#', '∃', '%', '&', '∋', '(', ')', '∗', '+', ',', '−', '.', '/', // 0x20
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?', // 0x30
+    '≅', 'Α', 'Β', 'Χ', 'Δ', 'Ε', 'Φ', 'Γ', 'Η', 'Ι', 'ϑ', 'Κ', 'Λ', 'Μ', 'Ν', 'Ο', // 0x40
+    'Π', 'Θ', 'Ρ', 'Σ', 'Τ', 'Υ', 'ς', 'Ω', 'Ξ', 'Ψ', 'Ζ', '[', '∴', ']', '⊥', '_', // 0x50
+    '\0', 'α', 'β', 'χ', 'δ', 'ε', 'φ', 'γ', 'η', 'ι', 'ϕ', 'κ', 'λ', 'μ', 'ν', 'ο', // 0x60
+    'π', 'θ', 'ρ', 'σ', 'τ', 'υ', 'ϖ', 'ω', 'ξ', 'ψ', 'ζ', '{', '|', '}', '∼', '\0', // 0x70
+    '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', // 0x80
+    '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', // 0x90
+    '€', 'ϒ', '′', '≤', '⁄', '∞', 'ƒ', '♣', '♦', '♥', '♠', '↔', '←', '↑', '→', '↓', // 0xA0
+    '°', '±', '″', '≥', '×', '∝', '∂', '•', '÷', '≠', '≡', '≈', '…', '\0', '\0', '↵', // 0xB0
+    'ℵ', 'ℑ', 'ℜ', '℘', '⊗', '⊕', '∅', '∩', '∪', '⊃', '⊇', '⊄', '⊂', '⊆', '∈', '∉', // 0xC0
+    '∠', '∇', '®', '©', '™', '∏', '√', '⋅', '¬', '∧', '∨', '⇔', '⇐', '⇑', '⇒', '⇓', // 0xD0
+    '◊', '〈', '®', '©', '™', '∑', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', // 0xE0
+    '\0', '〉', '∫', '⌠', '\0', '⌡', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', // 0xF0
+];
+
+/// Symbol-font characters (see `SYMBOL_FONT`) as what they are: "Rag2\u{F02D}/\u{F02D}" reads
+/// "Rag2−/−". One character for one, so offsets into the text stay as they were.
+pub fn mend_symbols(text: &str) -> std::borrow::Cow<'_, str> {
+    let symbol = |c: char| (0xF020..=0xF0FE).contains(&(c as u32)).then(|| SYMBOL_FONT[c as usize - 0xF020]).filter(|&s| s != '\0');
+    if !text.chars().any(|c| symbol(c).is_some()) {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    std::borrow::Cow::Owned(text.chars().map(|c| symbol(c).unwrap_or(c)).collect())
+}

@@ -20,7 +20,7 @@ import type { RecordInfo, RecordText, Written } from "../types";
 import { createEditor, historyJSON, replaceDoc, textHistory } from "../notes/editor/editor";
 import { NoteSession } from "../notes/editor/session";
 import { describe, flowQuote, locate, toW3C, type Anchor } from "./anchor";
-import { anchorOf, badge, citation, copyEmbed, isRegion, partQuote, placeParams, quoteParts, regionImage, showInSource, sourceOf, statuses, storedText, type ShownPart } from "./common";
+import { anchorOf, badge, citation, copyEmbed, isRegion, partQuote, partsAsQuoted, placeParams, quoteOf, quoteParts, regionImage, showInSource, sourceOf, statuses, storedText, type ShownPart } from "./common";
 import { deleteCapture } from "./delete";
 import { findReferences, type Reference } from "./references";
 import { Copy, FileDown, LocateFixed, Pencil, Trash2 } from "lucide";
@@ -62,24 +62,35 @@ function mount(host: HTMLElement, ctx: PageContext, t: RecordText, anchor: Ancho
   ctx.setTitle(info.title || "Capture");
 
   // ---- The quotation ----
-  const many = (anchor?.parts.length ?? 0) > 1;
+  const quoted = partsAsQuoted(quoteOf(info), (anchor?.parts ?? []).map((p) => ({ text: isRegion(p) ? null : flowQuote(partQuote(p)), continues: p.continues })));
   const shown = (anchor?.parts ?? []).map((p, i): ShownPart => {
     const status = st[i] === "moved" || st[i] === "lost" ? st[i] : "";
     const confirm = status === "moved" ? h("button", { class: "link-button", onclick: () => void confirmMoved(anchor!, i).then(redraw) }, "This is the place") : null;
-    const show = many ? iconButton(LocateFixed, `Show part ${i + 1} in the source`, () => openRecord(src, placeParams(anchor, p), { again: true }), undefined, 15) : null;
-    const tools = show || status ? h("span", { class: `capture-tools ${isRegion(p) ? "row tight" : "inline-tools"}` }, show, badge(status), confirm) : null;
-    return isRegion(p) ? { picture: h("div", { class: "capture-part" }, regionImage(id, i + 1), tools) } : { text: flowQuote(partQuote(p)), after: tools };
+    // Each part's text (or picture) is a link to its place in the source.
+    const go = (e: MouseEvent) => openRecord(src, placeParams(anchor, p), { again: true, newTab: e.metaKey });
+    const tools = status ? h("span", { class: `capture-tools ${isRegion(p) ? "row tight" : "inline-tools"}` }, badge(status), confirm) : null;
+    return isRegion(p)
+      ? { picture: h("div", { class: "capture-part" }, h("a", { href: "#", class: "quote-part-link", title: "Show this part in the source", onclick: (e: MouseEvent) => (e.preventDefault(), go(e)) }, regionImage(id, i + 1)), tools) }
+      : { text: quoted[i] ?? "", after: tools, joined: !!p.continues, go };
   });
   const cite = h("p", { class: "capture-cite muted" }, "— ", h("a", { href: "#", class: "list-link", onclick: (e: MouseEvent) => (e.preventDefault(), openRecord(src, placeParams(anchor), { again: true, newTab: e.metaKey })) }, citation(info)));
 
   // ---- The name: renaming is a step of this page's undo ----
-  const titleInput = h("input", { class: "title-input", value: info.title, "aria-label": "Title", spellcheck: true, placeholder: "Capture" });
+  // A long name wraps (it grows a line at a time); Enter still ends it.
+  const titleInput = h("textarea", { class: "title-input wrapping", rows: 1, value: info.title, "aria-label": "Title", spellcheck: true, placeholder: "Capture" });
+  const fit = () => ((titleInput.style.height = "auto"), (titleInput.style.height = `${titleInput.scrollHeight}px`));
+  titleInput.addEventListener("input", () => {
+    if (/\n/.test(titleInput.value)) titleInput.value = titleInput.value.replace(/\s*\n\s*/g, " ");
+    fit();
+  });
+  requestAnimationFrame(fit);
   const retitle = async (title: string, base?: string) => {
     const w = await call<Written>("records.relocate", { id, title, ...(base ? { base_version: base } : {}) });
     putRecord(w.info);
     info = w.info;
     session.rebase(w.info.version, session.savedBody);
     if (document.activeElement !== titleInput) titleInput.value = title;
+    fit();
     ctx.setTitle(title);
     return w.info.version;
   };

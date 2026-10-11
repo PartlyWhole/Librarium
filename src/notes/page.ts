@@ -15,6 +15,7 @@ import { router } from "../app/router";
 import { context, showStatus } from "../app/status";
 import { attachEditor, done, editorChanged, keepText, recordScope, takeText, typed, within } from "../app/undo";
 import { ask, modal } from "../ui/dialog";
+import { dropTarget } from "../ui/dnd";
 import { errorText, h, replace } from "../ui/dom";
 import { iconButton } from "../ui/icon";
 import { effect, untracked } from "../ui/signal";
@@ -22,6 +23,7 @@ import { toast } from "../ui/toast";
 import type { Draft, RecordInfo, RecordText, Written } from "../types";
 import { pasted } from "./attach";
 import { createEditor, historyJSON, positionOf, replaceDoc, textHistory } from "./editor/editor";
+import { formatLink } from "./editor/links";
 import { NoteSession, type Resolution } from "./editor/session";
 import { countLabel } from "./editor/stats";
 import { FolderInput } from "lucide";
@@ -36,6 +38,24 @@ export async function flushNote(id: string): Promise<void> {
 
 /** The editor showing a note, if one is open. */
 export const noteView = (id: string): EditorView | undefined => open.get(id)?.view;
+
+/** Embeds for records, one a line (links for notes, which aren't embedded). */
+export const embedsOf = (ids: string[]): string =>
+  ids.flatMap((id) => {
+    const r = getRecord(id);
+    return r ? [formatLink(r.title || "Untitled", id, r.kind !== "note")] : [];
+  }).join("\n");
+
+/** Puts embeds into a note at `at` (the cursor, by default), each on a line of its own. */
+export function insertEmbeds(view: EditorView, ids: string[], at = view.state.selection.main.head): void {
+  const text = embedsOf(ids);
+  if (!text || view.state.readOnly) return;
+  const line = view.state.doc.lineAt(at);
+  const before = at > line.from ? "\n" : "";
+  const after = at < line.to ? "\n" : "";
+  view.dispatch({ changes: { from: at, insert: before + text + after }, selection: { anchor: at + before.length + text.length }, userEvent: "input", scrollIntoView: true });
+  view.focus();
+}
 
 /** Kinds that can be embedded (offered after `![[`). */
 const EMBEDDABLE = new Set(["capture", "item", "board"]);
@@ -126,6 +146,14 @@ function mount(host: HTMLElement, params: Record<string, string>, ctx: PageConte
     },
     onFiles: (v, files) => void pasted(v, files),
     placeholder: "Write…",
+  });
+  // Records dragged in (from the Captures view, the sidebar, a folder page) go in where they are
+  // dropped: after the line under the pointer, as embeds (notes as links).
+  let dropAt = 0;
+  dropTarget(view.dom, {
+    accepts: (p) => !readOnly && p.records.length > 0 && !p.records.includes(id),
+    where: (_p, x, y) => ((dropAt = view.state.doc.lineAt(view.posAtCoords({ x, y }) ?? view.state.doc.length).to), "into"),
+    drop: (p) => insertEmbeds(view, p.records, dropAt),
   });
 
   // Words and characters in the status bar, while this note is the one shown.

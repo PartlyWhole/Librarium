@@ -4,6 +4,7 @@
  * place to go to: `place` (W3C selectors, as JSON) or `at` (a code-point offset, from search).
  */
 import { call, readBytes } from "../backend";
+import { fullScreen } from "../app/fullscreen";
 import type { PageContext, PageHandle } from "../app/pages";
 import { formatOf, getRecord } from "../app/records";
 import { errorText, h, replace } from "../ui/dom";
@@ -68,8 +69,9 @@ export function renderItem(host: HTMLElement, params: Record<string, string>, ct
     }
   });
   findInput.addEventListener("input", () => void find());
+  const zoomGroup = h("span", { class: "zoom-group" }, iconButton(ZoomOut, "Zoom out", () => view?.zoomOut()), iconButton(Maximize, "Fit width", () => view?.zoomReset()), iconButton(ZoomIn, "Zoom in", () => view?.zoomIn()));
   const toolbar = h("div", { class: "reader-toolbar", role: "toolbar", "aria-label": "Reader" },
-    h("span", { class: "zoom-group" }, iconButton(ZoomOut, "Zoom out", () => view?.zoomOut()), iconButton(Maximize, "Fit width", () => view?.zoomReset()), iconButton(ZoomIn, "Zoom in", () => view?.zoomIn())),
+    zoomGroup,
     pos, web ? snapshotControls(r, snap!) : null, tools, h("span", { class: "spacer" }),
     findInput, findCount, iconButton(ChevronUp, "Previous match", () => void find(true, true), "Shift+Enter"), iconButton(ChevronDown, "Next match", () => void find(true), "Enter"));
   replace(host, toolbar, web ? h("div", { class: "reader-notices" }, snapshotNotices(r, snap!)) : null, body);
@@ -80,6 +82,11 @@ export function renderItem(host: HTMLElement, params: Record<string, string>, ct
 
   let alive = true;
   const cleanup: (() => void)[] = [];
+  // Full screen: the item fills the screen, with its toolbar, and the rest of the app is hidden.
+  const full = fullScreen((to) => to.page === "item" && to.params.id === id);
+  full.button.classList.add("icon-button");
+  zoomGroup.append(full.button);
+  cleanup.push(full.stop);
   // The stored text anchors and search offsets point into, fetched once.
   let stored: Promise<StoredText | null> | null = null;
   const storedText = () => (stored ??= call<StoredText | null>("records.text", { id, part: snap ?? null }).catch(() => null));

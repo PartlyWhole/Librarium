@@ -133,6 +133,36 @@ export const openPdf: Engine = async (host, src, events) => {
   const resized = new ResizeObserver(refit);
   resized.observe(container);
 
+  // Pinching on a trackpad (or ⌘ or ⌃ with the scroll wheel) zooms around the pointer, as in
+  // Preview; the pages are drawn sharp again once it settles. WebKit tells of a pinch with its own
+  // gesture events (the scale since it began) and may send ⌃-wheel events too: one is followed.
+  const zoomAround = (factor: number, x: number, y: number) => {
+    const to = Math.min(8, Math.max(0.25, viewer.currentScale * factor));
+    if (Math.abs(to - viewer.currentScale) < 0.001) return;
+    fit = false;
+    // PDF.js takes the point less the container's offset in its parent (not in the window), so
+    // the pointer's place in the container is given back that way.
+    const box = container.getBoundingClientRect();
+    const origin = [x - box.left + container.offsetLeft, y - box.top + container.offsetTop];
+    viewer.updateScale({ scaleFactor: to / viewer.currentScale, origin, drawingDelay: 250 });
+  };
+  let pinching = false;
+  let pinched = 1;
+  container.addEventListener("wheel", (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    if (!pinching) zoomAround(Math.exp(-e.deltaY / 100), e.clientX, e.clientY);
+  }, { passive: false });
+  type Gesture = Event & { scale: number; clientX: number; clientY: number };
+  container.addEventListener("gesturestart", (e) => (e.preventDefault(), (pinching = true), (pinched = 1)));
+  container.addEventListener("gesturechange", (e) => {
+    const g = e as Gesture;
+    g.preventDefault();
+    zoomAround(g.scale / pinched, g.clientX, g.clientY);
+    pinched = g.scale;
+  });
+  container.addEventListener("gestureend", (e) => (e.preventDefault(), (pinching = false)));
+
   const task = pdfjs.getDocument({ data: new Uint8Array(await src.bytes()), ...DOCUMENT_OPTIONS });
   const doc = await task.promise;
   // Every page's text mended against the stored text's words and placed on the printed words,

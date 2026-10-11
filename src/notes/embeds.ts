@@ -6,6 +6,7 @@
  *
  * A picture can be given a width, written after the embed as `{width=N}`. Its corner handle
  * sets it, by dragging or with the keys; a double-click goes back to the picture's own size.
+ * A capture can show its title, written after the embed as `{title}`, from a button on hover.
  * Each change is one step of the note's undo.
  */
 import { syntaxTree } from "@codemirror/language";
@@ -31,13 +32,14 @@ interface Shown {
   sizable: boolean;
 }
 
-/** How each kind of record shows in a note. */
-function embedFor(r: RecordInfo, open: Open): Shown {
+/** How each kind of record shows in a note (`title`: a capture's title is shown, and how to
+ * switch it). */
+function embedFor(r: RecordInfo, open: Open, title: { on: boolean; toggle: () => void }): Shown {
   switch (r.kind) {
     case "item":
       return formatOf(r) === "image" ? { el: imageEmbed(r, open), sizable: true } : { el: cardEmbed(r, open), sizable: false };
     case "capture":
-      return { el: captureEmbed(r, open), sizable: false };
+      return { el: captureEmbed(r, open, { titled: title.on, toggleTitle: title.toggle }), sizable: false };
     case "board":
       return { el: boardEmbed(r, open), sizable: true };
     default:
@@ -45,13 +47,13 @@ function embedFor(r: RecordInfo, open: Open): Shown {
   }
 }
 
-/** What each kind of record becomes in Export with quotations. */
-export function embedMarkdown(r: RecordInfo): string {
+/** What each kind of record becomes in Export with quotations (`titled`: `{title}` follows). */
+export function embedMarkdown(r: RecordInfo, titled = false): string {
   switch (r.kind) {
     case "item":
       return formatOf(r) === "image" ? `![${r.title}](${originalPath(r)})` : `[${r.title}](${r.path})`;
     case "capture":
-      return captureMarkdown(r);
+      return captureMarkdown(r, titled);
     default:
       return `[${r.title || "Untitled"}](${r.path})`;
   }
@@ -89,15 +91,23 @@ function widthAfter(text: string, to: number): { width: number; end: number } | 
   return m ? { width: Number(m[1]), end: to + m[0].length } : null;
 }
 
+/** A capture's title shown above its quotation: `{title}` after the embed. */
+export const TITLE = "{title}";
+export const titledAt = (text: string, to: number): boolean => text.startsWith(TITLE, to);
+
 class EmbedWidget extends WidgetType {
-  constructor(readonly r: RecordInfo, readonly width: number | null) {
+  constructor(readonly r: RecordInfo, readonly width: number | null, readonly titled: boolean) {
     super();
   }
   eq(o: EmbedWidget) {
-    return o.r.id === this.r.id && o.r.version === this.r.version && o.r.title === this.r.title && o.width === this.width;
+    return o.r.id === this.r.id && o.r.version === this.r.version && o.r.title === this.r.title && o.width === this.width && o.titled === this.titled;
   }
   toDOM(view: EditorView) {
-    const { el, sizable: canSize } = embedFor(this.r, (id, e) => openRecord(id, {}, { newTab: e.metaKey, again: true }));
+    let el!: HTMLElement;
+    const title = { on: this.titled, toggle: () => setTitled(view, el, !this.titled) };
+    const shown = embedFor(this.r, (id, e) => openRecord(id, {}, { newTab: e.metaKey, again: true }), title);
+    el = shown.el;
+    const canSize = shown.sizable;
     el.classList.add("cm-embed");
     if (canSize) sizable(view, el, this.width, this.r.title || "picture");
     return el;
@@ -107,18 +117,33 @@ class EmbedWidget extends WidgetType {
   }
 }
 
-/** Writes a width after the embed drawn by `el` (null: none, the picture's own size). */
-function setWidth(view: EditorView, el: HTMLElement, width: number | null) {
+/** The embed drawn by `el`, in the note's text. */
+function embedAt(view: EditorView, el: HTMLElement) {
   let at: number;
   try {
     at = view.posAtDOM(el);
   } catch {
-    return;
+    return null;
   }
   const text = view.state.doc.toString();
   const line = view.state.doc.lineAt(at);
   const l = parseLinks(text, syntaxTree(view.state), line.from, line.to).find((x) => x.embed && x.from === at);
-  if (!l) return;
+  return l ? { l, text } : null;
+}
+
+/** Writes `{title}` after the capture drawn by `el`, or takes it away. */
+function setTitled(view: EditorView, el: HTMLElement, on: boolean) {
+  const found = embedAt(view, el);
+  if (!found || titledAt(found.text, found.l.to) === on) return;
+  const { l } = found;
+  view.dispatch({ changes: on ? { from: l.to, insert: TITLE } : { from: l.to, to: l.to + TITLE.length }, userEvent: "input.embed" });
+}
+
+/** Writes a width after the embed drawn by `el` (null: none, the picture's own size). */
+function setWidth(view: EditorView, el: HTMLElement, width: number | null) {
+  const found = embedAt(view, el);
+  if (!found) return;
+  const { l, text } = found;
   const old = widthAfter(text, l.to);
   const insert = width == null ? "" : `{width=${Math.round(width)}}`;
   if ((old ? text.slice(l.to, old.end) : "") === insert) return;
@@ -202,9 +227,11 @@ function build(view: EditorView): DecorationSet {
       if (!l.embed || !l.id || l.from < from - 2 || l.from >= to || active.has(st.doc.lineAt(l.from).number)) continue;
       const r = all.get(l.id);
       if (!r || isArchived(r)) continue;
-      // With its width, if one is written after it (hidden with it).
+      // With its width, or a capture's title, if written after it (hidden with it).
       const sized = widthAfter(text, l.to);
-      b.add(l.from, sized?.end ?? l.to, Decoration.replace({ widget: new EmbedWidget(r, sized?.width ?? null) }));
+      const titled = r.kind === "capture" && titledAt(text, l.to);
+      const end = titled ? l.to + TITLE.length : (sized?.end ?? l.to);
+      b.add(l.from, end, Decoration.replace({ widget: new EmbedWidget(r, sized?.width ?? null, titled) }));
     }
   }
   return b.finish();

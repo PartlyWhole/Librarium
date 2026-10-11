@@ -55,3 +55,16 @@ fn ids_and_dates() {
     assert_eq!(local_date(1_790_932_440_000, -7 * 3600, 4), "2026-10-01");
     assert_eq!(local_date(1_790_932_440_000, -7 * 3600, 0), "2026-10-02");
 }
+
+#[test]
+fn symbol_font_characters_read_as_what_they_are() {
+    use librarium::util::mend_symbols;
+    // As PDFKit reports a paper's superscript minus and gamma from the Symbol font.
+    assert_eq!(mend_symbols("Rag2\u{F02D}/\u{F02D}\u{F067}c\u{F02D}/\u{F02D} mice"), "Rag2−/−γc−/− mice");
+    assert_eq!(mend_symbols("p \u{F0A3} 0.05, \u{F061} = 1"), "p ≤ 0.05, α = 1");
+    // One character for one: offsets into the text don't move.
+    let s = "a\u{F062}c";
+    assert_eq!(mend_symbols(s).chars().count(), s.chars().count());
+    // Pieces with no character of their own, and other text, are left alone.
+    assert_eq!(mend_symbols("\u{F0E6} plain \u{F8FF}"), "\u{F0E6} plain \u{F8FF}");
+}

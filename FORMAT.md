@@ -191,8 +191,8 @@ daily.date: "2026-10-02"
 
 Fields, in order after the envelope:
 - `captures.source`: the source record's UUID
-- `captures.quote`: non-empty part quotes, each trimmed, joined with `" […] "`; empty for picture
-  captures
+- `captures.quote`: non-empty part quotes, each trimmed, joined with `" […] "`, or with `" "` before
+  a part marked `continues` in the anchor; empty for picture captures
 - `captures.parts`: an integer
 - `captures.locator`: the first part's place (`"p. 3"`, a chapter title); removed when no part
   has one
@@ -279,6 +279,10 @@ Stored text is never regenerated if it is present. Anchors point into it.
 - **`extracted/text-v1.json`:**
   - **pdf:** `{"extractor": "pdfkit", "version": 1, "pages": [{"page": 1, "text"}]}`.
     - The fallback extractor is `"pdf-extract 0.12"`.
+    - Characters PDFKit reports from a Symbol font as U+F020–U+F0FE are written as the
+      characters Adobe's Symbol encoding gives them ("−", "γ", "≤"…), one for one; codes with no
+      character of their own stay. Text stored before is read the same way, so offsets don't
+      change.
     - Pages with fewer than 16 non-space characters are recognised. They gain `"lines"` and
       `"recognized": true`, and the extractor becomes `"pdfkit + apple-vision 1"`.
   - **epub:** `{"extractor": "librarium-epub 1", "version": 1, "title", "creator", "publisher",
@@ -311,7 +315,9 @@ Stored text is never regenerated if it is present. Anchors point into it.
   `<id>.anchor.json`, then scans. A sidecar without a capture is an orphan: it is listed, never
   deleted.
 - **A part** is `{"selector": [...], "boxes"?: [{"page"?, "x", "y", "w", "h"}] (percent),
-  "region"?: ".region-<N>.png"}`.
+  "region"?: ".region-<N>.png", "continues"?: true}`. `continues` marks a text part that carries
+  on the sentence of the text part before it (split by a page break or a note); missing means
+  false.
 - **Selectors** form a flat list. The W3C types are:
   - `{"type": "TextQuoteSelector", "exact", "prefix", "suffix"}`, with up to 32 code points of
     context. If the passage wasn't found in the stored text, the context is empty and there is no
@@ -344,7 +350,7 @@ Stored text is never regenerated if it is present. Anchors point into it.
 
 - **Syntax.** A link is `[[label|<uuid>]]`; an embed is `![[label|<uuid>]]`. An image or board
   embed may be followed by `{width=N}`, in pixels (`^\{width=(\d{1,5})\}`, shown at least 48 px
-  wide).
+  wide). A capture embed may be followed by `{title}`: its title is shown above the quotation.
 - **Parsing.**
   1. Find `[[`, skipping escaped positions.
   2. The link ends at the first `]]` on the same line. A newline, `[` or lone `]` before it

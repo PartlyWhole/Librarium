@@ -51,6 +51,8 @@ export interface AnchorPart {
   boxes?: { page?: number; x: number; y: number; w: number; h: number }[];
   /** A region's picture beside the capture: ".region-<N>.png". */
   region?: string;
+  /** It continues the sentence of the part before (split by a page break or a footnote). */
+  continues?: boolean;
 }
 
 /** A capture's anchor, as `captures/<id>.anchor.json` holds it. */

@@ -93,7 +93,7 @@ One window. Only regions scroll, never the window.
   - Links
   - Outline (notes)
   - History (notes)
-  - Captures (items, captures)
+  - Captures (items and captures: the source's captures; notes: every capture, to insert)
   - About this item (items)
   - Jobs
 - **Status bar.**
@@ -192,11 +192,17 @@ One window. Only regions scroll, never the window.
 ### Embeds `![[…]]`
 
 - **Inserting.** `![[` offers captures, library items and boards.
+  - **The Captures view** beside a note lists every capture, newest first, searchable, grouped by
+    source as on a board. Click selects (⌘-click adds or removes, ⇧-click a range). Drag
+    captures into the note, or **Insert** (the + on a row, Enter, or the bar for what is
+    selected) puts them at the cursor; ⌘C copies them as embeds.
+  - Records dragged into a note (from that view, the sidebar or a folder page) go in after the
+    line they are dropped on, one a line: embeds, or links for notes.
 - **How each kind shows** (except on the line being edited):
 
   | Kind | Shows as | Click opens |
   |---|---|---|
-  | Capture | the quotation and "— Source, place" ("[…]" between parts, pictures on their own) | the quotation: the capture; the citation: the source at the place; a pencil on hover: the capture |
+  | Capture | the quotation and "— Source, place" ("[…]" between parts, pictures on their own), with its title above when `{title}` follows | the quotation: the capture; the citation: the source at the place; on hover, a pencil: the capture, and H: show or hide the title |
   | Image item | the image, resizable from its corner | it in the reader |
   | PDF, EPUB or web item | a card with icon and title | the item |
   | Board | a picture of the board, captioned with its name | the board |
@@ -325,8 +331,12 @@ One window. Only regions scroll, never the window.
 
 ### Common to every format
 
-- **Toolbar.** Zoom out, Fit width, Zoom in (×1.2 steps, 0.25–8×); "Page N of M"; the capture
-  buttons; a find field.
+- **Toolbar.** Zoom out, Fit width, Zoom in (×1.2 steps, 0.25–8×), Full screen; "Page N of M";
+  the capture buttons; a find field.
+- **Zooming with the trackpad** (PDFs and saved pages): pinching, or ⌘ or ⌃ with the scroll
+  wheel, zooms around the pointer (0.25–8×); the pages are drawn sharp again once it settles.
+- **Full screen** (⇧⌘↩, or the toolbar's button): the item and its toolbar fill the screen and
+  the rest of the app is hidden, as for a board.
 - **Find** (⌘F). Return / ⇧Return go to the next / previous match; "n of m" or "Not found"; Escape
   clears. Matches are soft yellow, and the current one is orange with a ring.
 - **Going to a place.** Search hits and **Show in the source** go to the exact place without
@@ -347,6 +357,8 @@ One window. Only regions scroll, never the window.
     widths. Drags snap to whole words.
   - Words whose ligatures PDF.js misreads ("diSerent", common in saved web pages) are corrected
     from the stored text, so find, selection and copying see "different".
+  - Text in a Symbol font (named so) reads as its symbols: a PDF that embeds the font without
+    saying what its glyphs are reads "-/-g" for "−/−γ" otherwise.
   - Multi-line highlights are one band per line.
   - Before going to a place, the reader measures the pages up to it, so mixed page sizes never
     shift the target.
@@ -408,8 +420,13 @@ dragged out for capture.
     capture. Escape cancels."
   - Clicking a picture in an EPUB captures it.
 - **The draft** sits at the top of the side panel's Captures view, which opens by itself.
-  - It shows the parts as one quotation ("[…]" between them, × removes one), the hint "Select
-    more text, or drag a region (⇧⌘R), to add to it", "From <citation>", and "Your words
+  - It shows the parts as one quotation ("[…]" between them, × removes one). Where a part runs
+    on from the one before (it ends mid-sentence and the next starts in lower case, as across a
+    page break or a footnote), they are joined with a space instead, shown "⁀"; clicking the
+    "⁀" or the "[…]" turns one into the other. The capture page and embeds read joined parts as
+    one sentence.
+  - Then the hint "Select more text, or drag a region (⇧⌘R), to add to it", "From <citation>",
+    "Title (optional)" (blank, the title is the quote's first words), and "Your words
     (optional)".
   - **Discard** / **Save capture** (⌘↩).
   - There is one draft per source and snapshot. It survives leaving and returning, and its parts
@@ -421,9 +438,13 @@ dragged out for capture.
 - **The citation** is "Source, place". A place equal to the source's title is omitted.
 - **The capture page.**
   - The archived notice, with **Restore**.
-  - The title.
-  - The quotation, with a Show button per part, "moved — check it" / "lost" badges, and
-    **This is the place** for a moved part.
+  - The title, wrapping onto more lines when long (Enter still ends it).
+  - The quotation, each part a link to its place in the source (Show in the source, in the
+    header, goes to the first), with "moved — check it" / "lost" badges, and **This is the
+    place** for a moved part.
+  - **Symbols** read as the page shows them: a quote takes the page's symbol where the stored
+    text has an unreadable character, a plain letter or a hyphen in its place (the anchor keeps
+    the stored text, so the capture finds its place again).
   - The "— citation" link.
   - **Your words** ("Write why this matters…").
   - **Used in**: each note and each place in it ("After “…”", "At the start"); clicking one opens
@@ -439,7 +460,8 @@ dragged out for capture.
     **Cancel** / **Save changes** (⌘↩), and the toast is "Capture updated."
   - Your words and a user-given title are kept.
   - Editing parts is not undoable.
-- **The Captures panel** shows the draft, then the source's captures, oldest first, with the open
+- **The Captures panel** shows the draft, then the source's captures, oldest first, each by its
+  name (or, while the title is still the automatic one, its whole quote), wrapping, with the open
   one marked and moved/lost badges. Each row offers Show, Edit selection, Copy embed and Delete.
 - **The Captures page** (⇧⌘K).
   - Search by quote, name, source or place.
@@ -504,7 +526,8 @@ Boards use Excalidraw. React is used only here.
   - **The panel.** A button at the canvas's top right (Captures and Library) opens two tabs, each
     newest first with one search box: **Captures** (searched by quote, name, source or place)
     and **Library** (by title, kind, folder, author or publication). Drag one onto the drawing,
-    or Add (or Enter) puts it in the middle of what is in view. It docks beside the drawing on a
+    or Add (or Enter) puts it in the middle of what is in view; several can be selected and
+    added at once, as in a note's Captures view. It docks beside the drawing on a
     wide enough canvas, and is resized from its left edge (its width is remembered); the docking
     and the tab are kept while the app runs. Not on read-only boards.
     - A source with several captures is one group under its name and count, closed until
@@ -668,7 +691,8 @@ actions. Items are enabled only when they apply.
   - Link to a note or item… ⌥⌘K, Put a capture, note or item on the board… ⌥⌘I
 - **Format:** Bold, Italic, Strikethrough, Highlight, Code, Link, Task, Heading 1–6, Body text.
 - **View:** Command palette; Toggle sidebar; Toggle side panel; Theme (system / light / dark);
-  Single Page / Two Pages / Scrolling (books); Board in Full Screen; Enter Full Screen.
+  Single Page / Two Pages / Scrolling (books); Page in Full Screen (boards and items); Enter Full
+  Screen.
 - **Go:** Today, Notes, Library, Captures, Search, Archive; Back, Forward.
 - **Window:** Minimize, Zoom; Next tab, Previous tab; Tab 1–8, Last tab.
 - **Help:** Keyboard shortcuts, Reveal logs.
@@ -703,7 +727,7 @@ composition.
 | ⌥⌘N | New board | ✓ |
 | ⌥⌘K | Board: link the selection | ✓ |
 | ⌥⌘I | Board: put something on it | ✓ |
-| ⇧⌘↩ | Board: full screen | ✓ |
+| ⇧⌘↩ | Full screen (a board or an item) | ✓ |
 | ⇧⌘N | New folder | |
 | ⌥⌘Y | Show history | |
 | ⌘F | Find in this item | |

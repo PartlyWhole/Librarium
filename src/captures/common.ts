@@ -14,6 +14,13 @@ export const F = { source: "captures.source", quote: "captures.quote", parts: "c
 
 export const sourceOf = (c: RecordInfo | undefined): string => String(c?.fields[F.source] ?? "");
 export const quoteOf = (c: RecordInfo): string => flowQuote(String(c.fields[F.quote] ?? ""));
+/** Whether a capture's title is one the user gave (not the quote's first words, as made). */
+export const isNamed = (c: RecordInfo): boolean => {
+  const quote = quoteOf(c);
+  return !quote || !quote.startsWith(c.title.replace(/…$/, ""));
+};
+/** What a capture is called in lists: its own name, else its whole quote (never cut short). */
+export const shownName = (c: RecordInfo): string => (isNamed(c) ? c.title : quoteOf(c)) || "Capture";
 /** A capture of a picture only (no quoted text). */
 export const isPicture = (c: RecordInfo): boolean => !String(c.fields[F.quote] ?? "").trim();
 const byCreated = (a: RecordInfo, b: RecordInfo) => (a.created ?? "").localeCompare(b.created ?? "");
@@ -87,12 +94,69 @@ export function copyEmbed(c: RecordInfo): void {
   void navigator.clipboard?.writeText(`![[${c.title}|${c.id}]]`).then(() => toast("Embed copied: paste it into a note."), () => toast("The embed couldn’t be copied."));
 }
 
-/** A part as shown: its text (with anything to show after it), or a picture. */
-export type ShownPart = { text: string; after?: Node | null } | { picture: HTMLElement };
+/** A character no font can be trusted to draw: private, replaced, or a control. */
+const UNREADABLE = /[\uE000-\uF8FF\uFFFD\p{Cc}]/u;
+/** A Greek letter or a mathematical sign (minus, ±, ×, ≤, ∞, primes…). */
+const SYMBOL = /[\p{Script=Greek}\p{Sm}\u2032-\u2037\u00B0\u00B5]/u;
+
+/**
+ * A quote from the stored text with its symbols as the page shows them. Some PDFs don't say
+ * what their symbol glyphs are, and the stored text then has a box, a plain letter ("g" for "γ")
+ * or a hyphen (for "−") where the reader's own text has the symbol. The two are matched letter by letter,
+ * spaces aside, and only where they line up; then the page's symbol is taken where the stored
+ * text has something unreadable, a plain letter or a hyphen.
+ */
+export function symbolsFrom(stored: string, shown: string): string {
+  const a = [...stored];
+  const b = [...shown].filter((c) => !/\s/u.test(c));
+  if (a.filter((c) => !/\s/u.test(c)).length !== b.length) return stored;
+  let j = 0;
+  return a
+    .map((c) => {
+      if (/\s/u.test(c)) return c;
+      const p = b[j++]!;
+      return p !== c && SYMBOL.test(p) && (UNREADABLE.test(c) || /[A-Za-z-]/.test(c)) ? p : c;
+    })
+    .join("");
+}
+
+/**
+ * The text parts as the capture's quote has them (null for a picture). The anchor keeps the
+ * stored text's characters, so a capture finds its place again; the quote has the symbols as
+ * the page showed them. Every symbol stands in for one character, so the parts, joined as the
+ * quote joins them, line up with it, and each part is cut back out.
+ */
+export function partsAsQuoted(quote: string, parts: { text: string | null; continues?: boolean }[]): (string | null)[] {
+  let joined = "";
+  const spans: ([number, number] | null)[] = parts.map((p) => {
+    const t = p.text?.trim();
+    if (!t) return null;
+    if (joined) joined += p.continues ? " " : " […] ";
+    const start = [...joined].length;
+    joined += t;
+    return [start, [...joined].length];
+  });
+  const mended = [...symbolsFrom(joined, quote)];
+  return parts.map((p, i) => (spans[i] ? mended.slice(spans[i]![0], spans[i]![1]).join("") : p.text));
+}
+
+/**
+ * Whether a part runs on from the one before as one sentence (split by a page break or a
+ * footnote): the first ends mid-sentence and the next starts in lower case.
+ */
+export const runsOn = (before: string, after: string): boolean =>
+  !/[.!?…:;]["'”’)\]]*$/u.test(before.trim()) && /^["'“‘(]*\p{Ll}/u.test(after.trim());
+
+/**
+ * A part as shown: its text (with anything to show after it, and whether it continues the one
+ * before, or what to show between them), or a picture.
+ */
+export type ShownPart = { text: string; after?: Node | null; joined?: boolean; gap?: Node; go?: (e: MouseEvent) => void } | { picture: HTMLElement };
 
 /**
  * Parts as they read: each run of text parts one quotation, joined by an inline "[…]" (a
- * passage left out); a picture between them stands on its own.
+ * passage left out), or by a space where a part continues the sentence; a picture between them
+ * stands on its own.
  */
 export function quoteParts(parts: ShownPart[], cls: string): HTMLElement[] {
   const out: HTMLElement[] = [];
@@ -103,9 +167,11 @@ export function quoteParts(parts: ShownPart[], cls: string): HTMLElement[] {
       out.push(p.picture);
       continue;
     }
-    if (quote) quote.append(h("span", { class: "quote-gap", title: "A passage left out" }, " […] "));
+    if (quote) quote.append(p.gap ?? (p.joined ? " " : h("span", { class: "quote-gap", title: "A passage left out" }, " […] ")));
     else out.push((quote = h("blockquote", { class: cls })));
-    quote.append(p.text, p.after ?? "");
+    // A part with somewhere to go is a link to it (its place in the source).
+    const text = p.go ? h("a", { href: "#", class: "quote-part-link", title: "Show this part in the source", onclick: (e: MouseEvent) => (e.preventDefault(), p.go!(e)) }, p.text) : p.text;
+    quote.append(text, p.after ?? "");
   }
   return out;
 }

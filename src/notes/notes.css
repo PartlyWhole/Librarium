@@ -129,3 +129,5 @@
 .diff-sign { position: absolute; left: 8px; color: var(--muted); }
 .diff-skip { padding: 2px 24px; color: var(--faint); font-family: var(--font-ui); font-size: 12px; }
 .diff-key { font-family: var(--font-mono); font-size: 11px; padding: 0 4px; border-radius: 3px; }
+/* A title that wraps instead of being cut short (a textarea that grows with it). */
+.title-input.wrapping { display: block; resize: none; overflow: hidden; font-family: inherit; }

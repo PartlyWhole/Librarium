@@ -1,6 +1,7 @@
 /**
- * Two side-panel views: Links (what links to the record shown, with context; for a note, also
- * its links without a target) and Outline (the shown note's headings; a click goes there).
+ * Side-panel views for notes: Links (what links to the record shown, with context; for a note,
+ * also its links without a target), Outline (the shown note's headings; a click goes there), and
+ * Captures (every capture, to drag into the note or insert at the cursor as embeds).
  */
 import { EditorView } from "@codemirror/view";
 import { call, on } from "../backend";
@@ -12,11 +13,13 @@ import { errorText, h, replace } from "../ui/dom";
 import { effect } from "../ui/signal";
 import { toast } from "../ui/toast";
 import type { Backlink, Unresolved } from "../types";
+import { renderPicker } from "../captures/picker";
 import { outline } from "./editor/stats";
-import { noteView } from "./page";
-import { Link2, ListTree } from "lucide";
+import { embedsOf, insertEmbeds, noteView } from "./page";
+import { Link2, ListTree, Quote } from "lucide";
 
 const LINKED = new Set(["note", "item", "capture", "board"]);
+
 
 /** Choose its target…: picks the record an unresolved link should point at. */
 function chooseTarget(u: Unresolved): void {
@@ -102,6 +105,27 @@ addPanelView({
       if (!view || view.state.doc === shown) return;
       shown = view.state.doc;
       paintOutline(host, view);
+    });
+  },
+});
+
+addPanelView({
+  id: "note-captures",
+  title: "Captures",
+  icon: Quote,
+  applies: (r) => r.page === "note" && !!r.params.id,
+  render(host, route) {
+    const id = route.params.id!;
+    return renderPicker(host, {
+      tabs: ["captures"],
+      verb: "Insert",
+      addLabel: "Insert into the note",
+      where: "the note",
+      add: (ids) => {
+        const view = noteView(id);
+        if (view) insertEmbeds(view, ids);
+      },
+      copyText: embedsOf,
     });
   },
 });

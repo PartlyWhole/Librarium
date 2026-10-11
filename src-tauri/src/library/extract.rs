@@ -13,7 +13,7 @@ use crate::error::{Error, Result};
 use crate::jobs::JobCtx;
 use crate::store::frontmatter::FmValue;
 use crate::store::{files, relocate, save, Library};
-use crate::util::{clean_title, json_bytes, parse_id};
+use crate::util::{clean_title, json_bytes, mend_symbols, parse_id};
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -135,7 +135,7 @@ pub fn pdf_text(path: &Path) -> Result<Value> {
         }
     };
     let pages: Vec<Value> =
-        pages.iter().enumerate().map(|(i, t)| json!({ "page": i + 1, "text": normalize(t) })).collect();
+        pages.iter().enumerate().map(|(i, t)| json!({ "page": i + 1, "text": normalize(&mend_symbols(t)) })).collect();
     Ok(json!({ "extractor": extractor, "version": VERSION, "pages": pages }))
 }
 
