@@ -535,7 +535,10 @@ Boards use Excalidraw. React is used only here.
   - A box left empty goes. Read-only boards show boxes, with no button.
 - **Linked names in texts.** In Excalidraw's own texts, each linked name is underlined where it
   is drawn (across lines, too); a click on it opens it (⌘-click: a new tab), and a double-click
-  still edits the text. A card or box over a text hides its names.
+  still edits the text. A card or box over a text hides its names. A text linked as a whole
+  (its link's name isn't in it) is underlined all through.
+  - Excalidraw's link icon is left off cards, text boxes, texts and shapes with words (they open
+    their links themselves); pictures and shapes without words keep it.
 - **Linking.**
   - `[[` in a board text opens the title picker; the name chosen takes the place of the `[[`
     (spaced from the words beside it), and Escape takes the `[[` back. A capture named from its
