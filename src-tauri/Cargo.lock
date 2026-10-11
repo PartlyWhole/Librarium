@@ -2293,6 +2293,7 @@ version = "0.2.7"
 dependencies = [
  "base64 0.22.1",
  "block2",
+ "flate2",
  "imagesize",
  "libc",
  "log",
@@ -2307,8 +2308,10 @@ dependencies = [
  "objc2-web-kit",
  "pdf-extract",
  "pulldown-cmark",
+ "reqwest",
  "roxmltree",
  "rusqlite",
+ "rustls",
  "saphyr-parser",
  "serde",
  "serde_json",

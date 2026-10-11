@@ -20,7 +20,7 @@ interface PanelView {
 }
 
 /** The views' order along the top; views not listed come last. */
-const ORDER = ["links", "outline", "history", "captures", "note-captures", "about", "jobs"];
+const ORDER = ["links", "outline", "history", "captures", "note-captures", "etymology", "about", "jobs"];
 const rank = (v: PanelView) => (ORDER.indexOf(v.id) + ORDER.length + 1) % (ORDER.length + 1);
 const views: PanelView[] = [];
 

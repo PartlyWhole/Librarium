@@ -758,6 +758,91 @@ pub struct BoardSaved {
     pub scene_sha: String,
 }
 
+/// Word origins: whether the database is here, or how far its download has got.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct EtymStatus {
+    /// `missing`, `downloading`, `unpacking`, `ready` or `failed`.
+    pub state: String,
+    pub received: u64,
+    /// The download's size, and the database's once unpacked, in bytes.
+    pub download_bytes: u64,
+    pub disk_bytes: u64,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct EtymWordParams {
+    pub word: String,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct EtymKeyParams {
+    /// A term's stable key, such as `la:sāl` (never parsed).
+    pub key: String,
+}
+
+/// A word in any language.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct EtymTerm {
+    pub key: String,
+    pub lang: String,
+    pub lang_name: String,
+    pub term: String,
+    pub gloss: Option<String>,
+}
+
+/// One step of a word's main line of descent: the older form, how it was taken, and the other
+/// parts when the step is out of a compound.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct EtymStep {
+    pub term: EtymTerm,
+    pub rel: Option<String>,
+    pub with: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct EtymSense {
+    pub pos: Option<String>,
+    pub gloss: String,
+}
+
+/// English words that share an ancestor with a word, under that ancestor.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct EtymRelatives {
+    pub ancestor: EtymTerm,
+    pub words: Vec<EtymTerm>,
+    pub total: u32,
+}
+
+/// Everything shown for one word (or one ancestor).
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct EtymEntry {
+    pub term: EtymTerm,
+    pub pos: Option<String>,
+    pub senses: Vec<EtymSense>,
+    /// Wiktionary's prose etymology.
+    pub etymology: Option<String>,
+    /// The word itself first, then each older form.
+    pub lineage: Vec<EtymStep>,
+    pub doublets: Vec<EtymTerm>,
+    pub cognates: Vec<EtymTerm>,
+    pub roots: Vec<EtymTerm>,
+    /// For an English word.
+    pub relatives: Vec<EtymRelatives>,
+    /// For an older word: the English words that come from it.
+    pub descendants: Vec<EtymTerm>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct EtymLookup {
+    pub query: String,
+    pub entries: Vec<EtymEntry>,
+    /// Words beginning with the query, when it isn't one.
+    pub suggestions: Vec<EtymTerm>,
+    /// What to show wherever the data is shown.
+    pub attribution: String,
+}
+
 /// Every exported type, in the order `src/types.ts` lists them.
 pub fn typescript() -> String {
     use crate::error::{Code, Error};
@@ -856,6 +941,15 @@ pub fn typescript() -> String {
         BoardLoaded,
         BoardSaveParams,
         BoardSaved,
+        EtymStatus,
+        EtymWordParams,
+        EtymKeyParams,
+        EtymTerm,
+        EtymStep,
+        EtymSense,
+        EtymRelatives,
+        EtymEntry,
+        EtymLookup,
     );
     out
 }

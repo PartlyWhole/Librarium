@@ -511,3 +511,73 @@ export type BoardLoaded = { info: RecordInfo, scene: string, scene_sha: string, 
 export type BoardSaveParams = { id: string, base_version: string, base_scene_sha: string, scene: string, page: string, };
 
 export type BoardSaved = { info: RecordInfo, seq: number, scene_sha: string, };
+
+/**
+ * Word origins: whether the database is here, or how far its download has got.
+ */
+export type EtymStatus = { 
+/**
+ * `missing`, `downloading`, `unpacking`, `ready` or `failed`.
+ */
+state: string, received: number, 
+/**
+ * The download's size, and the database's once unpacked, in bytes.
+ */
+download_bytes: number, disk_bytes: number, error: string | null, };
+
+export type EtymWordParams = { word: string, };
+
+export type EtymKeyParams = { 
+/**
+ * A term's stable key, such as `la:sāl` (never parsed).
+ */
+key: string, };
+
+/**
+ * A word in any language.
+ */
+export type EtymTerm = { key: string, lang: string, lang_name: string, term: string, gloss: string | null, };
+
+/**
+ * One step of a word's main line of descent: the older form, how it was taken, and the other
+ * parts when the step is out of a compound.
+ */
+export type EtymStep = { term: EtymTerm, rel: string | null, with: Array<string>, };
+
+export type EtymSense = { pos: string | null, gloss: string, };
+
+/**
+ * English words that share an ancestor with a word, under that ancestor.
+ */
+export type EtymRelatives = { ancestor: EtymTerm, words: Array<EtymTerm>, total: number, };
+
+/**
+ * Everything shown for one word (or one ancestor).
+ */
+export type EtymEntry = { term: EtymTerm, pos: string | null, senses: Array<EtymSense>, 
+/**
+ * Wiktionary's prose etymology.
+ */
+etymology: string | null, 
+/**
+ * The word itself first, then each older form.
+ */
+lineage: Array<EtymStep>, doublets: Array<EtymTerm>, cognates: Array<EtymTerm>, roots: Array<EtymTerm>, 
+/**
+ * For an English word.
+ */
+relatives: Array<EtymRelatives>, 
+/**
+ * For an older word: the English words that come from it.
+ */
+descendants: Array<EtymTerm>, };
+
+export type EtymLookup = { query: string, entries: Array<EtymEntry>, 
+/**
+ * Words beginning with the query, when it isn't one.
+ */
+suggestions: Array<EtymTerm>, 
+/**
+ * What to show wherever the data is shown.
+ */
+attribution: string, };

@@ -11,6 +11,7 @@ import "./library";
 import "./reader";
 import "./captures";
 import "./websave";
+import "./etymology";
 import "./updates";
 import { startApp } from "./app/shell";
 
