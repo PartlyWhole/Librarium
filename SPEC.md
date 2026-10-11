@@ -336,7 +336,8 @@ One window. Only regions scroll, never the window.
 - **Zooming with the trackpad** (PDFs and saved pages): pinching, or ⌘ or ⌃ with the scroll
   wheel, zooms around the pointer (0.25–8×); the pages are drawn sharp again once it settles.
 - **Full screen** (⇧⌘↩, or the toolbar's button): the item and its toolbar fill the screen and
-  the rest of the app is hidden, as for a board.
+  the rest of the app is hidden, as for a board; Escape ends it (in the find box, it clears
+  the find first).
 - **Find** (⌘F). Return / ⇧Return go to the next / previous match; "n of m" or "Not found"; Escape
   clears. Matches are soft yellow, and the current one is orange with a ring.
 - **Going to a place.** Search hits and **Show in the source** go to the exact place without
@@ -510,7 +511,8 @@ Boards use Excalidraw. React is used only here.
   - A screen-reader list of what is on the board.
   - **Full screen** (⇧⌘↩, or the button at the canvas's top right): the drawing fills the screen
     and the rest of the app is hidden; the window goes into full screen, and comes out only if it
-    wasn't there before. Pressed again, or on leaving the board, it ends.
+    wasn't there before. Pressed again, Escape, or leaving the board ends it (Escape first does
+    what it does on the board: leaving a drawing tool, text being written or a menu).
   - Excalidraw's own Library (reusable shapes) is hidden: it isn't kept, and its name clashes
     with the Library.
 - **Saving.**
