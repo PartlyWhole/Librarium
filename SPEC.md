@@ -331,8 +331,12 @@ One window. Only regions scroll, never the window.
 
 ### Common to every format
 
-- **Toolbar.** Zoom out, Fit width, Zoom in (×1.2 steps, 0.25–8×); "Page N of M"; the capture
-  buttons; a find field.
+- **Toolbar.** Zoom out, Fit width, Zoom in (×1.2 steps, 0.25–8×), Full screen; "Page N of M";
+  the capture buttons; a find field.
+- **Zooming with the trackpad** (PDFs and saved pages): pinching, or ⌘ or ⌃ with the scroll
+  wheel, zooms around the pointer (0.25–8×); the pages are drawn sharp again once it settles.
+- **Full screen** (⇧⌘↩, or the toolbar's button): the item and its toolbar fill the screen and
+  the rest of the app is hidden, as for a board.
 - **Find** (⌘F). Return / ⇧Return go to the next / previous match; "n of m" or "Not found"; Escape
   clears. Matches are soft yellow, and the current one is orange with a ring.
 - **Going to a place.** Search hits and **Show in the source** go to the exact place without
@@ -681,7 +685,8 @@ actions. Items are enabled only when they apply.
   - Link to a note or item… ⌥⌘K, Put a capture, note or item on the board… ⌥⌘I
 - **Format:** Bold, Italic, Strikethrough, Highlight, Code, Link, Task, Heading 1–6, Body text.
 - **View:** Command palette; Toggle sidebar; Toggle side panel; Theme (system / light / dark);
-  Single Page / Two Pages / Scrolling (books); Board in Full Screen; Enter Full Screen.
+  Single Page / Two Pages / Scrolling (books); Page in Full Screen (boards and items); Enter Full
+  Screen.
 - **Go:** Today, Notes, Library, Captures, Search, Archive; Back, Forward.
 - **Window:** Minimize, Zoom; Next tab, Previous tab; Tab 1–8, Last tab.
 - **Help:** Keyboard shortcuts, Reveal logs.
@@ -716,7 +721,7 @@ composition.
 | ⌥⌘N | New board | ✓ |
 | ⌥⌘K | Board: link the selection | ✓ |
 | ⌥⌘I | Board: put something on it | ✓ |
-| ⇧⌘↩ | Board: full screen | ✓ |
+| ⇧⌘↩ | Full screen (a board or an item) | ✓ |
 | ⇧⌘N | New folder | |
 | ⌥⌘Y | Show history | |
 | ⌘F | Find in this item | |
