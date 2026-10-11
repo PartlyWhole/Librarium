@@ -1,22 +1,25 @@
 /**
  * The Captures page (⇧⌘K): every capture, searchable by quote, name, source or place; by source
- * or newest first; all, passages or pictures (both choices remembered). Cards show the quote or
- * a thumbnail, the name, source, place and date, with buttons on hover and a right-click menu.
+ * or newest first; all, passages or pictures (both choices remembered). Cards show the name in
+ * full, then the quote (cut short) or a thumbnail, the source, place and date, with buttons on
+ * hover and a right-click menu. By source, a source's title opens and closes its captures.
  */
 import type { PageContext } from "../app/pages";
 import { pref } from "../app/prefs";
 import { getRecord, listRecords, openRecord } from "../app/records";
 import { h, replace } from "../ui/dom";
 import { shortDate } from "../ui/format";
-import { iconButton } from "../ui/icon";
+import { icon, iconButton } from "../ui/icon";
 import { effect, signal } from "../ui/signal";
 import type { RecordInfo } from "../types";
 import { copyEmbed, F, isNamed, isPicture, KIND, matches, newestFirst, quoteOf, regionImage, searchWords, showInSource, sourceOf } from "./common";
 import { captureMenu, deleteCapture } from "./delete";
-import { Copy, LocateFixed, Pencil, Trash2 } from "lucide";
+import { ChevronRight, Copy, ExternalLink, LocateFixed, Pencil, Trash2 } from "lucide";
 
 const group = pref<"source" | "newest">("captures.group", "source");
 const show = pref<"all" | "passages" | "pictures">("captures.show", "all");
+/** Sources whose captures are closed (kept while the app runs; a search opens them all). */
+const closed = signal<ReadonlySet<string>>(new Set());
 
 export function renderCaptures(host: HTMLElement, _params: Record<string, string>, ctx: PageContext): () => void {
   ctx.setTitle("Captures");
@@ -41,12 +44,14 @@ export function renderCaptures(host: HTMLElement, _params: Record<string, string
 
   const card = (c: RecordInfo, withSource: boolean): HTMLElement => {
     const quote = quoteOf(c);
-    // A name the user gave (not the quote's first words) is shown.
-    const named = quote && isNamed(c);
-    const body = isPicture(c) ? (thumbs.get(c.id) ?? thumbs.set(c.id, regionImage(c.id, 1, "capture-thumb", c.title || "A captured picture")).get(c.id)!) : h("blockquote", { class: "capture-card-quote" }, quote);
-    const meta = [named ? c.title : null, withSource ? getRecord(sourceOf(c))?.title : null, c.fields[F.locator] as string | undefined, c.created ? shortDate(c.created) : null].filter(Boolean).join(" · ");
-    const el = h("article", { class: "capture-card", tabindex: "0", "aria-label": c.title || "Capture" },
-      h("div", { class: "capture-card-body" }, body, h("div", { class: "muted small" }, meta)),
+    const name = c.title || (isPicture(c) ? "A captured picture" : "Capture");
+    // Beneath the name, the quote; a name made of the quote's first words is followed by the rest.
+    const lead = name.replace(/…$/, "");
+    const rest = !quote ? "" : isNamed(c) ? quote : quote.length > lead.length ? `…${quote.slice(lead.length).trimStart()}` : "";
+    const below = isPicture(c) ? (thumbs.get(c.id) ?? thumbs.set(c.id, regionImage(c.id, 1, "capture-thumb", name)).get(c.id)!) : rest ? h("blockquote", { class: "capture-card-quote" }, rest) : null;
+    const meta = [withSource ? getRecord(sourceOf(c))?.title : null, c.fields[F.locator] as string | undefined, c.created ? shortDate(c.created) : null].filter(Boolean).join(" · ");
+    const el = h("article", { class: "capture-card", tabindex: "0", "aria-label": name },
+      h("div", { class: "capture-card-body" }, h("div", { class: "capture-card-title" }, name), below, h("div", { class: "muted small" }, meta)),
       h("div", { class: "capture-tools" },
         iconButton(LocateFixed, "Show in the source", () => showInSource(c), undefined, 15),
         iconButton(Pencil, "Edit selection", () => showInSource(c, { edit: true }), undefined, 15),
@@ -76,13 +81,23 @@ export function renderCaptures(host: HTMLElement, _params: Record<string, string
     // By source: the source with the latest capture first; each source's captures in order.
     const bySource = new Map<string, RecordInfo[]>();
     for (const c of shown) bySource.set(sourceOf(c), [...(bySource.get(sourceOf(c)) ?? []), c]);
+    const shut = words.length ? new Set<string>() : closed();
     replace(list, [...bySource].map(([id, cs]) => {
       const src = getRecord(id);
+      const open = !shut.has(id);
+      const toggle = () => {
+        const next = new Set(closed.peek());
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        closed.set(next);
+        list.querySelector<HTMLElement>(`.capture-group-toggle[data-source="${id}"]`)?.focus();
+      };
       return h("section", { class: "capture-group", "aria-label": src?.title ?? "A source" },
         h("h2", { class: "capture-group-head" },
-          h("a", { href: "#", class: "list-link", onclick: (e: MouseEvent) => (e.preventDefault(), src && openRecord(id, {}, { newTab: e.metaKey })) }, src?.title ?? "A source no longer in the library"),
-          h("span", { class: "muted small" }, ` ${cs.length}`)),
-        h("div", { class: "capture-cards" }, cs.reverse().map((c) => card(c, false))));
+          h("button", { type: "button", class: "capture-group-toggle", "aria-expanded": String(open), dataset: { source: id }, onclick: toggle },
+            icon(ChevronRight, 15), h("span", null, src?.title ?? "A source no longer in the library"), h("span", { class: "muted small" }, String(cs.length))),
+          src ? iconButton(ExternalLink, "Open the source", (e) => openRecord(id, {}, { newTab: e.metaKey }), undefined, 15) : null),
+        open ? h("div", { class: "capture-cards" }, cs.reverse().map((c) => card(c, false))) : null);
     }));
   });
   search.focus();

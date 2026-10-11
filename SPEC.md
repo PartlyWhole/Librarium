@@ -469,7 +469,11 @@ dragged out for capture.
 - **The Captures page** (⇧⌘K).
   - Search by quote, name, source or place.
   - **By source** or **Newest first**; **All / Passages / Pictures**.
-  - Cards show the quote or a thumbnail, name, source, place and date, with hover buttons.
+  - By source, clicking a source's title opens or closes its captures (kept while the app runs;
+    a search opens them all); the button beside it opens the source.
+  - Cards show the name in full, then the quote cut to three lines (a name made of the quote's
+    first words is followed by the rest of it) or a thumbnail, then source, place and date,
+    with hover buttons.
   - A count. The view choices are remembered.
 - **Deleting a capture that notes use** opens a dialog listing each place by note:
   - Embeds: **Keep as quoted text** (default), Remove, or Leave in place.
