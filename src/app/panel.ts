@@ -7,7 +7,7 @@ import { h, replace } from "../ui/dom";
 import { icon, iconButton, type IconNode } from "../ui/icon";
 import { effect, untracked } from "../ui/signal";
 import { pref } from "./prefs";
-import { router, type Route } from "./router";
+import { placeOf, router, type Route } from "./router";
 import { X } from "lucide";
 
 interface PanelView {
@@ -20,7 +20,7 @@ interface PanelView {
 }
 
 /** The views' order along the top; views not listed come last. */
-const ORDER = ["links", "outline", "history", "captures", "about", "jobs"];
+const ORDER = ["links", "outline", "history", "captures", "note-captures", "about", "jobs"];
 const rank = (v: PanelView) => (ORDER.indexOf(v.id) + ORDER.length + 1) % (ORDER.length + 1);
 const views: PanelView[] = [];
 
@@ -48,9 +48,15 @@ export function sidePanel(onClose: () => void): HTMLElement {
   const close = iconButton(X, "Close the side panel", onClose, "Mod+Alt+\\", 15);
   const el = h("aside", { class: "side-panel", "aria-label": "Side panel" }, h("div", { class: "side-panel-head" }, tabs, close), body);
   let dispose: (() => void) | void;
+  // Drawn again only when what it is for changes: the router hands out a new route whenever a
+  // tab is republished (its title changed…), and drawing again loses what a view holds.
+  let drawn = "";
   effect(() => {
     const r = router.current();
     const want = chosen();
+    const key = `${panelOpen()}|${want}|${placeOf(r)}`;
+    if (key === drawn) return;
+    drawn = key;
     if (dispose) dispose();
     dispose = undefined;
     if (!panelOpen()) return replace(body);

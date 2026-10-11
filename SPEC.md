@@ -93,7 +93,7 @@ One window. Only regions scroll, never the window.
   - Links
   - Outline (notes)
   - History (notes)
-  - Captures (items, captures)
+  - Captures (items and captures: the source's captures; notes: every capture, to insert)
   - About this item (items)
   - Jobs
 - **Status bar.**
@@ -192,6 +192,12 @@ One window. Only regions scroll, never the window.
 ### Embeds `![[…]]`
 
 - **Inserting.** `![[` offers captures, library items and boards.
+  - **The Captures view** beside a note lists every capture, newest first, searchable, grouped by
+    source as on a board. Click selects (⌘-click adds or removes, ⇧-click a range). Drag
+    captures into the note, or **Insert** (the + on a row, Enter, or the bar for what is
+    selected) puts them at the cursor; ⌘C copies them as embeds.
+  - Records dragged into a note (from that view, the sidebar or a folder page) go in after the
+    line they are dropped on, one a line: embeds, or links for notes.
 - **How each kind shows** (except on the line being edited):
 
   | Kind | Shows as | Click opens |
@@ -510,7 +516,8 @@ Boards use Excalidraw. React is used only here.
   - **The panel.** A button at the canvas's top right (Captures and Library) opens two tabs, each
     newest first with one search box: **Captures** (searched by quote, name, source or place)
     and **Library** (by title, kind, folder, author or publication). Drag one onto the drawing,
-    or Add (or Enter) puts it in the middle of what is in view. It docks beside the drawing on a
+    or Add (or Enter) puts it in the middle of what is in view; several can be selected and
+    added at once, as in a note's Captures view. It docks beside the drawing on a
     wide enough canvas, and is resized from its left edge (its width is remembered); the docking
     and the tab are kept while the app runs. Not on read-only boards.
     - A source with several captures is one group under its name and count, closed until

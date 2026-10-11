@@ -27,7 +27,7 @@ import type { BoardLoaded, BoardSaved, Draft, ImportResult, Written } from "../t
 import type { BoardEngine, BoardInsert } from "./engine";
 import { boardOutline, boardPage } from "./mirror";
 import { recordOf, type BoardElement, type BoardLink } from "./links";
-import { renderBoardPanel } from "./panel";
+import { renderPicker } from "../captures/picker";
 import { renderCard } from "./cards";
 import { appTheme, isPicture, loadEngine, pictureData, portable } from "./shared";
 import { FolderInput, Maximize2, Minimize2, Quote } from "lucide";
@@ -260,7 +260,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
       title: "Captures and Library",
       icon: () => icon(Quote, 20),
       render: (panel) => {
-        const stop = renderBoardPanel(panel, (rid) => insertRecords([rid]));
+        const stop = renderPicker(panel, { add: insertRecords, verb: "Add", addLabel: "Add to the board", where: "the board" });
         panel.append(resizeHandle({ label: "Resize the panel", width: panelWidth, min: 240, max: 640, usual: PANEL_USUAL, grows: -1 }));
         return stop;
       },
