@@ -176,6 +176,7 @@ daily.date: "2026-10-02"
       `[[words|id]]`.
     - A linked shape, card or picture without words: `[[Name|id]]`, or `![[Name|id]]` when it is
       an embed.
+    - A text box: its Markdown, trimmed, as written (an empty one is left out).
 - **The `.excalidraw` file** is Excalidraw's `serializeAsJSON(elements, appState, files,
   "local")`.
   - A new board is exactly:
@@ -187,6 +188,9 @@ daily.date: "2026-10-02"
     - The words in a shape are linked through the shape: its links are kept on the shape (older
       boards may keep them on the bound text).
   - **Cards** are `embeddable` elements with that link and a transparent stroke and fill.
+  - **Text boxes** are `embeddable` elements whose `link` is `librarium://text`, with a
+    transparent stroke and fill, and their Markdown in `customData.librarium.text` (links and
+    embeds written as in a note). On export they become Excalidraw texts of their words.
   - **Pictures** are `image` elements whose `fileId` is a library item's ID. Files keyed by a
     UUID are not stored in `files`.
 - **Save order.** `.excalidraw`, then the page, then `boards.scene-sha256`. A missing drawing is

@@ -11,7 +11,7 @@
  *   is an embed).
  */
 import { formatLink } from "../notes/editor/links";
-import { recordOf, type BoardElement, type BoardLink } from "./links";
+import { boxText, isTextBox, recordOf, type BoardElement, type BoardLink } from "./links";
 
 /** The page's first line, as the backend writes it for a new board. */
 const pageNote = (id: string) => `<!-- Librarium writes this page from the board's drawing (${id}.excalidraw); edits here are replaced when the board is saved. -->`;
@@ -57,6 +57,10 @@ export function boardPage(id: string, elements: readonly BoardElement[], titleOf
         if (target) text = formatLink(text, target);
       }
       paragraphs.push({ x: e.x, y: e.y, text });
+    } else if (isTextBox(e)) {
+      // A text box is Markdown already, its links written as they are.
+      const text = boxText(e).trim();
+      if (text) paragraphs.push({ x: e.x, y: e.y, text });
     } else if (!bound.has(e.id)) {
       const target = recordOf(e.link);
       if (!target) continue;

@@ -16,8 +16,27 @@
 .board-link-chip kbd { font: inherit; font-family: var(--font-mono); color: var(--muted); }
 .board-link-chip[hidden] { display: none; }
 
-.board-card-host { width: 100%; height: 100%; overflow: auto; }
-.board-card { box-sizing: border-box; min-height: 100%; padding: 10px 12px; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r2); font-size: var(--small); line-height: 1.45; }
+/* Linked names in texts: underlined where they are drawn (clicks are read from the drawing). */
+.board-names { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.board-names-frame { position: absolute; transform-origin: center; }
+.board-name { position: absolute; box-sizing: border-box; border-bottom: 1.5px solid var(--accent); }
+.board-host.over-name .excalidraw canvas.interactive { cursor: pointer !important; }
+
+/* A text box: a note's editor on the drawing. Until it is written in (selected, then clicked),
+   only its links and embeds take the pointer; the rest is the drawing's. */
+.board-text-host { width: 100%; height: 100%; overflow: hidden; }
+.board-text-box { box-sizing: border-box; padding: 6px 10px; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r2); font-family: var(--font-ui); font-size: var(--small); line-height: 1.5; }
+.board-text-box .cm-editor { background: transparent; color: var(--ink); }
+.board-text-box .cm-scroller { font-family: var(--font-ui); line-height: 1.5; overflow: visible; }
+.board-text-box .cm-editor.cm-focused { outline: none; }
+.board-text-box .cm-content { padding: 0; }
+.board-text-box .cm-wikilink, .board-text-box .embed a, .board-text-box .embed button { pointer-events: auto; }
+
+/* Excalidraw's link bar has nothing to say about a text box (its "link" is what makes it one). */
+.board-canvas .excalidraw-hyperlinkContainer:has(a[href="librarium://text"]) { display: none; }
+
+.board-card-host { width: 100%; height: 100%; overflow: hidden; }
+.board-card { box-sizing: border-box; padding: 10px 12px; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r2); font-size: var(--small); line-height: 1.45; }
 .board-card-link { display: flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; }
 .board-card-link .muted { margin-left: auto; }
 .board-card.missing { color: var(--muted); font-style: italic; }

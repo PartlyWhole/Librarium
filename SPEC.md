@@ -126,7 +126,7 @@ One window. Only regions scroll, never the window.
   - The title renames on blur, and the file name follows. Enter goes to the text; Escape reverts.
   - The header has **Move to folder**.
 - **Editor.** CodeMirror 6 with Markdown live preview: marks are hidden except on the construct
-  being edited.
+  being edited, while the editor has the focus (an editor left reads as shown).
   - **Markdown supported:** CommonMark plus GFM tables, tasks and strikethrough; `==highlight==`;
     quotes; fenced code. Code is highlighted for JS, TS, Python, Rust, JSON, CSS,
     HTML/XML/SVG, SQL and shell.
@@ -521,6 +521,17 @@ Boards use Excalidraw. React is used only here.
     other version is kept as "… (version from elsewhere)" and yours is saved.
 - **Undo.** ⌘Z / ⇧⌘Z undo drawing steps and renames, in order. Drawing steps are forgotten on
   leaving the board.
+- **Text boxes.** The Text box button (beside Full screen) puts a box in the middle of the view,
+  ready to write in. A box is written in as a note is: Markdown, `[[` links and `![[` embeds
+  (a capture shows its quotation), with the note editor's keys and suggestions.
+  - Double-click, Enter (when it is selected) or its corner button writes in it; Escape or a
+    click elsewhere leaves it, as one step to undo. Typing in it undoes as typing does.
+  - Its links work with a click, without writing in it; the rest of it moves and resizes as a
+    shape does. Its height follows its words.
+  - A box left empty goes. Read-only boards show boxes, with no button.
+- **Linked names in texts.** In Excalidraw's own texts, each linked name is underlined where it
+  is drawn (across lines, too); a click on it opens it (⌘-click: a new tab), and a double-click
+  still edits the text. A card or box over a text hides its names.
 - **Linking.**
   - `[[` in a board text opens the title picker; the name chosen takes the place of the `[[`
     (spaced from the words beside it), and Escape takes the `[[` back. A capture named from its
@@ -546,7 +557,8 @@ Boards use Excalidraw. React is used only here.
       opened (kept while the app runs). While searching, groups with matches open, and one
       closed stays closed for that search.
   - Captures become cards with the quotation, the citation and Show in the source. They are
-    redrawn when the capture changes.
+    redrawn when the capture changes. Cards are as tall as what they show (their width is
+    yours; their height follows), so nothing in them is cut off or scrolls.
   - Notes, items and boards become cards with their icon and name.
   - **Pasting** links and embeds (copied from a note or the Library): an embed on a line of its
     own becomes its card or picture, and other lines become words with each link written as its
@@ -554,8 +566,9 @@ Boards use Excalidraw. React is used only here.
   - Pictures are library items (pasted ones go to Attachments).
   - A card's buttons work after selecting it and clicking again.
 - **Export.** PNG, SVG, or an Excalidraw file (with its pictures embedded). Cards are written out
-  as boxes with words.
-- **Keys.** The app's reserved shortcuts win on the canvas; every other key goes to Excalidraw.
+  as boxes with words, and text boxes as texts of their words.
+- **Keys.** The app's reserved shortcuts win on the canvas; every other key goes to Excalidraw
+  (except in a text box being written in, whose keys are its own).
 
 ## Saving web pages
 
