@@ -492,20 +492,27 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     document.execCommand("insertText", false, words);
   }, true);
 
+  // Excalidraw's link icon (see vite.config.ts) is left off what opens its links itself: cards,
+  // text boxes, and texts and the shapes holding them (their names are underlined). A picture
+  // or a shape without words keeps it.
+  (globalThis as { librariumLinkIcon?: (e: Drawn & { boundElements?: readonly { type: string }[] | null }) => boolean }).librariumLinkIcon = (e) =>
+    !recordOf(e.link) && e.link !== TEXT_BOX ? true : !(e.type === "embeddable" || e.type === "text" || !!e.boundElements?.some((x) => x.type === "text"));
+
   // ---- Linked names in texts, underlined over them: a click on one opens it, as in a note ----
   const names = document.createElement("div");
   names.className = "board-names";
   host.appendChild(names);
   const measure = document.createElement("canvas").getContext("2d")!;
   const fontName = (id: number) => Object.entries(FONT_FAMILY).find(([, n]) => n === id)?.[0] ?? "Excalifont";
-  /** Where each linked name is, on screen, and its record. */
-  let shown: { id: string; label: string; box: DOMRect }[] = [];
+  /** Where each linked name is, on screen, and its records (several: a text linked as a whole). */
+  let shown: { links: BoardLink[]; box: DOMRect }[] = [];
   function drawNames(state: AppState) {
     if (!api) return;
     const all = api.getSceneElements() as unknown as readonly (Drawn & { width: number; height: number; angle: number; fontSize: number; fontFamily: number; lineHeight: number; textAlign: string })[];
     const b = host.getBoundingClientRect();
     const zoom = state.zoom.value;
     const out: HTMLElement[] = [];
+    const spans: { links: BoardLink[]; el: HTMLElement }[] = [];
     // A card or box drawn over a text hides its names (they are drawn above everything).
     const covered = (t: (typeof all)[number], i: number) =>
       all.slice(i + 1).some((c) => c.type === "embeddable" && c.x < t.x + t.width && c.x + c.width > t.x && c.y < t.y + t.height && c.y + c.height > t.y);
@@ -520,39 +527,42 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
       const frame = document.createElement("div");
       frame.className = "board-names-frame";
       Object.assign(frame.style, { left: `${at.x - b.left}px`, top: `${at.y - b.top}px`, width: `${t.width * zoom}px`, height: `${t.height * zoom}px`, transform: t.angle ? `rotate(${t.angle}rad)` : "" });
-      // A name may be wrapped onto several lines: each line's part is underlined.
+      /** Underlines [start, end) of the words (as one line, wrapped lines joined by a space). */
+      const underline = (start: number, end: number, to: BoardLink[]) => {
+        let lineStart = 0;
+        lines.forEach((line, n) => {
+          const lineEnd = lineStart + line.length;
+          const from = Math.max(start, lineStart);
+          const upTo = Math.min(end, lineEnd);
+          if (from < upTo) {
+            const width = measure.measureText(line).width;
+            const left = t.textAlign === "center" ? (t.width - width) / 2 : t.textAlign === "right" ? t.width - width : 0;
+            const x = left + measure.measureText(line.slice(0, from - lineStart)).width;
+            const w = measure.measureText(line.slice(from - lineStart, upTo - lineStart)).width;
+            const name = document.createElement("span");
+            name.className = "board-name";
+            Object.assign(name.style, { left: `${x * zoom}px`, top: `${n * lineH * zoom}px`, width: `${w * zoom}px`, height: `${lineH * zoom}px` });
+            frame.appendChild(name);
+            spans.push({ links: to, el: name });
+          }
+          lineStart = lineEnd + 1;
+        });
+      };
+      // Each name where it is drawn, across lines too; links whose names aren't in the words
+      // (a text linked as a whole) underline all of it.
       const flat = lines.join(" ");
+      const whole: BoardLink[] = [];
       for (const l of links) {
         const pattern = new RegExp(l.label.trim().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"), "g");
-        for (const m of flat.matchAll(pattern)) {
-          let start = m.index!;
-          const end = start + m[0].length;
-          let lineStart = 0;
-          lines.forEach((line, i) => {
-            const lineEnd = lineStart + line.length;
-            const from = Math.max(start, lineStart);
-            const to = Math.min(end, lineEnd);
-            if (from < to) {
-              const width = measure.measureText(line).width;
-              const left = t.textAlign === "center" ? (t.width - width) / 2 : t.textAlign === "right" ? t.width - width : 0;
-              const x = left + measure.measureText(line.slice(0, from - lineStart)).width;
-              const w = measure.measureText(line.slice(from - lineStart, to - lineStart)).width;
-              const name = document.createElement("span");
-              name.className = "board-name";
-              name.dataset.id = l.id;
-              name.dataset.label = l.label;
-              Object.assign(name.style, { left: `${x * zoom}px`, top: `${i * lineH * zoom}px`, width: `${w * zoom}px`, height: `${lineH * zoom}px` });
-              frame.appendChild(name);
-            }
-            lineStart = lineEnd + 1;
-          });
-          start = end;
-        }
+        const found = [...flat.matchAll(pattern)];
+        if (!found.length) whole.push(l);
+        for (const m of found) underline(m.index!, m.index! + m[0].length, [l]);
       }
+      if (whole.length) underline(0, flat.length, whole);
       if (frame.childElementCount) out.push(frame);
     }
     names.replaceChildren(...out);
-    shown = [...names.querySelectorAll<HTMLElement>(".board-name")].map((n) => ({ id: n.dataset.id!, label: n.dataset.label!, box: n.getBoundingClientRect() }));
+    shown = spans.map((n) => ({ links: n.links, box: n.el.getBoundingClientRect() })).reverse();
   }
   // The drawing's fonts load after it is first drawn: names are measured again then.
   document.fonts?.addEventListener("loadingdone", () => api && drawNames(api.getAppState()));
@@ -572,7 +582,7 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     const n = nameAt(e.clientX, e.clientY);
     if (!n) return;
     const newTab = e.metaKey;
-    opening = setTimeout(() => o.onOpenLink(`${RECORD_LINK}${n.id}`, newTab, { links: [], at: { x: e.clientX, y: e.clientY } }), 300);
+    opening = setTimeout(() => o.onOpenLink(`${RECORD_LINK}${n.links[0]!.id}`, newTab, { links: n.links, at: { x: e.clientX, y: e.clientY } }), 300);
   }, true);
   el.addEventListener("dblclick", () => clearTimeout(opening), true);
   el.addEventListener("pointermove", (e) => host.classList.toggle("over-name", !!nameAt(e.clientX, e.clientY)));

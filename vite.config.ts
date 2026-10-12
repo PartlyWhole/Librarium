@@ -7,13 +7,23 @@ import { defineConfig } from "vitest/config";
  * server's pre-bundled copy as well as to builds.
  */
 const EXCALIDRAW_CDN = /`https:\/\/esm\.sh\/\$\{.*?\}\/dist\/prod\/`/g;
-const excalidrawOffline = {
-  name: "librarium:excalidraw-offline",
+/**
+ * Excalidraw draws a link icon by every element with a link, and has no option to leave it out.
+ * Its check asks the board first (`globalThis.librariumLinkIcon`, set in src/boards/engine.ts):
+ * cards, text boxes and texts open their links themselves. The same check in the dev build and
+ * the minified one.
+ */
+const LINK_ICON = /(\(\s*(\w+),\s*\w+,\s*(\w+),\s*\w+\s*\)\s*=>\s*\{\s*if\s*\(\s*)\2\.link\s*&&\s*!\3\.selectedElementIds\[\2\.id\]/;
+const excalidrawPatched = {
+  name: "librarium:excalidraw",
   transform(code: string, id: string) {
-    if (!id.includes("@excalidraw/excalidraw") || !code.includes("esm.sh")) return null;
+    if (!id.includes("@excalidraw/excalidraw") || (!code.includes("esm.sh") && !LINK_ICON.test(code))) return null;
     // A full address (fonts' addresses are made with `new URL(name, base)`), on the app's origin.
     const local = 'new URL("/excalidraw/", globalThis.location?.href ?? "http://localhost/").href';
-    const out = code.replace(EXCALIDRAW_CDN, local).replace(/https:\/\/esm\.sh\//g, "/excalidraw/");
+    const out = code
+      .replace(EXCALIDRAW_CDN, local)
+      .replace(/https:\/\/esm\.sh\//g, "/excalidraw/")
+      .replace(LINK_ICON, (_m, head: string, el: string, state: string) => `${head}${el}.link && globalThis.librariumLinkIcon?.(${el}) !== false && !${state}.selectedElementIds[${el}.id]`);
     return { code: out, map: null };
   },
 };
@@ -21,8 +31,8 @@ const excalidrawOffline = {
 // Tauri expects a fixed dev port and must see Rust errors.
 export default defineConfig({
   clearScreen: false,
-  plugins: [excalidrawOffline],
-  optimizeDeps: { rolldownOptions: { plugins: [excalidrawOffline] } },
+  plugins: [excalidrawPatched],
+  optimizeDeps: { rolldownOptions: { plugins: [excalidrawPatched] } },
   server: { port: 1420, strictPort: true, watch: { ignored: ["**/src-tauri/**"] } },
   envPrefix: ["VITE_", "TAURI_ENV_"],
   build: {
