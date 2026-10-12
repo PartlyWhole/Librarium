@@ -533,6 +533,10 @@ CC-licensed).
 - **Insert** (beside a note) puts the line of descent into the note at its cursor, as a
   quotation with its first definition and "— Word origins from Wiktionary (CC BY-SA 4.0) and
   other dictionaries". It is plain text: nothing links back to the database.
+- **Capture** (beside Insert) captures the line of descent, and words selected in an entry
+  (a sentence of Wiktionary's account, say) get **Capture** beside them. Captures cite the
+  **Word origins** library item (made the first time) and the word: "Word origins, salary". The
+  item's own page, and Show in the source, are the Word origins view at that word.
 - The sources and their licences are shown, folded, under every lookup.
 - **The data** (641 MB) isn't part of the app. The view offers to download it once (209 MB,
   from a release of Librarium on GitHub, with Cancel); it is checked against its SHA-256 before

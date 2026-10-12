@@ -8,7 +8,7 @@ import { h } from "../ui/dom";
 import { toast } from "../ui/toast";
 import type { RecordInfo, StoredText } from "../types";
 import { symbolText } from "../reader/pdf/words";
-import { flowQuote, locate, type Anchor, type AnchorPart, type TextQuoteSelector, BIBLE_REF } from "./anchor";
+import { flowQuote, locate, type Anchor, type AnchorPart, type TextQuoteSelector, BIBLE_REF, ETYM_TERM } from "./anchor";
 
 export const KIND = "capture";
 export const F = { source: "captures.source", quote: "captures.quote", parts: "captures.parts", locator: "captures.locator" };
@@ -220,6 +220,8 @@ export function regionImage(id: string, n: number, cls = "capture-region", alt =
   return img;
 }
 
+const BY_REFERENCE = new Set([BIBLE_REF, ETYM_TERM]);
+
 type PartStatus = "found" | "moved" | "lost" | "region";
 
 /** The stored text a capture's places point into. */
@@ -228,8 +230,8 @@ export const storedText = (a: Anchor): Promise<StoredText | null> => call<Stored
 /** Finds every part of a capture again in its source's stored text (fetched by `text`). */
 export async function statuses(a: Anchor, text = storedText): Promise<PartStatus[]> {
   const stored = await text(a);
-  // A Bible passage is where its reference says (its version's text is the Bible's own).
-  return a.parts.map((p) => (isRegion(p) ? "region" : p.selector.some((s) => "conformsTo" in s && s.conformsTo === BIBLE_REF) ? "found" : !stored ? "lost" : locate(stored.text, p.selector).status));
+  // A Bible passage or a word's origins is where its reference says (the text is the app's data).
+  return a.parts.map((p) => (isRegion(p) ? "region" : p.selector.some((s) => "conformsTo" in s && BY_REFERENCE.has(s.conformsTo)) ? "found" : !stored ? "lost" : locate(stored.text, p.selector).status));
 }
 
 /** The worst of a capture's statuses, as a badge's word ("" when all is well). */

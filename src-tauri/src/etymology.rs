@@ -5,9 +5,11 @@
 
 use crate::dataset::{Dataset, Source};
 use crate::error::{Code, Error, Result};
-use crate::store::Emit;
-use crate::types::{EtymEntry, EtymLookup, EtymRelatives, EtymSense, EtymStep, EtymTerm};
+use crate::library::{self, FORMAT};
+use crate::store::{Emit, Library};
+use crate::types::{EtymEntry, EtymLookup, EtymRelatives, EtymSense, EtymStep, EtymTerm, Written};
 use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::json;
 use std::collections::{HashSet, VecDeque};
 use std::path::Path;
 use unicode_normalization::char::is_combining_mark;
@@ -37,6 +39,19 @@ impl Etymology {
 
     fn with<T>(&self, f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T> {
         self.data.with(f)
+    }
+
+    /// The library item captures from word origins cite: the one there is, or a new one.
+    pub fn record(&self, lib: &Library) -> Result<Written> {
+        library::dataset_item(
+            lib,
+            FORMAT,
+            "etymology",
+            "Word origins",
+            json!({ FORMAT: "etymology" }),
+            "Word origins",
+            SOURCE.url,
+        )
     }
 
     /// An English word: each of its entries (homographs), or words beginning with it.
