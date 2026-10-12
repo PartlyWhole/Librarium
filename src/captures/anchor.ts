@@ -21,6 +21,9 @@ const MOVED_THRESHOLD = 0.75;
 export const PDF_PAGE = "http://tools.ietf.org/rfc/rfc8118";
 export const MEDIA = "http://www.w3.org/TR/media-frags/";
 export const CFI = "http://www.idpf.org/epub/linking/cfi/epub-cfi.html";
+/** A passage of a Bible version: `Jhn.3.16` or `Jhn.3.16-Jhn.3.18` (STEPBible's book names, the
+ * KJV's numbering). */
+export const BIBLE_REF = "librarium:bible-ref";
 
 export interface TextQuoteSelector {
   type: "TextQuoteSelector";

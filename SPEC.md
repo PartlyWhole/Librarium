@@ -482,6 +482,34 @@ dragged out for capture.
   - The capture is archived and the notes rewritten. One Undo restores everything.
 - **Orphan sidecars** are listed in Settings ▸ Captures, never deleted.
 
+## Bible
+
+Eight English versions (KJV, BSB, YLT, LSV, ASV, RV, Darby, WEB) and the Hebrew and Greek word
+by word, from STEP Bible (Tyndale House, Cambridge), eBible.org and the Berean Bible, built
+by `tools/bible/build.py`.
+
+- **The Bible page** (the ribbon's Bible). A book and chapter to choose, with previous and next
+  chapter, and the versions as buttons along the top: one version reads as running text;
+  several stand side by side, verse beside verse. Every version is in the KJV's numbering (a
+  Psalm's title is its verse 0); a verse a version leaves out shows "—".
+- **Interlinear** puts the Hebrew (right to left) or Greek beneath each verse, word by word:
+  the word, its transliteration and its gloss. The Greek is the Nestle-Aland text.
+- **Word study** (the side panel, beside the Bible): a click on a word of the Hebrew or Greek,
+  or on a KJV or BSB word (they carry Strong's numbers), shows its lexicon entries (each sense
+  of the number), the word's grammar spelled out, Abbott-Smith's entry for Greek words, and how
+  many words of the Hebrew and Greek have it, with the first 300 verses (each opens there).
+- **Search** looks in the first version shown: every word (each as the start of a word), or a
+  phrase "in quotes"; the first 200 verses, in order. A result opens at its verse.
+- **Capturing.** A passage selected in one version (in running text, or down its column) gets
+  **Capture** beside it: a capture of its words, cited "King James Version, John 1:1–2". The
+  version becomes a library item (kind "Bible") the first time, so its captures group, embed,
+  link and show "Used in" as any source's do; opening the item, or Show in the source, opens the
+  Bible page at the passage with that version first.
+- The versions shown, Interlinear and the place are remembered. Each version's source and
+  licence, and STEP Bible's credit, are under the chapter.
+- **The data** (196 MB) is downloaded once, when the page first opens (63 MB, from a release of
+  Librarium on GitHub), and checked against its SHA-256, as for word origins.
+
 ## Word origins
 
 Where English words come from, from the etymology database built by the `etym` tool (Wiktionary

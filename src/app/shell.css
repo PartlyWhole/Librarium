@@ -118,3 +118,8 @@
 .resize-handle.resize-end { right: -4px; }
 .resize-handle:hover, .resize-handle:focus-visible { background: linear-gradient(to right, transparent 2px, var(--accent) 2px, var(--accent) 5px, transparent 5px); outline: none; }
 body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; -webkit-user-select: none !important; }
+
+/* A downloaded dataset's setup (word origins, the Bible). */
+.dataset-setup { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: 520px; }
+.dataset-progress { width: 100%; }
+.dataset-setup .button { display: inline-flex; align-items: center; gap: 6px; }

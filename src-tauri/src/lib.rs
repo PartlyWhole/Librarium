@@ -2,10 +2,12 @@
 
 pub mod app;
 pub mod archive;
+pub mod bible;
 pub mod boards;
 pub mod captures;
 pub mod commands;
 pub mod daily;
+pub mod dataset;
 #[cfg(debug_assertions)]
 pub mod devbridge;
 pub mod error;

@@ -70,9 +70,24 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         "folder.inspect" => ok(app::inspect(Path::new(&p::<PathParams>(params)?.path))),
         "folder.reveal" => ok(app::reveal(&lib()?.root)?),
         "settings.get" => ok(app.settings.all()),
-        "etymology.status" => ok(app.etymology.status()),
-        "etymology.download" => ok(app.etymology.download()),
-        "etymology.cancel" => ok(app.etymology.cancel()),
+        "bible.status" => ok(app.bible.data.status()),
+        "bible.download" => ok(app.bible.data.download()),
+        "bible.cancel" => ok(app.bible.data.cancel()),
+        "bible.info" => ok(app.bible.info()?),
+        "bible.record" => ok(app.bible.record(&*lib()?, &p::<BibleVersionParams>(params)?.version)?),
+        "bible.chapter" => {
+            let c: BibleChapterParams = p(params)?;
+            ok(app.bible.chapter(&c.book, c.chapter, &c.versions, c.original)?)
+        }
+        "bible.word" => ok(app.bible.word(&p::<BibleStrongsParams>(params)?.strongs)?),
+        "bible.grammar" => ok(app.bible.grammar(&p::<BibleCodeParams>(params)?.code)?),
+        "bible.search" => {
+            let s: BibleSearchParams = p(params)?;
+            ok(app.bible.search(&s.version, &s.query)?)
+        }
+        "etymology.status" => ok(app.etymology.data.status()),
+        "etymology.download" => ok(app.etymology.data.download()),
+        "etymology.cancel" => ok(app.etymology.data.cancel()),
         "etymology.lookup" => ok(app.etymology.lookup(&p::<EtymWordParams>(params)?.word)?),
         "etymology.term" => ok(app.etymology.term(&p::<EtymKeyParams>(params)?.key)?),
         "etymology.search" => ok(app.etymology.search(&p::<EtymWordParams>(params)?.word)?),

@@ -19,7 +19,7 @@ import { canOpen, listRecords, openRecord, putRecord, recordIcon } from "./recor
 import { router } from "./router";
 import { revealFolder, revealLogs, theme } from "./settings";
 import { lastStep, nextStep, redo, redoHere, redoLast, undo, undoHere, undoLast } from "./undo";
-import { Archive, CalendarDays, Command, Files, Keyboard, Library, Plus, Quote, Search, Settings } from "lucide";
+import { Archive, BookOpenText, CalendarDays, Command, Files, Keyboard, Library, Plus, Quote, Search, Settings } from "lucide";
 
 export const sidebarOpen = pref("ui.sidebar", true);
 /** The sidebar's width, in pixels. */
@@ -82,6 +82,7 @@ const GO: [page: string, title: string, icon: typeof Files, keys?: string][] = [
   ["notes", "Notes", Files],
   ["library", "Library", Library],
   ["captures", "Captures", Quote, "Mod+Shift+K"],
+  ["bible", "Bible", BookOpenText],
   ["search", "Search", Search, "Mod+Shift+F"],
   ["archive", "Archive", Archive],
 ];

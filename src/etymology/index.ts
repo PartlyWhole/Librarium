@@ -5,23 +5,21 @@
  * shown opens in turn (Back returns). Beside a note, Insert puts the line of descent into it as
  * a quotation with its source. The data is downloaded once, when asked (see etymology.rs).
  */
-import { call, on } from "../backend";
+import { call } from "../backend";
+import { dataStatus, datasetSetup } from "../app/dataset";
 import { defineAction } from "../app/actions";
 import { addPanelView, showPanelView } from "../app/panel";
 import { router } from "../app/router";
 import { activeEditor } from "../notes/editor/editor";
 import { noteView } from "../notes/page";
 import { errorText, h, replace } from "../ui/dom";
-import { icon, iconButton } from "../ui/icon";
+import { iconButton } from "../ui/icon";
 import { effect, signal } from "../ui/signal";
-import { toast } from "../ui/toast";
-import type { EtymEntry, EtymLookup, EtymStatus, EtymTerm } from "../types";
+import type { EtymEntry, EtymLookup, EtymTerm } from "../types";
 import "./etymology.css";
-import { ArrowLeft, Download, Sprout, TextCursorInput } from "lucide";
+import { ArrowLeft, Sprout, TextCursorInput } from "lucide";
 
-const status = signal<EtymStatus | null>(null);
-void call<EtymStatus>("etymology.status").then((s) => status.set(s), () => {});
-on<EtymStatus>("etymology.status", (s) => status.set(s));
+const status = dataStatus("etymology");
 
 /** What is shown: a word (looked up) or a term (by key), and what was shown before it. */
 type Shown = { word: string } | { key: string };
@@ -61,25 +59,6 @@ defineAction({
   menu: { name: "edit", group: 2.95 },
   icon: Sprout,
 });
-
-const mb = (n: number) => `${Math.round(n / 1_000_000)} MB`;
-
-/** Download, its progress, or why it failed. */
-function setup(s: EtymStatus): HTMLElement {
-  const about = h("p", { class: "muted small" }, "Where English words come from: each word’s line of descent back through Middle English, French, Latin, Greek and Proto-Indo-European, and the words it is related to. From Wiktionary and other dictionaries, kept on this Mac.");
-  if (s.state === "downloading" || s.state === "unpacking") {
-    const done = s.state === "unpacking" ? 1 : s.received / s.download_bytes;
-    return h("div", { class: "etym-setup" }, about,
-      h("progress", { class: "etym-progress", max: "1", value: String(done) }),
-      h("p", { class: "small" }, s.state === "unpacking" ? "Unpacking and checking…" : `Downloading word origins: ${mb(s.received)} of ${mb(s.download_bytes)}`),
-      s.state === "downloading" ? h("button", { class: "button small", type: "button", onclick: () => void call("etymology.cancel") }, "Cancel") : null);
-  }
-  return h("div", { class: "etym-setup" }, about,
-    s.error ? h("p", { class: "small notice-text" }, s.error) : null,
-    h("button", { class: "button primary small", type: "button", onclick: () => void call<EtymStatus>("etymology.download").then((x) => status.set(x), (e) => toast(errorText(e))) },
-      icon(Download, 14), s.error ? "Try again" : `Download word origins (${mb(s.download_bytes)})`),
-    h("p", { class: "muted small" }, `Downloaded once from Librarium’s releases on GitHub; ${mb(s.disk_bytes)} on this Mac. Nothing is sent when you look a word up.`));
-}
 
 /** A word that opens when clicked. */
 const termLink = (t: EtymTerm, label = t.term) =>
@@ -170,7 +149,7 @@ addPanelView({
       const what = shown();
       backButton.style.display = back.length ? "" : "none";
       if (!s) return replace(host);
-      if (s.state !== "ready") return replace(host, h("div", { class: "etym-panel" }, setup(s)));
+      if (s.state !== "ready") return replace(host, h("div", { class: "etym-panel" }, datasetSetup("etymology", s, { name: "word origins", about: "Where English words come from: each word’s line of descent back through Middle English, French, Latin, Greek and Proto-Indo-European, and the words it is related to. From Wiktionary and other dictionaries, kept on this Mac." })));
       replace(host, h("div", { class: "etym-panel" }, form, suggest, result));
       if (!what) return replace(result, h("p", { class: "muted small" }, "Type a word, or select one in a note or a page and choose Look up word origin (⌃⌘E)."));
       if ("word" in what) input.value = what.word;

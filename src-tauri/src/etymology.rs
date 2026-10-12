@@ -1,116 +1,42 @@
 //! Word origins: the database the `etym` tool builds from Wiktionary and other dictionaries,
-//! read-only SQLite in the app's folder (`etymology.db`). It isn't shipped with the app: it is
-//! downloaded once, when asked, from a release of this repository, unpacked, and checked against
-//! its SHA-256 before it is used. The queries follow the database's contract (schema version 2):
+//! read-only SQLite in the app's folder (`etymology.db`), downloaded once when asked (see
+//! dataset.rs). The queries follow the database's contract (schema version 2):
 //! terms are named by their stable keys, and links weaker than 0.4 are left out.
 
+use crate::dataset::{Dataset, Source};
 use crate::error::{Code, Error, Result};
 use crate::store::Emit;
-use crate::types::{EtymEntry, EtymLookup, EtymRelatives, EtymSense, EtymStatus, EtymStep, EtymTerm};
-use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
-use sha2::{Digest, Sha256};
+use crate::types::{EtymEntry, EtymLookup, EtymRelatives, EtymSense, EtymStep, EtymTerm};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{HashSet, VecDeque};
-use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::path::Path;
 use unicode_normalization::char::is_combining_mark;
 use unicode_normalization::UnicodeNormalization;
 
 /// The database, gzipped, as released; and the database it unpacks to.
-const URL: &str = "https://github.com/PartlyWhole/Librarium/releases/download/etymology-2026-10-11/etymology.db.gz";
-const DOWNLOAD_BYTES: u64 = 207_218_613;
-const DISK_BYTES: u64 = 635_740_160;
-const SHA256: &str = "548d12e9c88a894fdbc9bef45cf666c0d3af3a71eda3c13429c70e81382f8b6f";
-const FILE_NAME: &str = "etymology.db";
+static SOURCE: Source = Source {
+    name: "Word origins",
+    url: "https://github.com/PartlyWhole/Librarium/releases/download/etymology-2026-10-11/etymology.db.gz",
+    file: "etymology.db",
+    download_bytes: 207_218_613,
+    disk_bytes: 635_740_160,
+    sha256: "548d12e9c88a894fdbc9bef45cf666c0d3af3a71eda3c13429c70e81382f8b6f",
+    schema: "2",
+    event: "etymology.status",
+};
 const MIN_CONFIDENCE: f64 = 0.4;
 
 pub struct Etymology {
-    path: PathBuf,
-    emit: Emit,
-    state: Arc<Mutex<EtymStatus>>,
-    cancel: Arc<AtomicBool>,
-    db: Mutex<Option<Connection>>,
-}
-
-fn status(state: &str, received: u64, error: Option<String>) -> EtymStatus {
-    EtymStatus { state: state.into(), received, download_bytes: DOWNLOAD_BYTES, disk_bytes: DISK_BYTES, error }
+    pub data: Dataset,
 }
 
 impl Etymology {
     pub fn new(app_data: &Path, emit: Emit) -> Etymology {
-        let path = app_data.join(FILE_NAME);
-        let state = status(if path.exists() { "ready" } else { "missing" }, 0, None);
-        Etymology {
-            path,
-            emit,
-            state: Arc::new(Mutex::new(state)),
-            cancel: Arc::new(AtomicBool::new(false)),
-            db: Mutex::new(None),
-        }
+        Etymology { data: Dataset::new(&SOURCE, app_data, emit) }
     }
 
-    pub fn status(&self) -> EtymStatus {
-        self.state.lock().unwrap().clone()
-    }
-
-    /// Starts the download (once); progress and the outcome come as `etymology.status` events.
-    pub fn download(&self) -> EtymStatus {
-        {
-            let mut s = self.state.lock().unwrap();
-            if matches!(s.state.as_str(), "downloading" | "unpacking" | "ready") {
-                return s.clone();
-            }
-            *s = status("downloading", 0, None);
-        }
-        self.cancel.store(false, Ordering::SeqCst);
-        let (path, state, emit, cancel) =
-            (self.path.clone(), self.state.clone(), self.emit.clone(), self.cancel.clone());
-        tauri::async_runtime::spawn(async move {
-            let result = fetch(&path, &state, &emit, &cancel).await;
-            let s = {
-                let mut s = state.lock().unwrap();
-                *s = match result {
-                    Ok(()) => status("ready", DOWNLOAD_BYTES, None),
-                    Err(_) if cancel.load(Ordering::SeqCst) => status("missing", 0, None),
-                    Err(e) => {
-                        log::warn!("word origins weren't downloaded: {}", e.message);
-                        status("failed", 0, Some(e.message))
-                    }
-                };
-                s.clone()
-            };
-            emit("etymology.status", serde_json::to_value(s).unwrap_or_default());
-        });
-        self.status()
-    }
-
-    pub fn cancel(&self) -> EtymStatus {
-        self.cancel.store(true, Ordering::SeqCst);
-        self.status()
-    }
-
-    /// Runs `f` on the database, opened read-only the first time.
     fn with<T>(&self, f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T> {
-        let mut db = self.db.lock().unwrap();
-        if db.is_none() {
-            if !self.path.exists() {
-                return Err(Error::not_found("Word origins aren’t downloaded yet."));
-            }
-            let c = Connection::open_with_flags(
-                &self.path,
-                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-            )?;
-            let version: Option<String> =
-                c.query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |r| r.get(0)).optional()?;
-            if version.as_deref() != Some("2") {
-                return Err(Error::invalid("The word origins database is of a kind this version doesn’t read."));
-            }
-            *db = Some(c);
-        }
-        Ok(f(db.as_ref().unwrap())?)
+        self.data.with(f)
     }
 
     /// An English word: each of its entries (homographs), or words beginning with it.
@@ -162,70 +88,6 @@ impl Etymology {
     pub fn search(&self, q: &str) -> Result<Vec<EtymTerm>> {
         self.with(|c| search(c, q, 12))
     }
-}
-
-/// The download: the gzipped file, then unpacked and checked, then put in place.
-async fn fetch(path: &Path, state: &Mutex<EtymStatus>, emit: &Emit, cancel: &AtomicBool) -> Result<()> {
-    let net = |e: reqwest::Error| Error::io(format!("The download didn’t complete ({e})."));
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let client = reqwest::Client::builder().user_agent("Librarium").build().map_err(net)?;
-    let mut res = client.get(URL).send().await.map_err(net)?.error_for_status().map_err(net)?;
-    let gz = path.with_extension("db.gz.part");
-    let mut out = BufWriter::new(File::create(&gz)?);
-    let (mut received, mut told) = (0u64, Instant::now());
-    while let Some(chunk) = res.chunk().await.map_err(net)? {
-        if cancel.load(Ordering::SeqCst) {
-            drop(out);
-            let _ = fs::remove_file(&gz);
-            return Err(Error::new(Code::Cancelled, "cancelled"));
-        }
-        out.write_all(&chunk)?;
-        received += chunk.len() as u64;
-        if told.elapsed() > Duration::from_millis(250) {
-            told = Instant::now();
-            let s = status("downloading", received, None);
-            *state.lock().unwrap() = s.clone();
-            emit("etymology.status", serde_json::to_value(s).unwrap_or_default());
-        }
-    }
-    out.flush()?;
-    drop(out);
-    let s = status("unpacking", received, None);
-    *state.lock().unwrap() = s.clone();
-    emit("etymology.status", serde_json::to_value(s).unwrap_or_default());
-    let dst = path.to_path_buf();
-    tauri::async_runtime::spawn_blocking(move || unpack(&gz, &dst)).await.map_err(|e| Error::io(e.to_string()))?
-}
-
-/// Unpacks the download beside where it goes, checks it, and moves it there.
-fn unpack(gz: &Path, dst: &Path) -> Result<()> {
-    let part = dst.with_extension("db.part");
-    let result = (|| -> Result<()> {
-        let mut input = flate2::read::GzDecoder::new(BufReader::new(File::open(gz)?));
-        let mut out = BufWriter::new(File::create(&part)?);
-        let mut hash = Sha256::new();
-        let mut buf = vec![0u8; 1 << 20];
-        loop {
-            let n = input.read(&mut buf)?;
-            if n == 0 {
-                break;
-            }
-            hash.update(&buf[..n]);
-            out.write_all(&buf[..n])?;
-        }
-        out.into_inner().map_err(|e| Error::io(e.to_string()))?.sync_all()?;
-        let got: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
-        if got != SHA256 {
-            return Err(Error::io("The download was damaged; try again."));
-        }
-        fs::rename(&part, dst)?;
-        Ok(())
-    })();
-    let _ = fs::remove_file(gz);
-    if result.is_err() {
-        let _ = fs::remove_file(&part);
-    }
-    result
 }
 
 /// As the database's `norm`: lower case, accents taken off, no leading `*`.
