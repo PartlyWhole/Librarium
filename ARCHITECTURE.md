@@ -44,6 +44,9 @@ src/                      the interface
   reader/                 the item page: pdf/, image/, epub/, and what captures draw with
   captures/  boards/  library/  websave/  search/  archive/  updates/
   etymology/              the Word origins view and Look up word origin
+
+tools/bible/build.py      builds bible.db (English versions, the Hebrew and Greek word by
+                          word, lexicons) from its sources; not part of the app
 ```
 
 ## Rules
