@@ -42,6 +42,9 @@ src/                      the interface
   notes/                  the note page, embeds, history; editor/ is CodeMirror
   reader/                 the item page: pdf/, image/, epub/, and what captures draw with
   captures/  boards/  library/  websave/  search/  archive/  updates/
+
+tools/bible/build.py      builds bible.db (English versions, the Hebrew and Greek word by
+                          word, lexicons) from its sources; not part of the app
 ```
 
 ## Rules
