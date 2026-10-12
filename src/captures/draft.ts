@@ -8,6 +8,7 @@
  * handles and frames in the document and a bar over it.
  */
 import { call } from "../backend";
+import { runAction } from "../app/actions";
 import { showPanelView } from "../app/panel";
 import { getRecord, openRecord, putRecord } from "../app/records";
 import { router } from "../app/router";
@@ -22,7 +23,7 @@ import { onReaderOpen, type Box, type EditedPart, type EditPart, type OpenReader
 import { CFI, describe, flowQuote, locateSelection, MEDIA, PDF_PAGE, sliceCp, type Selector } from "./anchor";
 import { anchorOf, capturesOf, cite, isRegion, joinParts, partQuote, placeParams, quoteOf, quoteParts, runsOn, symbolsFrom, symbolsIn, type ShownPart } from "./common";
 import { deleteCapture } from "./delete";
-import { Crop, Highlighter, Pencil, Quote, Trash2, X } from "lucide";
+import { Crop, Highlighter, Pencil, Quote, Sprout, Trash2, X } from "lucide";
 
 /** A part of the capture being made. */
 interface DraftPart extends CapturePart {
@@ -245,7 +246,10 @@ onReaderOpen((r) => {
     if (!sel?.end) return void (pop.hidden = true);
     const image = !!sel.image && !sel.text;
     const adding = !!draft()?.parts.length;
-    replace(pop, popButton(Highlighter, adding ? (image ? "Add image to capture" : "Add to capture") : image ? "Capture image" : "Capture", () => void addSelection()));
+    // A single word can be looked up too.
+    const word = !image && /^\p{L}[\p{L}'’-]*$/u.test(sel.text.trim());
+    replace(pop, popButton(Highlighter, adding ? (image ? "Add image to capture" : "Add to capture") : image ? "Capture image" : "Capture", () => void addSelection()),
+      word ? popButton(Sprout, "Origin", () => ((pop.hidden = true), runAction("etymology.lookup")), "Look up the word’s origin (⌃⌘E)") : null);
     pop.hidden = false;
     place(pop, sel.end.x, sel.end.bottom + 8, sel.end.y - 40);
   };

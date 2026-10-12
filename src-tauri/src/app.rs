@@ -2,6 +2,7 @@
 //! library closes the previous one first; the interface is told by `library.status`.
 
 use crate::error::{Code, Context, Error, Result};
+use crate::etymology::Etymology;
 use crate::settings::{Settings, LIBRARY_PATH};
 use crate::store::{Emit, Library};
 use crate::types::{FolderInfo, LibraryState, LibraryStatus};
@@ -24,6 +25,8 @@ pub struct App {
     pub logs: PathBuf,
     pub settings: Settings,
     pub emit: Emit,
+    /// Word origins (the app's, not a library's).
+    pub etymology: Etymology,
     state: RwLock<State>,
     opening: Mutex<()>,
 }
@@ -38,6 +41,7 @@ impl App {
     pub fn new(app_data: PathBuf, logs: PathBuf, emit: Emit) -> App {
         App {
             settings: Settings::load(&app_data),
+            etymology: Etymology::new(&app_data, emit.clone()),
             app_data,
             logs,
             emit,

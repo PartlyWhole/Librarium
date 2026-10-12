@@ -70,6 +70,12 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         "folder.inspect" => ok(app::inspect(Path::new(&p::<PathParams>(params)?.path))),
         "folder.reveal" => ok(app::reveal(&lib()?.root)?),
         "settings.get" => ok(app.settings.all()),
+        "etymology.status" => ok(app.etymology.status()),
+        "etymology.download" => ok(app.etymology.download()),
+        "etymology.cancel" => ok(app.etymology.cancel()),
+        "etymology.lookup" => ok(app.etymology.lookup(&p::<EtymWordParams>(params)?.word)?),
+        "etymology.term" => ok(app.etymology.term(&p::<EtymKeyParams>(params)?.key)?),
+        "etymology.search" => ok(app.etymology.search(&p::<EtymWordParams>(params)?.word)?),
         "settings.set" => ok(app.set_settings(p::<SettingsParams>(params)?.values)?),
         "export.write" => {
             let e: ExportParams = p(params)?;

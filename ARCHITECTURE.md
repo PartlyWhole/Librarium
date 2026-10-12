@@ -30,6 +30,7 @@ src-tauri/src/            the backend: one crate, one module per concern
   reader.rs               files for the reader: the `bytes` command and the asset: protocol
   jobs.rs                 background work that resumes after a restart
   settings.rs             settings.json and drafts in app data
+  etymology.rs            word origins: the database's download, and lookups in it (read-only)
   devbridge.rs            development only: a browser can drive the backend (see below)
 
 src/                      the interface
@@ -42,6 +43,7 @@ src/                      the interface
   notes/                  the note page, embeds, history; editor/ is CodeMirror
   reader/                 the item page: pdf/, image/, epub/, and what captures draw with
   captures/  boards/  library/  websave/  search/  archive/  updates/
+  etymology/              the Word origins view and Look up word origin
 ```
 
 ## Rules

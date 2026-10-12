@@ -482,6 +482,34 @@ dragged out for capture.
   - The capture is archived and the notes rewritten. One Undo restores everything.
 - **Orphan sidecars** are listed in Settings ▸ Captures, never deleted.
 
+## Word origins
+
+Where English words come from, from the etymology database built by the `etym` tool (Wiktionary
+in English, French and German, Lewis & Short, LSJ and IE-CoR: its permissive build, all of it
+CC-licensed).
+
+- **The Word origins view** of the side panel, beside any page. A box looks a word up, with
+  words beginning with what is typed offered as you go.
+- **Look up word origin** (⌃⌘E, Edit menu): the word selected in a note, PDF or saved page (or
+  at a note's cursor) is shown there. In a PDF or saved page, a single word selected also gets
+  **Origin** beside Capture.
+- **What a word shows**, for each of its entries (homographs):
+  - its first definitions;
+  - its **line of descent**, each older form with its language, meaning and how it was taken
+    (inherited, borrowed, derived…), and the other parts where a step is out of a compound;
+  - Wiktionary's account of it, its doublets, the English words it shares each ancestor with,
+    its cognates and roots;
+  - links weaker than 0.4 (a minority view) are left out.
+- Any word shown opens in turn (an older form shows the English words that come from it); Back
+  returns. A form of another word (wrote, mice) has no origin of its own and says so.
+- **Insert** (beside a note) puts the line of descent into the note at its cursor, as a
+  quotation with its first definition and "— Word origins from Wiktionary (CC BY-SA 4.0) and
+  other dictionaries". It is plain text: nothing links back to the database.
+- The sources and their licences are shown, folded, under every lookup.
+- **The data** (641 MB) isn't part of the app. The view offers to download it once (209 MB,
+  from a release of Librarium on GitHub, with Cancel); it is checked against its SHA-256 before
+  it is used, and kept in app data. Nothing is sent when a word is looked up.
+
 ## Links and backlinks
 
 - **The Links panel** shows "Linked from", with context, for notes, items, captures and boards.
@@ -763,6 +791,7 @@ composition.
 | ⌥⌘K | Board: link the selection | ✓ |
 | ⌥⌘I | Board: put something on it | ✓ |
 | ⇧⌘↩ | Full screen (a board or an item) | ✓ |
+| ⌃⌘E | Look up word origin | ✓ |
 | ⇧⌘N | New folder | |
 | ⌥⌘Y | Show history | |
 | ⌘F | Find in this item | |

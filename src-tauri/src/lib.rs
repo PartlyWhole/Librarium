@@ -9,6 +9,7 @@ pub mod daily;
 #[cfg(debug_assertions)]
 pub mod devbridge;
 pub mod error;
+pub mod etymology;
 pub mod history;
 pub mod index;
 pub mod jobs;
