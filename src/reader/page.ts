@@ -7,6 +7,8 @@ import { call, readBytes } from "../backend";
 import { fullScreen } from "../app/fullscreen";
 import type { PageContext, PageHandle } from "../app/pages";
 import { formatOf, getRecord } from "../app/records";
+import { router } from "../app/router";
+import { biblePlace } from "../bible/page";
 import { errorText, h, replace } from "../ui/dom";
 import { iconButton } from "../ui/icon";
 import { untracked } from "../ui/signal";
@@ -34,6 +36,8 @@ export function renderItem(host: HTMLElement, params: Record<string, string>, ct
   const id = params.id ?? "";
   const r = untracked(() => getRecord(id));
   if (!r) return replace(host, h("p", { class: "empty" }, "This item can’t be found any more."));
+  // A version of the Bible is read on the Bible page.
+  if (formatOf(r) === "bible") return void setTimeout(() => router.go("bible", biblePlace(r, params), { replace: true }));
   ctx.setTitle(r.title || "Untitled");
   host.classList.add("reader-page");
   const web = formatOf(r) === "web";

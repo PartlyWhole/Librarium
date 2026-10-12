@@ -232,7 +232,7 @@ My own words.
 ### Item (`record.json`)
 
 **Every item.** The envelope, plus:
-- `library.format`: `pdf` | `epub` | `image` | `web`
+- `library.format`: `pdf` | `epub` | `image` | `web` | `bible`
 - `library.folder`, when in a subfolder
 - `archive.at`, when archived
 - `provenance`
@@ -254,6 +254,15 @@ My own words.
     `drawn`, `incomplete` or `empty`.
 - `provenance: {"author", "final-url", "publication", "published", "saved-at",
   "saved-with": "Librarium <ver> (WebKit)", "source": "<url>"}`, with `null` for unknowns
+
+**Bible versions** (`bible`) stand for a version in `bible.db` (app data). They have no file
+and no stored text, only:
+- `bible.version`: the version's id (`kjv`, `bsb`, `ylt`, `lsv`, `asv`, `rv`, `dby`, `web`)
+- `provenance: {"saved-at", "saved-with": "Librarium <ver> (Bible)", "source": "<the
+  database's address>"}`
+
+One is made, titled with the version's name, the first time a passage of that version is
+captured.
 
 Saving the same address again adds a snapshot to the item. Addresses match on `source` or
 `final-url`, ignoring `#fragment` and a trailing `/`.
@@ -335,6 +344,9 @@ Stored text is never regenerated if it is present. Anchors point into it.
   - `{"type": "FragmentSelector", "value": "page=N", "conformsTo": "http://tools.ietf.org/rfc/rfc8118"}`
   - `{"type": "FragmentSelector", "value": "epubcfi(…)", "conformsTo": "http://www.idpf.org/epub/linking/cfi/epub-cfi.html"}`
   - `{"type": "FragmentSelector", "value": "xywh=percent:x,y,w,h", "conformsTo": "http://www.w3.org/TR/media-frags/"}`
+  - `{"type": "FragmentSelector", "value": "Jhn.3.16" | "Jhn.3.16-Jhn.3.18", "conformsTo": "librarium:bible-ref"}`:
+    a passage of a Bible version, by STEPBible's book names and the KJV's numbering (verse 0 is
+    a Psalm's title).
 - **Part shapes.**
 
   | Part | Selector | Extra fields |
@@ -343,6 +355,7 @@ Stored text is never regenerated if it is present. Anchors point into it.
   | PDF region | `[{page=N, "refinedBy": xywh}]` | `boxes`, `region` |
   | Image region | `[xywh]` | `boxes`, `region` |
   | EPUB picture | `[cfi]` or `[]` | `region` |
+  | Bible passage | `[quote (no context), bible-ref]` | |
 
 - **Editing parts.** Rewriting the parts renames region PNGs to their new index. Higher-numbered
   old PNGs are left in place.
@@ -353,7 +366,7 @@ Stored text is never regenerated if it is present. Anchors point into it.
      threshold is shown as *moved* until confirmed. Below it, the anchor is *lost*: listed, never
      drawn in the wrong place.
 
-  Confirming a moved part rewrites `parts`.
+  Confirming a moved part rewrites `parts`. A Bible passage is found by its reference.
 
 ## Links and embeds (in Markdown bodies)
 

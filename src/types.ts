@@ -604,6 +604,8 @@ export type BibleInfo = { versions: Array<BibleVersion>, books: Array<BibleBook>
  */
 attribution: string, };
 
+export type BibleVersionParams = { version: string, };
+
 export type BibleChapterParams = { book: string, chapter: number, versions: Array<string>, 
 /**
  * With the Hebrew or Greek, word by word.

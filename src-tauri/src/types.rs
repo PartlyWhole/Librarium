@@ -874,6 +874,11 @@ pub struct BibleInfo {
 }
 
 #[derive(Clone, Debug, Deserialize, TS)]
+pub struct BibleVersionParams {
+    pub version: String,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
 pub struct BibleChapterParams {
     pub book: String,
     pub chapter: u32,
@@ -1084,6 +1089,7 @@ pub fn typescript() -> String {
         BibleVersion,
         BibleBook,
         BibleInfo,
+        BibleVersionParams,
         BibleChapterParams,
         BibleTag,
         BibleWord,

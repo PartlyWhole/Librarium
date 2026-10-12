@@ -500,6 +500,11 @@ by `tools/bible/build.py`.
   many words of the Hebrew and Greek have it, with the first 300 verses (each opens there).
 - **Search** looks in the first version shown: every word (each as the start of a word), or a
   phrase "in quotes"; the first 200 verses, in order. A result opens at its verse.
+- **Capturing.** A passage selected in one version (in running text, or down its column) gets
+  **Capture** beside it: a capture of its words, cited "King James Version, John 1:1–2". The
+  version becomes a library item (kind "Bible") the first time, so its captures group, embed,
+  link and show "Used in" as any source's do; opening the item, or Show in the source, opens the
+  Bible page at the passage with that version first.
 - The versions shown, Interlinear and the place are remembered. Each version's source and
   licence, and STEP Bible's credit, are under the chapter.
 - **The data** (196 MB) is downloaded once, when the page first opens (63 MB, from a release of

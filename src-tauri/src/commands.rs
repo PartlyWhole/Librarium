@@ -74,6 +74,7 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         "bible.download" => ok(app.bible.data.download()),
         "bible.cancel" => ok(app.bible.data.cancel()),
         "bible.info" => ok(app.bible.info()?),
+        "bible.record" => ok(app.bible.record(&*lib()?, &p::<BibleVersionParams>(params)?.version)?),
         "bible.chapter" => {
             let c: BibleChapterParams = p(params)?;
             ok(app.bible.chapter(&c.book, c.chapter, &c.versions, c.original)?)

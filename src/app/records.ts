@@ -11,7 +11,7 @@ import type { RecordInfo } from "../types";
 import { pages } from "./pages";
 import { router } from "./router";
 import { showStatus } from "./status";
-import { BookOpen, FileText, Globe, Image, Quote, Shapes } from "lucide";
+import { BookOpen, BookOpenText, FileText, Globe, Image, Quote, Shapes } from "lucide";
 
 /** Every record, by ID, archived ones too. Replaced (never mutated) on each change. */
 export const records = signal<ReadonlyMap<string, RecordInfo>>(new Map());
@@ -50,13 +50,13 @@ export function listRecords(kind?: string): RecordInfo[] {
   return [...records().values()].filter((r) => (!kind || r.kind === kind) && !isArchived(r));
 }
 
-/** A library item's format: pdf, epub, image or web. */
+/** A library item's format: pdf, epub, image, web or bible (a version of the Bible). */
 export const formatOf = (r: RecordInfo): string => String(r.fields["library.format"] ?? "");
 
 const KIND_ICONS: Record<string, IconNode> = { note: FileText, capture: Quote, board: Shapes };
-const FORMAT_ICONS: Record<string, IconNode> = { pdf: FileText, epub: BookOpen, image: Image, web: Globe };
+const FORMAT_ICONS: Record<string, IconNode> = { pdf: FileText, epub: BookOpen, image: Image, web: Globe, bible: BookOpenText };
 const KIND_NAMES: Record<string, string> = { note: "Note", capture: "Capture", board: "Board", item: "Item" };
-const FORMAT_NAMES: Record<string, string> = { web: "Web page", pdf: "PDF", epub: "EPUB", image: "Image" };
+const FORMAT_NAMES: Record<string, string> = { web: "Web page", pdf: "PDF", epub: "EPUB", image: "Image", bible: "Bible" };
 
 export function recordIcon(r: RecordInfo): IconNode {
   return (r.kind === "item" ? FORMAT_ICONS[formatOf(r)] : KIND_ICONS[r.kind]) ?? FileText;
