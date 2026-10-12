@@ -1,6 +1,7 @@
 //! The app's state: the settings, and the open library (or why there isn't one). Opening a
 //! library closes the previous one first; the interface is told by `library.status`.
 
+use crate::bible::Bible;
 use crate::error::{Code, Context, Error, Result};
 use crate::etymology::Etymology;
 use crate::settings::{Settings, LIBRARY_PATH};
@@ -25,8 +26,9 @@ pub struct App {
     pub logs: PathBuf,
     pub settings: Settings,
     pub emit: Emit,
-    /// Word origins (the app's, not a library's).
+    /// Word origins and the Bible (the app's, not a library's).
     pub etymology: Etymology,
+    pub bible: Bible,
     state: RwLock<State>,
     opening: Mutex<()>,
 }
@@ -42,6 +44,7 @@ impl App {
         App {
             settings: Settings::load(&app_data),
             etymology: Etymology::new(&app_data, emit.clone()),
+            bible: Bible::new(&app_data, emit.clone()),
             app_data,
             logs,
             emit,

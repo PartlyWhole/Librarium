@@ -12,6 +12,7 @@ import "./reader";
 import "./captures";
 import "./websave";
 import "./etymology";
+import "./bible";
 import "./updates";
 import { startApp } from "./app/shell";
 

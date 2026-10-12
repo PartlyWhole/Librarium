@@ -1,0 +1,60 @@
+/* The Bible page and the side panel's Word study. */
+.ws-page.bible-page { max-width: none; padding: 0; }
+.bible-setup { padding: 28px 32px; }
+.bible-toolbar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 20px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.bible-nav { display: flex; align-items: center; gap: 4px; }
+.bible-select { font: inherit; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--r1); background: var(--bg); color: var(--ink); }
+.bible-versions { display: flex; flex-wrap: wrap; gap: 4px; }
+.bible-version { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: none; color: var(--muted); font: 500 var(--small) var(--font-ui); cursor: pointer; }
+.bible-version[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); }
+.bible-search { margin-left: auto; width: 200px; }
+.bible-content { padding: 20px 32px 48px; }
+.bible-chapter { max-width: 1100px; margin: 0 auto; }
+.bible-heading { margin: 0 0 16px; font-size: 22px; }
+
+/* One version: the chapter as it reads. */
+.bible-flow { max-width: 680px; font-size: var(--reading-size); line-height: 1.75; }
+.bible-flow .bible-title { font-style: italic; color: var(--muted); }
+.bible-num { margin-right: 3px; font-size: 0.65em; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bible-v { scroll-margin: 120px; }
+
+/* Several versions (or with the original): verse beside verse. */
+.bible-row { display: grid; grid-template-columns: 2.2em repeat(var(--bible-columns), minmax(0, 1fr)); gap: 4px 18px; padding: 8px 0; border-bottom: 1px solid var(--border); line-height: 1.6; scroll-margin: 120px; }
+.bible-row > .bible-num { margin: 0; padding-top: 3px; font-size: var(--small); text-align: right; }
+.bible-heads { position: sticky; top: 46px; z-index: 1; background: var(--bg); font-size: var(--small); font-weight: 600; color: var(--muted); }
+.bible-row.bible-title .bible-cell { font-style: italic; color: var(--muted); }
+.bible-flash { animation: bible-flash 2s ease-out; }
+@keyframes bible-flash { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } to { background: transparent; } }
+
+/* Tagged English words: what they translate is a click away. */
+.bible-w { cursor: pointer; border-radius: 3px; }
+.bible-w:hover { background: var(--hover); text-decoration: underline dotted var(--muted); }
+
+/* The Hebrew or Greek, word by word. */
+.bible-words { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px 4px; padding: 6px 0 2px; }
+.bible-word { display: inline-flex; flex-direction: column; align-items: center; min-width: 3em; padding: 3px 6px; border: none; border-radius: var(--r1); background: none; color: var(--ink); font: inherit; cursor: pointer; }
+.bible-word:hover, .bible-word:focus-visible { background: var(--hover); outline: none; }
+.bible-orig { font-size: 1.25em; line-height: 1.3; font-family: "SBL Hebrew", "SBL Greek", "Times New Roman", serif; }
+.bible-translit { font-size: 11px; font-style: italic; color: var(--muted); }
+.bible-gloss { font-size: 11px; color: var(--muted); }
+
+.bible-credits { margin-top: 28px; font-size: 11px; line-height: 1.5; }
+.bible-results { display: flex; flex-direction: column; gap: 2px; max-width: 760px; }
+.bible-result { display: flex; gap: 10px; padding: 6px 8px; border-radius: var(--r1); color: var(--ink); text-decoration: none; }
+.bible-result:hover { background: var(--hover); }
+.bible-result-ref { flex: none; width: 9.5em; font-weight: 600; font-size: var(--small); color: var(--muted); }
+
+/* Word study. */
+.bible-study { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 16px; }
+.bible-study-word .bible-orig { font-size: 1.6em; }
+.bible-grammar { margin: 0; padding-left: 16px; }
+.bible-entry { padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.bible-entry.sense { opacity: 0.8; }
+.bible-entry-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.bible-lemma { font-size: 1.4em; font-family: "SBL Hebrew", "SBL Greek", "Times New Roman", serif; }
+.bible-entry p { margin: 2px 0; }
+.bible-definition { max-height: 320px; overflow: auto; line-height: 1.5; }
+.bible-study-h { margin: 6px 0 0; font-size: var(--small); color: var(--muted); }
+.bible-occurrences { margin: 0; padding-left: 18px; }
+.bible-occurrences li { margin: 3px 0; }
+.bible-occurrences .muted { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

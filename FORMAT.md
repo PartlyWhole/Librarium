@@ -451,6 +451,8 @@ App data is per device and never synced.
 - `folders.sort.<kind>`: `{key, dir}`
 - `folders.view.<kind>`: `list` | `icons`
 - `captures.group`, `captures.show`
+- `bible.versions` (version ids shown, in order), `bible.interlinear`, `bible.place`:
+  `{book, chapter}`
 - `daily.dayStart`: 0–12, default 4
 - `reader.epub`: `{fontSize, font, matchApp, theme, layout, spacing, width, justify}`
 - `reader.place.<item id>`: a Readium locator
@@ -458,6 +460,10 @@ App data is per device and never synced.
 **`etymology.db`:** word origins, the `etym` tool's SQLite database (schema version 2, profile
 `permissive`), downloaded when asked and checked against its SHA-256; opened read-only, never
 written. `etymology.db.gz.part` and `etymology.db.part` are a download in progress.
+
+**`bible.db`:** the Bible, as built by `tools/bible/build.py` (schema version 1), downloaded when
+asked and checked against its SHA-256; opened read-only, never written. Its tables are described
+in the builder.
 
 **`libraries/<library id>/`:**
 - `device.json`: `{"device": "<uuid>"}`. This is the history log's name, so keep it.

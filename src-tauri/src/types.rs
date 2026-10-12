@@ -758,9 +758,10 @@ pub struct BoardSaved {
     pub scene_sha: String,
 }
 
-/// Word origins: whether the database is here, or how far its download has got.
+/// A downloaded database (word origins, the Bible): whether it is here, or how far its download
+/// has got.
 #[derive(Clone, Debug, Serialize, TS)]
-pub struct EtymStatus {
+pub struct DataStatus {
     /// `missing`, `downloading`, `unpacking`, `ready` or `failed`.
     pub state: String,
     pub received: u64,
@@ -841,6 +842,136 @@ pub struct EtymLookup {
     pub suggestions: Vec<EtymTerm>,
     /// What to show wherever the data is shown.
     pub attribution: String,
+}
+
+/// A Bible version in the database.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleVersion {
+    pub id: String,
+    pub name: String,
+    pub year: Option<i64>,
+    pub license: String,
+    pub attribution: String,
+    /// Its words carry Strong's numbers (KJV, BSB).
+    pub strongs: bool,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleBook {
+    /// STEPBible's name: `Gen` … `Rev`.
+    pub id: String,
+    pub name: String,
+    pub testament: String,
+    pub chapters: u32,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleInfo {
+    pub versions: Vec<BibleVersion>,
+    pub books: Vec<BibleBook>,
+    /// The Hebrew and Greek texts' source, to show beside them.
+    pub attribution: String,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct BibleChapterParams {
+    pub book: String,
+    pub chapter: u32,
+    pub versions: Vec<String>,
+    /// With the Hebrew or Greek, word by word.
+    pub original: bool,
+}
+
+/// A word (with what is around it) in an English version, and the Strong's number it translates.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleTag {
+    pub text: String,
+    pub strongs: Option<String>,
+}
+
+/// A word of the Hebrew or Greek.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleWord {
+    pub text: String,
+    pub translit: Option<String>,
+    pub gloss: Option<String>,
+    pub strongs: Option<String>,
+    pub grammar: Option<String>,
+    /// `H` (Hebrew), `A` (Aramaic) or `G` (Greek).
+    pub lang: String,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleVerse {
+    /// 0 is a Psalm's title.
+    pub verse: u32,
+    /// Each version's text, by version id (absent where a version leaves the verse out).
+    pub texts: BTreeMap<String, String>,
+    /// Each tagged version's words, by version id.
+    pub tags: BTreeMap<String, Vec<BibleTag>>,
+    pub words: Vec<BibleWord>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleChapter {
+    pub book: String,
+    pub chapter: u32,
+    pub verses: Vec<BibleVerse>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct BibleStrongsParams {
+    pub strongs: String,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleLexEntry {
+    pub strongs: String,
+    pub lemma: Option<String>,
+    pub translit: Option<String>,
+    pub grammar: Option<String>,
+    pub gloss: Option<String>,
+    /// Abbott-Smith's entry (Greek), in HTML.
+    pub definition: Option<String>,
+    /// How it relates to the plain number ("a Name of").
+    pub relation: Option<String>,
+}
+
+/// A verse, by its place, with a version's text.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleRef {
+    pub book: String,
+    pub chapter: u32,
+    pub verse: u32,
+    pub text: String,
+}
+
+/// A Strong's number: its lexicon entries, and where its words are.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleWordStudy {
+    pub strongs: String,
+    pub entries: Vec<BibleLexEntry>,
+    /// How many words of the Hebrew or Greek have it, and the first verses (KJV text).
+    pub count: u32,
+    pub verses: Vec<BibleRef>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct BibleCodeParams {
+    pub code: String,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct BibleGrammar {
+    pub code: String,
+    pub brief: Option<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct BibleSearchParams {
+    pub version: String,
+    pub query: String,
 }
 
 /// Every exported type, in the order `src/types.ts` lists them.
@@ -941,7 +1072,7 @@ pub fn typescript() -> String {
         BoardLoaded,
         BoardSaveParams,
         BoardSaved,
-        EtymStatus,
+        DataStatus,
         EtymWordParams,
         EtymKeyParams,
         EtymTerm,
@@ -950,6 +1081,21 @@ pub fn typescript() -> String {
         EtymRelatives,
         EtymEntry,
         EtymLookup,
+        BibleVersion,
+        BibleBook,
+        BibleInfo,
+        BibleChapterParams,
+        BibleTag,
+        BibleWord,
+        BibleVerse,
+        BibleChapter,
+        BibleStrongsParams,
+        BibleLexEntry,
+        BibleRef,
+        BibleWordStudy,
+        BibleCodeParams,
+        BibleGrammar,
+        BibleSearchParams,
     );
     out
 }

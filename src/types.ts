@@ -513,9 +513,10 @@ export type BoardSaveParams = { id: string, base_version: string, base_scene_sha
 export type BoardSaved = { info: RecordInfo, seq: number, scene_sha: string, };
 
 /**
- * Word origins: whether the database is here, or how far its download has got.
+ * A downloaded database (word origins, the Bible): whether it is here, or how far its download
+ * has got.
  */
-export type EtymStatus = { 
+export type DataStatus = { 
 /**
  * `missing`, `downloading`, `unpacking`, `ready` or `failed`.
  */
@@ -581,3 +582,92 @@ suggestions: Array<EtymTerm>,
  * What to show wherever the data is shown.
  */
 attribution: string, };
+
+/**
+ * A Bible version in the database.
+ */
+export type BibleVersion = { id: string, name: string, year: number | null, license: string, attribution: string, 
+/**
+ * Its words carry Strong's numbers (KJV, BSB).
+ */
+strongs: boolean, };
+
+export type BibleBook = { 
+/**
+ * STEPBible's name: `Gen` … `Rev`.
+ */
+id: string, name: string, testament: string, chapters: number, };
+
+export type BibleInfo = { versions: Array<BibleVersion>, books: Array<BibleBook>, 
+/**
+ * The Hebrew and Greek texts' source, to show beside them.
+ */
+attribution: string, };
+
+export type BibleChapterParams = { book: string, chapter: number, versions: Array<string>, 
+/**
+ * With the Hebrew or Greek, word by word.
+ */
+original: boolean, };
+
+/**
+ * A word (with what is around it) in an English version, and the Strong's number it translates.
+ */
+export type BibleTag = { text: string, strongs: string | null, };
+
+/**
+ * A word of the Hebrew or Greek.
+ */
+export type BibleWord = { text: string, translit: string | null, gloss: string | null, strongs: string | null, grammar: string | null, 
+/**
+ * `H` (Hebrew), `A` (Aramaic) or `G` (Greek).
+ */
+lang: string, };
+
+export type BibleVerse = { 
+/**
+ * 0 is a Psalm's title.
+ */
+verse: number, 
+/**
+ * Each version's text, by version id (absent where a version leaves the verse out).
+ */
+texts: { [key in string]: string }, 
+/**
+ * Each tagged version's words, by version id.
+ */
+tags: { [key in string]: Array<BibleTag> }, words: Array<BibleWord>, };
+
+export type BibleChapter = { book: string, chapter: number, verses: Array<BibleVerse>, };
+
+export type BibleStrongsParams = { strongs: string, };
+
+export type BibleLexEntry = { strongs: string, lemma: string | null, translit: string | null, grammar: string | null, gloss: string | null, 
+/**
+ * Abbott-Smith's entry (Greek), in HTML.
+ */
+definition: string | null, 
+/**
+ * How it relates to the plain number ("a Name of").
+ */
+relation: string | null, };
+
+/**
+ * A verse, by its place, with a version's text.
+ */
+export type BibleRef = { book: string, chapter: number, verse: number, text: string, };
+
+/**
+ * A Strong's number: its lexicon entries, and where its words are.
+ */
+export type BibleWordStudy = { strongs: string, entries: Array<BibleLexEntry>, 
+/**
+ * How many words of the Hebrew or Greek have it, and the first verses (KJV text).
+ */
+count: number, verses: Array<BibleRef>, };
+
+export type BibleCodeParams = { code: string, };
+
+export type BibleGrammar = { code: string, brief: string | null, description: string | null, };
+
+export type BibleSearchParams = { version: string, query: string, };
