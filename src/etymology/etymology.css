@@ -9,7 +9,9 @@
 .etym-entry { display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .etym-head { display: flex; align-items: baseline; gap: 8px; }
 .etym-head h2 { margin: 0; font-size: 18px; }
-.etym-head .icon-button { margin-left: auto; align-self: center; }
+.etym-actions { margin-left: auto; align-self: center; display: inline-flex; gap: 2px; }
+/* The Word origins item's page: the view, at a reading width. */
+.ws-page.etym-page { max-width: 720px; }
 .etym-senses { margin: 0; padding-left: 18px; }
 .etym-section h3 { margin: 4px 0; font-size: var(--small); font-weight: 600; color: var(--muted); }
 .etym-line { margin: 0; padding: 0 0 0 12px; list-style: none; border-left: 2px solid var(--border-strong); }

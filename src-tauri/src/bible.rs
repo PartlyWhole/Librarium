@@ -6,13 +6,12 @@
 
 use crate::dataset::{Dataset, Source};
 use crate::error::{Error, Result};
-use crate::library::{saved_with, FORMAT, KIND};
-use crate::store::{files, record, Emit, Library};
+use crate::library::{self, FORMAT};
+use crate::store::{Emit, Library};
 use crate::types::{
     BibleBook, BibleChapter, BibleGrammar, BibleInfo, BibleLexEntry, BibleRef, BibleTag, BibleVerse, BibleVersion,
     BibleWord, BibleWordStudy, Written,
 };
-use crate::util::{iso_utc, json_bytes, new_id, now_ms};
 use rusqlite::{params, OptionalExtension};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -51,27 +50,15 @@ impl Bible {
             .data
             .with(|c| c.query_row("SELECT name FROM versions WHERE id = ?1", [version], |r| r.get(0)).optional())?;
         let name = name.ok_or_else(|| Error::not_found("There is no such version."))?;
-        let w = lib.write();
-        if let Some(e) = lib.index.with_field(VERSION_FIELD, version)?.into_iter().find(|e| e.kind == KIND) {
-            return Ok(Written { info: record::info(lib, &e), seq: w.seq() });
-        }
-        let at = iso_utc(now_ms());
-        let rec = json!({
-            "id": new_id(),
-            "kind": KIND,
-            "kind-version": 1,
-            "created": at,
-            "title": name,
-            FORMAT: "bible",
-            VERSION_FIELD: version,
-            "provenance": { "saved-at": at, "saved-with": saved_with("Bible"), "source": SOURCE.url },
-        });
-        let stage = files::stage_dir(lib)?;
-        let made = files::stage_file(&stage, "record.json", &json_bytes(&rec, true))
-            .and_then(|_| files::import_item(&w, &stage));
-        let _ = std::fs::remove_dir_all(&stage);
-        let e = made?;
-        Ok(Written { info: record::info(lib, &e), seq: w.seq() })
+        library::dataset_item(
+            lib,
+            VERSION_FIELD,
+            version,
+            &name,
+            json!({ FORMAT: "bible", VERSION_FIELD: version }),
+            "Bible",
+            SOURCE.url,
+        )
     }
 
     /// The versions and books.

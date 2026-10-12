@@ -24,6 +24,8 @@ export const CFI = "http://www.idpf.org/epub/linking/cfi/epub-cfi.html";
 /** A passage of a Bible version: `Jhn.3.16` or `Jhn.3.16-Jhn.3.18` (STEPBible's book names, the
  * KJV's numbering). */
 export const BIBLE_REF = "librarium:bible-ref";
+/** A word in word origins, by its term's key (`en:salary`, `la:sāl`). */
+export const ETYM_TERM = "librarium:etymology-term";
 
 export interface TextQuoteSelector {
   type: "TextQuoteSelector";

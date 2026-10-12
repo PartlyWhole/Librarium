@@ -232,7 +232,7 @@ My own words.
 ### Item (`record.json`)
 
 **Every item.** The envelope, plus:
-- `library.format`: `pdf` | `epub` | `image` | `web` | `bible`
+- `library.format`: `pdf` | `epub` | `image` | `web` | `bible` | `etymology`
 - `library.folder`, when in a subfolder
 - `archive.at`, when archived
 - `provenance`
@@ -263,6 +263,10 @@ and no stored text, only:
 
 One is made, titled with the version's name, the first time a passage of that version is
 captured.
+
+**Word origins** (`etymology`) stands for `etymology.db` (app data): no file, no stored text, and
+`provenance` as for a Bible version (`"saved-with": "Librarium <ver> (Word origins)"`). There is
+one, titled "Word origins", made the first time something from word origins is captured.
 
 Saving the same address again adds a snapshot to the item. Addresses match on `source` or
 `final-url`, ignoring `#fragment` and a trailing `/`.
@@ -347,6 +351,8 @@ Stored text is never regenerated if it is present. Anchors point into it.
   - `{"type": "FragmentSelector", "value": "Jhn.3.16" | "Jhn.3.16-Jhn.3.18", "conformsTo": "librarium:bible-ref"}`:
     a passage of a Bible version, by STEPBible's book names and the KJV's numbering (verse 0 is
     a Psalm's title).
+  - `{"type": "FragmentSelector", "value": "en:salary", "conformsTo": "librarium:etymology-term"}`:
+    a word in word origins, by its term's key in `etymology.db`.
 - **Part shapes.**
 
   | Part | Selector | Extra fields |
@@ -356,6 +362,7 @@ Stored text is never regenerated if it is present. Anchors point into it.
   | Image region | `[xywh]` | `boxes`, `region` |
   | EPUB picture | `[cfi]` or `[]` | `region` |
   | Bible passage | `[quote (no context), bible-ref]` | |
+  | Word origins | `[quote (no context), etymology-term]` | |
 
 - **Editing parts.** Rewriting the parts renames region PNGs to their new index. Higher-numbered
   old PNGs are left in place.
@@ -366,7 +373,7 @@ Stored text is never regenerated if it is present. Anchors point into it.
      threshold is shown as *moved* until confirmed. Below it, the anchor is *lost*: listed, never
      drawn in the wrong place.
 
-  Confirming a moved part rewrites `parts`. A Bible passage is found by its reference.
+  Confirming a moved part rewrites `parts`. A Bible passage, or a word in word origins, is found by its reference.
 
 ## Links and embeds (in Markdown bodies)
 

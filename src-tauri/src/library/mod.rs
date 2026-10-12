@@ -8,10 +8,11 @@ pub mod ocr;
 pub mod snapshots;
 
 use crate::error::{Error, Result};
-use crate::store::record::Entry;
-use crate::store::Library;
-use crate::util::Id;
-use serde_json::Value;
+use crate::store::record::{self, Entry};
+use crate::store::{files, Library};
+use crate::types::Written;
+use crate::util::{iso_utc, json_bytes, new_id, now_ms, Id};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 
 pub const KIND: &str = "item";
@@ -27,6 +28,42 @@ pub const SNAPSHOT: &str = "library.snapshot";
 pub const SNAPSHOTS: &str = "library.snapshots";
 /// Mirrors the item's subfolder of `items/`.
 pub const FOLDER: &str = "library.folder";
+
+/// An item that stands for one of the app's downloaded datasets (a Bible version, word origins),
+/// which captures from it cite: the one whose field `key` is `value`, or a new one with these
+/// fields (its record only; the data stays in app data).
+pub fn dataset_item(
+    lib: &Library,
+    key: &str,
+    value: &str,
+    title: &str,
+    fields: Value,
+    how: &str,
+    source: &str,
+) -> Result<Written> {
+    let w = lib.write();
+    if let Some(e) = lib.index.with_field(key, value)?.into_iter().find(|e| e.kind == KIND) {
+        return Ok(Written { info: record::info(lib, &e), seq: w.seq() });
+    }
+    let at = iso_utc(now_ms());
+    let mut rec = json!({
+        "id": new_id(),
+        "kind": KIND,
+        "kind-version": 1,
+        "created": at,
+        "title": title,
+        "provenance": { "saved-at": at, "saved-with": saved_with(how), "source": source },
+    });
+    if let (Some(rec), Value::Object(f)) = (rec.as_object_mut(), fields) {
+        rec.extend(f);
+    }
+    let stage = files::stage_dir(lib)?;
+    let made =
+        files::stage_file(&stage, "record.json", &json_bytes(&rec, true)).and_then(|_| files::import_item(&w, &stage));
+    let _ = std::fs::remove_dir_all(&stage);
+    let e = made?;
+    Ok(Written { info: record::info(lib, &e), seq: w.seq() })
+}
 
 /// "Librarium 0.1.0 (import)": what saved an item.
 pub fn saved_with(how: &str) -> String {

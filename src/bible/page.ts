@@ -10,14 +10,13 @@ import type { PageContext, PageHandle } from "../app/pages";
 import { showPanelView } from "../app/panel";
 import { pref } from "../app/prefs";
 import { router } from "../app/router";
-import { listRecords, openRecord, putRecord } from "../app/records";
 import { BIBLE_REF } from "../captures/anchor";
-import { toast } from "../ui/toast";
+import { captureReference, captureSelections, dataItem, selectedWords } from "../captures/quick";
 import { errorText, h, replace } from "../ui/dom";
 import { icon, iconButton } from "../ui/icon";
 import { effect, signal } from "../ui/signal";
-import type { BibleChapter, BibleInfo, BibleRef, BibleTag, BibleVerse, BibleWord, RecordInfo, Written } from "../types";
-import { ChevronLeft, ChevronRight, Columns2, Highlighter } from "lucide";
+import type { BibleChapter, BibleInfo, BibleRef, BibleTag, BibleVerse, BibleWord, RecordInfo } from "../types";
+import { ChevronLeft, ChevronRight, Columns2 } from "lucide";
 
 export const bibleStatus = dataStatus("bible");
 export const versionsShown = pref<string[]>("bible.versions", ["kjv"]);
@@ -116,50 +115,34 @@ function showVersion(version: string | undefined): void {
   if (version && versionsShown.peek()[0] !== version) versionsShown.set([version, ...versionsShown.peek().filter((v) => v !== version)]);
 }
 
-/** Captures a passage selected in one version: its words, cited as "John 3:16", from the
- * version's library item (made the first time). */
-async function capturePassage(i: BibleInfo, version: string, book: string, chapter: number, from: number, to: number, quote: string): Promise<void> {
-  try {
-    let source = listRecords("item").find((r) => r.fields["bible.version"] === version);
-    if (!source) {
-      const w = await call<Written>("bible.record", { version });
-      putRecord(w.info);
-      source = w.info;
-    }
-    const ref = from === to ? `${book}.${chapter}.${from}` : `${book}.${chapter}.${from}-${book}.${chapter}.${to}`;
-    const name = i.books.find((b) => b.id === book)?.name ?? book;
-    const locator = from === 0 && to === 0 ? `${name} ${chapter} (title)` : from === to ? `${name} ${chapter}:${from}` : `${name} ${chapter}:${from || 1}–${to}`;
-    const w = await call<Written>("captures.create", {
-      source: source.id, snapshot: null, text: null, words: "", title: null,
-      parts: [{ selector: [{ type: "TextQuoteSelector", exact: quote, prefix: "", suffix: "" }, { type: "FragmentSelector", value: ref, conformsTo: BIBLE_REF }], quote, locator, region_png: null, boxes: [] }],
-    });
-    putRecord(w.info);
-    toast(`Captured ${locator} (${version.toUpperCase()}).`, { action: { label: "Open", run: () => openRecord(w.info.id) } });
-  } catch (e) {
-    toast(errorText(e));
-  }
+/** Captures a passage of one version: its words, cited as "John 3:16", from the version's
+ * library item (made the first time). */
+function capturePassage(i: BibleInfo, version: string, book: string, chapter: number, from: number, to: number, quote: string): Promise<void> {
+  const name = i.books.find((b) => b.id === book)?.name ?? book;
+  const locator = from === 0 && to === 0 ? `${name} ${chapter} (title)` : from === to ? `${name} ${chapter}:${from}` : `${name} ${chapter}:${from || 1}–${to}`;
+  return captureReference({
+    source: () => dataItem((r) => r.fields["bible.version"] === version, "bible.record", { version }),
+    quote,
+    ref: { value: from === to ? `${book}.${chapter}.${from}` : `${book}.${chapter}.${from}-${book}.${chapter}.${to}`, conformsTo: BIBLE_REF },
+    locator,
+    label: `${locator} (${version.toUpperCase()})`,
+  });
 }
 
-/** The passage selected in one version, if the selection is in one: its version, verses and words. */
-function selectedPassage(content: HTMLElement): { version: string; from: number; to: number; quote: string; end: DOMRect } | null {
-  const sel = window.getSelection();
-  if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
-  const range = sel.getRangeAt(0);
+/** The passage selected, if it is in one version: its version, verses and words. */
+function selectedPassage(range: Range): { version: string; from: number; to: number; quote: string } | null {
   const el = (n: Node) => (n instanceof Element ? n : n.parentElement);
   const a = el(range.startContainer)?.closest<HTMLElement>("[data-version]");
   const b = el(range.endContainer)?.closest<HTMLElement>("[data-version]");
-  if (!a || !b || a.dataset.version !== b.dataset.version || !content.contains(a)) return null;
+  if (!a || !b || a.dataset.version !== b.dataset.version) return null;
   const verseOf = (n: Node) => Number(el(n)?.closest<HTMLElement>("[data-verse]")?.dataset.verse ?? NaN);
   const from = verseOf(range.startContainer);
   const to = verseOf(range.endContainer);
   if (Number.isNaN(from) || Number.isNaN(to)) return null;
-  const copy = h("div", null, range.cloneContents());
-  // The words only: not the verse numbers, the Hebrew or Greek beneath, nor other versions'
-  // columns between (a selection down one column crosses them).
-  copy.querySelectorAll(`.bible-num, .bible-words, .bible-head, [data-version]:not([data-version="${a.dataset.version}"])`).forEach((x) => x.remove());
-  const quote = (copy.textContent ?? "").replace(/\s+/g, " ").trim();
-  const rects = range.getClientRects();
-  return quote ? { version: a.dataset.version!, from: Math.min(from, to), to: Math.max(from, to), quote, end: rects[rects.length - 1] ?? range.getBoundingClientRect() } : null;
+  // Not the verse numbers, the Hebrew or Greek beneath, nor other versions' columns between (a
+  // selection down one column crosses them).
+  const quote = selectedWords(range, `.bible-num, .bible-words, .bible-head, [data-version]:not([data-version="${a.dataset.version}"])`);
+  return quote ? { version: a.dataset.version!, from: Math.min(from, to), to: Math.max(from, to), quote } : null;
 }
 
 export function renderBible(host: HTMLElement, params: Record<string, string>, ctx: PageContext): PageHandle {
@@ -167,24 +150,10 @@ export function renderBible(host: HTMLElement, params: Record<string, string>, c
   ctx.setTitle("Bible");
   showVersion(params.version);
   // Capture, by a passage selected in one version.
-  const pop = h("div", { class: "selection-pop", role: "toolbar", "aria-label": "Selection", hidden: true });
-  document.body.appendChild(pop);
-  const onUp = () => setTimeout(() => {
-    const content = host.querySelector<HTMLElement>(".bible-content");
-    const p = content && selectedPassage(content);
+  const stopCapture = captureSelections(host, selectedPassage, (p) => {
     const where = at.peek();
-    if (!p) return void (pop.hidden = true);
-    replace(pop, h("button", { type: "button", onmousedown: (e: Event) => e.preventDefault(), onclick: () => {
-      pop.hidden = true;
-      void bibleInfo().then((i) => capturePassage(i, p.version, where.book, where.chapter, p.from, p.to, p.quote));
-      window.getSelection()?.removeAllRanges();
-    } }, icon(Highlighter, 14), "Capture"));
-    pop.hidden = false;
-    Object.assign(pop.style, { left: `${Math.min(window.innerWidth - 120, p.end.right)}px`, top: `${p.end.bottom + 8}px` });
-  }, 0);
-  host.addEventListener("mouseup", onUp);
-  const hidePop = () => (pop.hidden = true);
-  document.addEventListener("scroll", hidePop, true);
+    void bibleInfo().then((i) => capturePassage(i, p.version, where.book, where.chapter, p.from, p.to, p.quote));
+  });
   const at = signal({ book: params.book || place.peek().book, chapter: Number(params.chapter) || place.peek().chapter, verse: params.verse });
   const results = signal<{ query: string; refs: BibleRef[] } | null>(null);
   const stop = effect(() => {
@@ -262,9 +231,7 @@ export function renderBible(host: HTMLElement, params: Record<string, string>, c
   return {
     dispose: () => {
       stop();
-      pop.remove();
-      host.removeEventListener("mouseup", onUp);
-      document.removeEventListener("scroll", hidePop, true);
+      stopCapture();
       host.classList.remove("bible-page");
     },
     update(next) {

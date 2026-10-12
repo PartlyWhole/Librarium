@@ -88,6 +88,7 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         "etymology.status" => ok(app.etymology.data.status()),
         "etymology.download" => ok(app.etymology.data.download()),
         "etymology.cancel" => ok(app.etymology.data.cancel()),
+        "etymology.record" => ok(app.etymology.record(&*lib()?)?),
         "etymology.lookup" => ok(app.etymology.lookup(&p::<EtymWordParams>(params)?.word)?),
         "etymology.term" => ok(app.etymology.term(&p::<EtymKeyParams>(params)?.key)?),
         "etymology.search" => ok(app.etymology.search(&p::<EtymWordParams>(params)?.word)?),
