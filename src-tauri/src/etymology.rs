@@ -20,10 +20,10 @@ use unicode_normalization::char::is_combining_mark;
 use unicode_normalization::UnicodeNormalization;
 
 /// The database, gzipped, as released; and the database it unpacks to.
-const URL: &str = "https://github.com/PartlyWhole/Librarium/releases/download/etymology-2026-10-10/etymology.db.gz";
-const DOWNLOAD_BYTES: u64 = 209_056_763;
-const DISK_BYTES: u64 = 641_433_600;
-const SHA256: &str = "3c3e60180fde332be81550329f6060d10874b6de6bcba10f2fc66f12ecc29769";
+const URL: &str = "https://github.com/PartlyWhole/Librarium/releases/download/etymology-2026-10-11/etymology.db.gz";
+const DOWNLOAD_BYTES: u64 = 207_218_613;
+const DISK_BYTES: u64 = 635_740_160;
+const SHA256: &str = "548d12e9c88a894fdbc9bef45cf666c0d3af3a71eda3c13429c70e81382f8b6f";
 const FILE_NAME: &str = "etymology.db";
 const MIN_CONFIDENCE: f64 = 0.4;
 

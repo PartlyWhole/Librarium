@@ -2,6 +2,7 @@
 .etym-panel { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 16px; }
 .etym-setup { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .etym-progress { width: 100%; }
+.etym-setup .button { display: inline-flex; align-items: center; gap: 6px; }
 .etym-form { display: flex; align-items: center; gap: 4px; }
 .etym-form .search-input { flex: 1; min-width: 0; }
 .etym-suggest { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--r2); background: var(--bg); overflow: hidden; }

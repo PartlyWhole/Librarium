@@ -485,7 +485,8 @@ dragged out for capture.
 ## Word origins
 
 Where English words come from, from the etymology database built by the `etym` tool (Wiktionary
-in English, French and German, Webster 1913, Lewis & Short, LSJ and IE-CoR).
+in English, French and German, Lewis & Short, LSJ and IE-CoR: its permissive build, all of it
+CC-licensed).
 
 - **The Word origins view** of the side panel, beside any page. A box looks a word up, with
   words beginning with what is typed offered as you go.

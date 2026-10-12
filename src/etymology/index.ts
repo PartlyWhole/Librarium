@@ -77,7 +77,7 @@ function setup(s: EtymStatus): HTMLElement {
   return h("div", { class: "etym-setup" }, about,
     s.error ? h("p", { class: "small notice-text" }, s.error) : null,
     h("button", { class: "button primary small", type: "button", onclick: () => void call<EtymStatus>("etymology.download").then((x) => status.set(x), (e) => toast(errorText(e))) },
-      icon(Download, 14), s.error ? " Try again" : ` Download word origins (${mb(s.download_bytes)})`),
+      icon(Download, 14), s.error ? "Try again" : `Download word origins (${mb(s.download_bytes)})`),
     h("p", { class: "muted small" }, `Downloaded once from Librarium’s releases on GitHub; ${mb(s.disk_bytes)} on this Mac. Nothing is sent when you look a word up.`));
 }
 

@@ -456,7 +456,7 @@ App data is per device and never synced.
 - `reader.place.<item id>`: a Readium locator
 
 **`etymology.db`:** word origins, the `etym` tool's SQLite database (schema version 2, profile
-`full`), downloaded when asked and checked against its SHA-256; opened read-only, never
+`permissive`), downloaded when asked and checked against its SHA-256; opened read-only, never
 written. `etymology.db.gz.part` and `etymology.db.part` are a download in progress.
 
 **`libraries/<library id>/`:**
