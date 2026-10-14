@@ -157,8 +157,9 @@ One window. Only regions scroll, never the window.
   top-level list keeps its first number, a nested one starts at 1, "1. 1. 1." stays so, and
   other lists are left alone); when a number grows a digit (9 to 10), what is under it moves
   with its text.
-  - **Tab / ⇧Tab** (anywhere on the line, or over several items) move an item with its children,
-    by its parent's content column (3 under "1.", 4 under "10."). An item goes under the one
+  - **Tab / ⇧Tab**, and **⌘] / ⌘[** (anywhere on any line of an item, or over several items),
+    move an item with its children, by its parent's content column (3 under "1.", 4 under
+    "10."). An item goes under the one
     before it, as the last of its children if it has some, taking their marker; a list's first
     item goes under the last item of a list just before (bullets after numbers). ⇧Tab takes it
     into its parent's list, with that list's marker; the items after it come under it. A first

@@ -1,8 +1,8 @@
 /**
- * Lists, as in Obsidian: Tab and ⇧Tab move a list item with everything under it, by the width
- * of its parent's marker (so items under "1." line up with its text); ⌥↑ and ⌥↓ move it past
- * the item before or after it, also with everything under it; numbered lists are renumbered
- * after each. Enter on an empty item ends the list (or, nested, moves it out a level), at the
+ * Lists, as in Obsidian: Tab and ⇧Tab (and ⌘] and ⌘[), on any line of a list item, move it
+ * with everything under it, by the width of its parent's marker (so items under "1." line up
+ * with its text); ⌥↑ and ⌥↓ move it past the item before or after it, also with everything
+ * under it; numbered lists are renumbered after each. Enter on an empty item ends the list (or, nested, moves it out a level), at the
  * start of an item's text opens one above, and at the end of an item with items under it opens
  * the first of those; ⇧Enter goes on to a line of the same item. Wrapped lines of an item hang
  * under its text, not under its marker.
@@ -87,12 +87,15 @@ function markLike(state: EditorState, item: SyntaxNode, like: SyntaxNode): { cha
   return { change: { from: mark.from, to: mark.to, insert: want }, wider: want.length - have.length };
 }
 
-/** The top items whose first line is selected (an item inside another selected one is carried). */
+/** The top items with a line selected: one starting there, or the item a line goes on (an
+ * item inside another selected one is carried). */
 function selectedItems(state: EditorState): SyntaxNode[] {
   const out: SyntaxNode[] = [];
   for (const r of state.selection.ranges) {
     for (let l = state.doc.lineAt(r.from).number; l <= state.doc.lineAt(r.to).number; l++) {
-      const it = itemOn(state, l);
+      const line = state.doc.line(l);
+      const text = /\S/.exec(line.text);
+      const it = itemOn(state, l) ?? (text ? itemAt(state, line.from + text.index + 1) : null);
       if (it && !out.some((o) => o.from <= it.from && o.to >= it.to)) out.push(it);
     }
   }
@@ -586,6 +589,9 @@ export const markupKeymap = Prec.high(
     { key: "Enter", run: (v) => enterInList(v) || continueMarkup(v) },
     { key: "Shift-Enter", run: continueItem },
     { key: "Backspace", run: (v) => deleteTaskBox(v) || renumbered(deleteMarkupBackward)(v) },
+    // ⌘] and ⌘[ as Tab and ⇧Tab in a list; elsewhere they indent the lines as ever.
+    { key: "Mod-]", run: indentListItem },
+    { key: "Mod-[", run: outdentListItem },
     { key: "Alt-ArrowUp", run: moveItem(false) },
     { key: "Alt-ArrowDown", run: moveItem(true) },
   ]),
