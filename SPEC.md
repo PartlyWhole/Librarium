@@ -153,10 +153,30 @@ One window. Only regions scroll, never the window.
     selected it starts `[[`.
   - Typing `* _ = \` ~` over a selection wraps it.
 - **Cursors.** ⌘D adds the next match, ⌥-click adds a cursor, and ⌥-drag makes a block selection.
-- **Lists.** Tab / ⇧Tab move an item with its children and renumber the list, as one undo step,
-  in quotes too. Enter continues the list. List indentation is written as spaces (tabs already
-  there count as 4 columns), and a blank line Enter adds is empty. Wrapped lines hang under the
-  text, items under a task line up with its text, and markers are drawn monospace.
+- **Lists.** Each of these is one undo step, and renumbers the numbered lists it touches (a
+  top-level list keeps its first number, a nested one starts at 1, "1. 1. 1." stays so, and
+  other lists are left alone); when a number grows a digit (9 to 10), what is under it moves
+  with its text.
+  - **Tab / ⇧Tab** (anywhere on the line, or over several items) move an item with its children,
+    by its parent's content column (3 under "1.", 4 under "10."). An item goes under the one
+    before it, as the last of its children if it has some, taking their marker; a list's first
+    item goes under the last item of a list just before (bullets after numbers). ⇧Tab takes it
+    into its parent's list, with that list's marker; the items after it come under it. A first
+    item, or a top-level one, stays.
+  - **Enter** continues the list with the same marker (a task's box empty). On an empty item it
+    ends the list (top level) or makes it an item of its parent's list. At the start of an item's
+    text it opens an empty item above. At the end of an item with items under it, it opens the
+    first of those. **⇧Enter** goes on to a new line of the same item, under its text.
+  - **Backspace** at the start of an item's text takes its task box, then its marker (the text
+    goes on the item before), then its indentation.
+  - **⌥↑ / ⌥↓** move an item, with its children, past the item before or after it (at the start
+    or end of its list it stays); elsewhere they move the line.
+  - **Pasting a list** onto an empty item puts it in that item's place, at its level; at the end
+    of an item, after it. **Deleting whole lines** brings the items under a deleted item's line
+    up a level with it.
+  - List indentation is written as spaces (tabs already there count as 4 columns), and a blank
+    line Enter adds is empty. Wrapped lines hang under the text, items under a task line up with
+    its text, and markers are drawn monospace.
 - **Folding.**
   - An arrow appears left of headings and bullets, on hover or while folded. A folded line ends in
     "…" and its bullet gets a ring.

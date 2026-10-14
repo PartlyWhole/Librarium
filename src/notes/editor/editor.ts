@@ -17,7 +17,7 @@ import { folding } from "./folding";
 import { formatKeymap, wrapOnType } from "./format";
 import { indentation } from "./indent";
 import { formatLink, parseLinks } from "./links";
-import { hangingIndent, listKeymap, markupKeymap } from "./lists";
+import { hangingIndent, listEdits, listKeymap, markupKeymap } from "./lists";
 import { livePreview } from "./livepreview";
 import { markdownSupport } from "./markdown";
 
@@ -111,6 +111,7 @@ export function createEditor(o: EditorOptions): EditorView {
     EditorView.lineWrapping,
     markdownSupport(),
     markupKeymap,
+    listEdits,
     ...folding,
     livePreview({ titleOf: o.titleOf, embedShown }),
     embedExtension(),
