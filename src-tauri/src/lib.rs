@@ -28,8 +28,9 @@ pub mod websave;
 use app::App;
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, RunEvent, WindowEvent};
 
 /// The settings key for the main window's frame.
@@ -104,6 +105,11 @@ fn stays_in_app(url: &tauri::Url) -> bool {
     }
 }
 
+/// Whether the window shows the app itself (not a page of a book, which only frames may show).
+fn stays_on_page(url: &tauri::Url) -> bool {
+    matches!(url.scheme(), "tauri" | "http" | "https")
+}
+
 pub fn run() {
     reader::protocol(tauri::Builder::default())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -128,7 +134,12 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         // The window never leaves the app: a link to the web is stopped, and the interface asks
         // whether to open it in the browser.
-        .plugin(
+        .plugin({
+            // The app's own page, as last loaded. Book pages (blob: URLs, in frames) must be let
+            // through, and the check can't tell a frame from the window; so should the window
+            // itself land on one (a link dropped on it, say), it is sent back to the app, which
+            // reopens where it was.
+            let home: Arc<Mutex<Option<tauri::Url>>> = Arc::default();
             tauri::plugin::Builder::<tauri::Wry, ()>::new("stay-in-app")
                 .on_navigation(|webview, url| {
                     if webview.label() != "main" || stays_in_app(url) {
@@ -139,8 +150,30 @@ pub fn run() {
                     }
                     false
                 })
-                .build(),
-        )
+                .on_page_load(move |webview, payload| {
+                    if webview.label() != "main" || payload.event() != PageLoadEvent::Started {
+                        return;
+                    }
+                    let url = payload.url();
+                    let mut home = home.lock().unwrap();
+                    if stays_on_page(url) {
+                        *home = Some(url.clone());
+                    } else if let Some(home) = home.clone() {
+                        log::warn!("the window left the app for a {} page; going back", url.scheme());
+                        // Back finds the app as it was (WebKit keeps the page); if that fails, it
+                        // is loaded afresh.
+                        let _ = webview.eval("history.back()");
+                        let webview = webview.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_millis(1500));
+                            if webview.url().is_ok_and(|u| !stays_on_page(&u)) {
+                                let _ = webview.navigate(home);
+                            }
+                        });
+                    }
+                })
+                .build()
+        })
         .setup(|app| {
             let default_hook = std::panic::take_hook();
             std::panic::set_hook(Box::new(move |info| {
