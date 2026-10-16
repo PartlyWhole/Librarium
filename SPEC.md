@@ -399,9 +399,7 @@ dragged out for capture.
 
 ### EPUB (Readium, in the manner of Apple Books)
 
-- **Safety.** Book scripts never run, and fixed-layout books work. A book's page never takes
-  over the window: should one replace the app (a link dropped on it, say), the window goes back
-  to the book where it was.
+- **Safety.** Book scripts never run, and fixed-layout books work.
 - **Immersive page.**
   - The toolbar appears when the pointer nears the top, while it has focus, during find, or while
     a popover is open.
