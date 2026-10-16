@@ -15,13 +15,14 @@ import type { PageContext } from "../app/pages";
 import { formatOf } from "../app/records";
 import { router } from "../app/router";
 import { ETYM_TERM } from "../captures/anchor";
+import { anchorOf } from "../captures/common";
 import { captureReference, captureSelections, dataItem, selectedWords } from "../captures/quick";
 import { activeEditor } from "../notes/editor/editor";
 import { noteView } from "../notes/page";
 import { errorText, h, replace } from "../ui/dom";
 import { iconButton } from "../ui/icon";
 import { effect, signal } from "../ui/signal";
-import type { EtymEntry, EtymLookup, EtymTerm } from "../types";
+import type { EtymEntry, EtymLookup, EtymTerm, RecordInfo } from "../types";
 import "./etymology.css";
 import { ArrowLeft, Highlighter, Sprout, TextCursorInput } from "lucide";
 
@@ -73,21 +74,17 @@ const termLink = (t: EtymTerm, label = t.term) =>
 // Italics are written with `_`, so a reconstruction's `*` needs no escaping (and shows as written).
 const escapeMd = (s: string) => s.replace(/[\\_`[\]]/g, (c) => `\\${c}`);
 
-/** A word's line of descent as a Markdown quotation, with where it is from. */
+/** A word's entry as Insert puts it in a note: its top, as the view shows it, in Markdown. */
 function lineageMarkdown(e: EtymEntry): string {
-  const [first, ...rest] = e.lineage;
-  const line = [`**${escapeMd(first?.term.term ?? e.term.term)}**`, ...rest.map((s) => `${s.term.lang_name} _${escapeMd(s.term.term)}_`)].join(" ← ");
-  const gloss = e.senses[0]?.gloss ?? e.term.gloss;
-  return `> ${line}${gloss ? `\n>\n> ${escapeMd(gloss)}` : ""}\n>\n> — Word origins from Wiktionary (CC BY-SA 4.0) and other dictionaries`;
+  const head = `**${escapeMd(e.term.lang === "en" ? e.term.term : `${e.term.lang_name} ${e.term.term}`)}**${e.pos ? ` _${escapeMd(e.pos)}_` : ""}`;
+  const senses = e.senses.length ? e.senses.slice(0, 2).map((s, i) => `${i + 1}. ${escapeMd(s.gloss)}`).join("\n") : e.term.gloss ? escapeMd(e.term.gloss) : "";
+  const steps = e.lineage.slice(1).map((s) => `- ${s.term.lang_name} _${escapeMd(s.term.term)}_${s.with.length ? ` + ${s.with.map(escapeMd).join(" + ")}` : ""}${s.term.gloss ? ` “${escapeMd(s.term.gloss)}”` : ""}${s.rel ? ` (${s.rel})` : ""}`).join("\n");
+  return [head, senses, "**Line of descent**", steps, "_— Word origins from Wiktionary (CC BY-SA 4.0) and other dictionaries_"].filter(Boolean).join("\n\n");
 }
-
-/** A word's line of descent as it reads: "salary ← Middle English salarie ← …". */
-const lineageText = (e: EtymEntry): string =>
-  [e.lineage[0]?.term.term ?? e.term.term, ...e.lineage.slice(1).map((s) => `${s.term.lang_name} ${s.term.term}`)].join(" ← ");
 
 /** Captures words of a word's entry (its line of descent, unless others are given), citing the
  * Word origins item and the word. */
-function captureEntry(term: { key: string; term: string; lang: string; lang_name: string }, quote: string): Promise<void> {
+function captureEntry(term: { key: string; term: string; lang: string; lang_name: string }, quote: string, whole = false): Promise<void> {
   const locator = term.lang === "en" ? term.term : `${term.lang_name} ${term.term}`;
   return captureReference({
     source: () => dataItem((r) => formatOf(r) === "etymology", "etymology.record"),
@@ -95,17 +92,35 @@ function captureEntry(term: { key: string; term: string; lang: string; lang_name
     ref: { value: term.key, conformsTo: ETYM_TERM },
     locator,
     label: `the origins of “${locator}”`,
+    // A whole entry is named for its word (its words begin with the word anyway).
+    ...(whole ? { title: `Origins of ${locator}` } : {}),
   });
 }
 
-/** Words selected in one entry, to capture. */
-function selectedInEntry(range: Range): { term: { key: string; term: string; lang: string; lang_name: string }; quote: string } | null {
+/** Words selected in one entry, to capture: across more than one part of its top (the word, its
+ * meanings, its line of descent), the entry itself; else the words, a paragraph to a block. */
+function selectedInEntry(range: Range): { term: { key: string; term: string; lang: string; lang_name: string }; quote: string; whole: boolean } | null {
   const el = (n: Node) => (n instanceof Element ? n : n.parentElement);
   const a = el(range.startContainer)?.closest<HTMLElement>(".etym-entry");
   if (!a || a !== el(range.endContainer)?.closest(".etym-entry")) return null;
-  const quote = selectedWords(range, "button, .etym-rel");
   const d = a.dataset;
-  return quote ? { term: { key: d.key!, term: d.term!, lang: d.lang!, lang_name: d.langName! }, quote } : null;
+  const term = { key: d.key!, term: d.term!, lang: d.lang!, lang_name: d.langName! };
+  const touched = [...a.children].filter((c) => rangeHas(range, c));
+  const entry = shownEntries.get(a);
+  if (entry && touched.length > 1 && touched.every((c) => c instanceof HTMLElement && c.dataset.part)) return { term, quote: entryText(entry), whole: true };
+  const quote = selectedWords(range, "button", true);
+  return quote ? { term, quote, whole: false } : null;
+}
+
+/** Whether a range takes some of an element's words (not only its edge). */
+function rangeHas(range: Range, el: Element): boolean {
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  if (range.compareBoundaryPoints(Range.END_TO_START, r) >= 0 || range.compareBoundaryPoints(Range.START_TO_END, r) <= 0) return false;
+  const inside = range.cloneRange();
+  if (inside.compareBoundaryPoints(Range.START_TO_START, r) < 0) inside.setStart(r.startContainer, r.startOffset);
+  if (inside.compareBoundaryPoints(Range.END_TO_END, r) > 0) inside.setEnd(r.endContainer, r.endOffset);
+  return !!inside.toString().trim();
 }
 
 /** Puts a block into a note at its cursor, on lines of its own. */
@@ -120,25 +135,59 @@ function insertInto(noteId: string, text: string): void {
   view.focus();
 }
 
-function entryView(e: EtymEntry, noteId: string | null): HTMLElement {
+const section = (title: string, ...body: (Node | null)[]) => h("section", { class: "etym-section" }, h("h3", null, title), ...body);
+
+/** An entry's top, as the view shows it and its captures are drawn: the word, its first
+ * meanings and its line of descent (each word through `word`: a link here, plain in a capture). */
+function entryTop(e: EtymEntry, word: (t: EtymTerm) => Node, actions: Node | null = null): Node[] {
   const steps = e.lineage.slice(1);
-  const section = (title: string, ...body: (Node | null)[]) => h("section", { class: "etym-section" }, h("h3", null, title), ...body);
-  const chips = (ts: EtymTerm[]) => h("div", { class: "etym-chips" }, ts.map((t) => termLink(t)));
-  return h("article", { class: "etym-entry", dataset: { key: e.term.key, term: e.term.term, lang: e.term.lang, langName: e.term.lang_name } },
-    h("div", { class: "etym-head" },
-      h("h2", null, e.term.term), h("span", { class: "muted small" }, [e.term.lang !== "en" ? e.term.lang_name : null, e.pos].filter(Boolean).join(" · ")),
-      h("span", { class: "etym-actions" },
-        steps.length ? iconButton(Highlighter, "Capture its line of descent (or select words to capture them)", () => void captureEntry(e.term, lineageText(e)), undefined, 15) : null,
-        noteId && steps.length ? iconButton(TextCursorInput, "Insert into the note", () => insertInto(noteId, lineageMarkdown(e)), undefined, 15) : null)),
-    e.senses.length ? h("ol", { class: "etym-senses small" }, e.senses.slice(0, 2).map((s) => h("li", null, s.gloss))) : e.term.gloss ? h("p", { class: "small" }, e.term.gloss) : null,
+  return [
+    h("div", { class: "etym-head", dataset: { part: "head" } },
+      h("h2", null, e.term.term), h("span", { class: "muted small" }, [e.term.lang !== "en" ? e.term.lang_name : null, e.pos].filter(Boolean).join(" · ")), actions),
+    e.senses.length
+      ? h("ol", { class: "etym-senses small", dataset: { part: "senses" } }, e.senses.slice(0, 2).map((s) => h("li", null, s.gloss)))
+      : e.term.gloss ? h("p", { class: "small", dataset: { part: "senses" } }, e.term.gloss) : null,
     steps.length
-      ? section("Line of descent",
+      ? h("section", { class: "etym-section", dataset: { part: "line" } }, h("h3", null, "Line of descent"),
           h("ol", { class: "etym-line" }, steps.map((s) =>
-            h("li", null, h("span", { class: "muted small" }, s.term.lang_name), " ", termLink(s.term),
+            h("li", null, h("span", { class: "muted small" }, s.term.lang_name), " ", word(s.term),
               s.with.length ? h("span", { class: "muted small" }, ` + ${s.with.join(" + ")}`) : null,
               s.term.gloss ? h("span", { class: "muted small" }, ` “${s.term.gloss}”`) : null,
               s.rel ? h("span", { class: "etym-rel small" }, s.rel) : null))))
-      : h("p", { class: "muted small" }, e.senses.length || e.term.gloss ? "No origin is recorded for this word." : "No origin is recorded for this word. If it is a form of another word (wrote, mice), try that word."),
+      : null,
+  ].filter((x): x is HTMLElement => !!x);
+}
+
+/** An entry's top as text, as a capture of it holds it (and lists and search show it). */
+function entryText(e: EtymEntry): string {
+  const head = `${e.term.lang === "en" ? e.term.term : `${e.term.lang_name} ${e.term.term}`}${e.pos ? ` (${e.pos})` : ""}`;
+  const senses = e.senses.length ? e.senses.slice(0, 2).map((s, i) => `${i + 1}. ${s.gloss}`) : e.term.gloss ? [e.term.gloss] : [];
+  const steps = e.lineage.slice(1).map((s) => `${s.term.lang_name} ${s.term.term}${s.with.length ? ` + ${s.with.join(" + ")}` : ""}${s.term.gloss ? ` “${s.term.gloss}”` : ""}${s.rel ? ` (${s.rel})` : ""}`);
+  return [head, ...senses, ...(steps.length ? ["Line of descent", ...steps] : [])].join("\n\n");
+}
+
+/** Each entry shown, by its element (a selection in it may capture it whole). */
+const shownEntries = new WeakMap<HTMLElement, EtymEntry>();
+
+/** A capture of a word's entry drawn as the view shows it, if it is one (its words are the
+ * entry's top as text); else null, and its quotation is shown. */
+export async function entryCapture(c: RecordInfo): Promise<HTMLElement | null> {
+  const key = (await anchorOf(c.id)).parts[0]?.selector.find((x) => "conformsTo" in x && x.conformsTo === ETYM_TERM) as { value?: string } | undefined;
+  if (!key?.value) return null;
+  const e = (await call<EtymLookup>("etymology.term", { key: key.value })).entries.find((x) => x.term.key === key.value);
+  if (!e || entryText(e) !== String(c.fields["captures.quote"] ?? "").trim()) return null;
+  return h("div", { class: "etym-card" }, entryTop(e, (t) => h("span", { class: "etym-term" }, t.term)));
+}
+
+function entryView(e: EtymEntry, noteId: string | null): HTMLElement {
+  const steps = e.lineage.slice(1);
+  const chips = (ts: EtymTerm[]) => h("div", { class: "etym-chips" }, ts.map((t) => termLink(t)));
+  const actions = h("span", { class: "etym-actions" },
+    iconButton(Highlighter, "Capture this word’s entry (or select words to capture them)", () => void captureEntry(e.term, entryText(e), true), undefined, 15),
+    noteId && steps.length ? iconButton(TextCursorInput, "Insert into the note", () => insertInto(noteId, lineageMarkdown(e)), undefined, 15) : null);
+  const el = h("article", { class: "etym-entry", dataset: { key: e.term.key, term: e.term.term, lang: e.term.lang, langName: e.term.lang_name } },
+    ...entryTop(e, (t) => termLink(t), actions),
+    steps.length ? null : h("p", { class: "muted small" }, e.senses.length || e.term.gloss ? "No origin is recorded for this word." : "No origin is recorded for this word. If it is a form of another word (wrote, mice), try that word."),
     e.etymology ? section("From Wiktionary", h("p", { class: "etym-prose small" }, e.etymology)) : null,
     e.doublets.length ? section("Doublets", chips(e.doublets)) : null,
     e.relatives.length
@@ -150,6 +199,8 @@ function entryView(e: EtymEntry, noteId: string | null): HTMLElement {
     e.descendants.length ? section("English words from it", chips(e.descendants)) : null,
     e.cognates.length ? section("Cognates", chips(e.cognates)) : null,
     e.roots.length ? section("Roots", chips(e.roots)) : null);
+  shownEntries.set(el, e);
+  return el;
 }
 
 /** The view (in the side panel, or the Word origins item's page); `noteId`: the note beside it. */
@@ -197,7 +248,7 @@ function etymologyView(host: HTMLElement, noteId: string | null): () => void {
         h("details", { class: "etym-attribution muted" }, h("summary", null, "From Wiktionary (CC BY-SA 4.0) and other dictionaries"), h("p", null, l.attribution)));
     }, (e) => ask === asked && replace(result, h("p", { class: "small" }, errorText(e))));
   });
-  const stopCapture = captureSelections(host, selectedInEntry, (p) => void captureEntry(p.term, p.quote));
+  const stopCapture = captureSelections(host, selectedInEntry, (p) => void captureEntry(p.term, p.quote, p.whole));
   return () => {
     clearTimeout(timer);
     stop();

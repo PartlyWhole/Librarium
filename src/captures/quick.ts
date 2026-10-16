@@ -22,11 +22,11 @@ export async function dataItem(is: (r: RecordInfo) => boolean, method: string, p
 }
 
 /** Captures `quote` from `source`'s place `ref`, cited by `locator`; `label` says what it was. */
-export async function captureReference(o: { source: () => Promise<RecordInfo>; quote: string; ref: { value: string; conformsTo: string }; locator: string; label: string }): Promise<void> {
+export async function captureReference(o: { source: () => Promise<RecordInfo>; quote: string; ref: { value: string; conformsTo: string }; locator: string; label: string; title?: string }): Promise<void> {
   try {
     const source = await o.source();
     const w = await call<Written>("captures.create", {
-      source: source.id, snapshot: null, text: null, words: "", title: null,
+      source: source.id, snapshot: null, text: null, words: "", title: o.title ?? null,
       parts: [{ selector: [{ type: "TextQuoteSelector", exact: o.quote, prefix: "", suffix: "" }, { type: "FragmentSelector", value: o.ref.value, conformsTo: o.ref.conformsTo }], quote: o.quote, locator: o.locator, region_png: null, boxes: [] }],
     });
     putRecord(w.info);
@@ -36,11 +36,29 @@ export async function captureReference(o: { source: () => Promise<RecordInfo>; q
   }
 }
 
-/** The words of a selection, as read: without what `leave` matches (numbers, other columns). */
-export function selectedWords(range: Range, leave: string): string {
+const BLOCKS = new Set(["P", "LI", "OL", "UL", "DIV", "SECTION", "ARTICLE", "BLOCKQUOTE", "H1", "H2", "H3", "H4", "H5", "H6"]);
+
+/** The words of a selection, as read: without what `leave` matches (numbers, other columns);
+ * with `paragraphs`, each block on its own (a numbered list's items numbered), else run on. */
+export function selectedWords(range: Range, leave: string, paragraphs = false): string {
   const copy = h("div", null, range.cloneContents());
   if (leave) copy.querySelectorAll(leave).forEach((x) => x.remove());
-  return (copy.textContent ?? "").replace(/\s+/g, " ").trim();
+  if (!paragraphs) return (copy.textContent ?? "").replace(/\s+/g, " ").trim();
+  let out = "";
+  const walk = (n: Node) => {
+    for (const c of n.childNodes) {
+      if (c.nodeType === Node.TEXT_NODE) out += c.textContent ?? "";
+      else if (c instanceof HTMLElement) {
+        const block = BLOCKS.has(c.tagName);
+        if (block) out += "\n\n";
+        if (c.tagName === "LI" && c.parentElement?.tagName === "OL") out += `${[...c.parentElement.children].indexOf(c) + 1}. `;
+        walk(c);
+        if (block) out += "\n\n";
+      }
+    }
+  };
+  walk(copy);
+  return out.split(/\n{2,}/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n\n");
 }
 
 /**

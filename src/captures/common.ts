@@ -67,6 +67,14 @@ export function citation(c: RecordInfo): string {
 
 export const anchorOf = (id: string): Promise<Anchor> => call<Anchor>("captures.anchor", { id });
 
+/** A capture drawn as its source shows it, where the source is the app's own data (a word's
+ * entry in word origins): its element, or null where its quotation is shown as it is. */
+export async function drawnCapture(c: RecordInfo): Promise<HTMLElement | null> {
+  const src = getRecord(sourceOf(c));
+  if (src?.fields["library.format"] !== "etymology") return null;
+  return (await import("../etymology")).entryCapture(c).catch(() => null);
+}
+
 /** A part's exact quote (empty for a region or picture). */
 export const partQuote = (p: AnchorPart): string => (p.selector.find((s) => s.type === "TextQuoteSelector") as TextQuoteSelector | undefined)?.exact ?? "";
 

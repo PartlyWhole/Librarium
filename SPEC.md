@@ -551,12 +551,18 @@ CC-licensed).
   - links weaker than 0.4 (a minority view) are left out.
 - Any word shown opens in turn (an older form shows the English words that come from it); Back
   returns. A form of another word (wrote, mice) has no origin of its own and says so.
-- **Insert** (beside a note) puts the line of descent into the note at its cursor, as a
-  quotation with its first definition and "— Word origins from Wiktionary (CC BY-SA 4.0) and
-  other dictionaries". It is plain text: nothing links back to the database.
-- **Capture** (beside Insert) captures the line of descent, and words selected in an entry
-  (a sentence of Wiktionary's account, say) get **Capture** beside them. Captures cite the
-  **Word origins** library item (made the first time) and the word: "Word origins, salary". The
+- **Insert** (beside a note) puts the word's entry into the note at its cursor, shaped as the
+  view shows it: the word and its part of speech, its first two definitions numbered, and
+  **Line of descent** as a list (each step's language, word, meaning and how it was taken), then
+  "— Word origins from Wiktionary (CC BY-SA 4.0) and other dictionaries". It is plain text:
+  nothing links back to the database.
+- **Capture** (beside Insert) captures the word's entry (its word, first definitions and line of
+  descent). A selection reaching more than one of those parts captures the entry too; words
+  selected within one part, or in the rest of the entry (a sentence of Wiktionary's account, say),
+  get **Capture** beside them and are captured as they read, paragraph by paragraph. Captures cite
+  the **Word origins** library item (made the first time) and the word: "Word origins, salary". A
+  capture of the entry is titled "Origins of salary", and where it is shown (its page, a note,
+  a board) it is drawn as the view draws the entry, while its words still match the entry. The
   item's own page, and Show in the source, are the Word origins view at that word.
 - The sources and their licences are shown, folded, under every lookup.
 - **The data** (641 MB) isn't part of the app. The view offers to download it once (209 MB,
