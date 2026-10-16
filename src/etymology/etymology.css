@@ -23,3 +23,6 @@
 .etym-chips { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .etym-relatives { margin-bottom: 6px; }
 .etym-attribution { font-size: 11px; line-height: 1.4; }
+/* A capture of a word's entry, drawn as the view shows it (in a capture, a note or a board). */
+.etym-card { display: flex; flex-direction: column; gap: 8px; padding-left: 12px; border-left: 3px solid var(--accent); font-size: var(--small); }
+.etym-card .etym-head h2 { font-size: 1.3em; }

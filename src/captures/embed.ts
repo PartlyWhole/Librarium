@@ -9,7 +9,7 @@
 import { h } from "../ui/dom";
 import { icon } from "../ui/icon";
 import type { RecordInfo } from "../types";
-import { anchorOf, citation, F, isRegion, partQuote, partsAsQuoted, quoteOf, quoteParts, regionImage, showInSource, type ShownPart } from "./common";
+import { anchorOf, citation, drawnCapture, F, isRegion, partQuote, partsAsQuoted, quoteOf, quoteParts, regionImage, showInSource, type ShownPart } from "./common";
 import { flowQuote } from "./anchor";
 import { Heading, Pencil } from "lucide";
 import "./captures.css";
@@ -28,6 +28,12 @@ export function captureEmbed(r: RecordInfo, open: (id: string, e: MouseEvent) =>
     if ((e.target as Element).closest("a, button")) return;
     e.preventDefault();
     open(r.id, e);
+  });
+  // From the app's own data (a word's entry): drawn as its source shows it.
+  void drawnCapture(r).then((el) => {
+    if (!el) return;
+    block.querySelectorAll(":scope > .embed-quote").forEach((x) => x.remove());
+    block.querySelector(":scope > figcaption")!.before(el);
   });
   // Several parts, or a picture: each part in order, pictures as pictures.
   if (Number(r.fields[F.parts] ?? 1) > 1 || !quote) {

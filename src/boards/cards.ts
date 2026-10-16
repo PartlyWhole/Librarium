@@ -9,14 +9,17 @@ import { h, replace } from "../ui/dom";
 import { icon, iconButton } from "../ui/icon";
 import { effect, untracked } from "../ui/signal";
 import type { RecordInfo } from "../types";
-import { citation, showInSource } from "../captures/common";
+import { citation, drawnCapture, showInSource } from "../captures/common";
 import { appTheme, loadEngine, portable } from "./shared";
 import { LocateFixed } from "lucide";
 
 function captureCard(r: RecordInfo): HTMLElement {
   const quote = String(r.fields["captures.quote"] ?? "").trim();
+  const shown = quote ? h("blockquote", { class: "embed-quote" }, quote) : h("p", { class: "muted" }, "A captured region");
+  // From the app's own data (a word's entry): drawn as its source shows it.
+  void drawnCapture(r).then((el) => el && shown.replaceWith(el));
   return h("div", null,
-    quote ? h("blockquote", { class: "embed-quote" }, quote) : h("p", { class: "muted" }, "A captured region"),
+    shown,
     h("div", { class: "board-card-cite" },
       h("a", { href: "#", class: "embed-cite", onclick: (e: MouseEvent) => (e.preventDefault(), openRecord(r.id, {}, { newTab: e.metaKey })) }, `— ${citation(r)}`),
       iconButton(LocateFixed, "Show in the source", (e) => showInSource(r, { newTab: e.metaKey }), undefined, 14)));

@@ -20,7 +20,7 @@ import type { RecordInfo, RecordText, Written } from "../types";
 import { createEditor, historyJSON, replaceDoc, textHistory } from "../notes/editor/editor";
 import { NoteSession } from "../notes/editor/session";
 import { describe, flowQuote, locate, toW3C, type Anchor } from "./anchor";
-import { anchorOf, badge, citation, copyEmbed, isRegion, partQuote, partsAsQuoted, placeParams, quoteOf, quoteParts, regionImage, showInSource, sourceOf, statuses, storedText, type ShownPart } from "./common";
+import { anchorOf, badge, citation, copyEmbed, drawnCapture, isRegion, partQuote, partsAsQuoted, placeParams, quoteOf, quoteParts, regionImage, showInSource, sourceOf, statuses, storedText, type ShownPart } from "./common";
 import { deleteCapture } from "./delete";
 import { findReferences, type Reference } from "./references";
 import { Copy, FileDown, LocateFixed, Pencil, Trash2 } from "lucide";
@@ -124,7 +124,9 @@ function mount(host: HTMLElement, ctx: PageContext, t: RecordText, anchor: Ancho
   const editorHost = h("div", { class: "editor-host capture-words" });
   const usedIn = h("section", { class: "used-in", "aria-label": "Used in" });
   const archived = isArchived(info) ? h("p", { class: "notice" }, "This capture is in the archive. ", h("button", { type: "button", class: "link-button", onclick: () => void restore(info) }, "Restore")) : null;
-  replace(host, archived, titleInput, h("div", null, quoteParts(shown, "capture-quote")), cite, h("h2", { class: "list-heading" }, "Your words"), editorHost, usedIn);
+  const quoteBox = h("div", null, quoteParts(shown, "capture-quote"));
+  void drawnCapture(info).then((el) => el && replace(quoteBox, el));
+  replace(host, archived, titleInput, quoteBox, cite, h("h2", { class: "list-heading" }, "Your words"), editorHost, usedIn);
 
   const session: NoteSession = new NoteSession(id, info.version, t.body, {
     current: () => view.state.doc.toString(),
