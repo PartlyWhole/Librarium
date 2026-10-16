@@ -4,7 +4,7 @@
  * when to use it, so typing and a note's other steps undo in the order they were done.
  */
 import { closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyField, indentWithTab, isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
+import { defaultKeymap, history, historyField, indentLess, insertTab, isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { bracketMatching, indentOnInput, indentUnit } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { EditorState, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
@@ -117,7 +117,7 @@ export function createEditor(o: EditorOptions): EditorView {
     embedExtension(),
     linkCompletion(o.targets),
     clipboard,
-    keymap.of([...formatKeymap, ...clipboardKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...completionKeymap, ...listKeymap, indentWithTab]),
+    keymap.of([...formatKeymap, ...clipboardKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...completionKeymap, ...listKeymap, { key: "Tab", run: insertTab, shift: indentLess }]),
     hangingIndent,
     // Outside lists, Tab inserts a tab.
     indentUnit.of("\t"),

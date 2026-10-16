@@ -130,9 +130,10 @@ One window. Only regions scroll, never the window.
   - **Markdown supported:** CommonMark plus GFM tables, tasks and strikethrough; `==highlight==`;
     quotes; fenced code. Code is highlighted for JS, TS, Python, Rust, JSON, CSS,
     HTML/XML/SVG, SQL and shell.
-  - **Indented lines are never code.** Outside lists, Tab inserts a tab, ⇧Tab outdents and Enter
-    keeps the indent. Away from the cursor, leading whitespace becomes a left margin (a tab is
-    4 columns), so wrapped lines align. Fenced code, HTML and tables are left as typed.
+  - **Indented lines are never code.** Outside lists, Tab inserts a tab at the cursor (with
+    a selection, it indents the lines selected), ⇧Tab outdents and Enter keeps the indent. Away
+    from the cursor, leading whitespace becomes a left margin (a tab is 4 columns), so wrapped
+    lines align. Fenced code, HTML and tables are left as typed.
   - **What shows away from the cursor.** Bullets are dots. Task boxes toggle on click. Bare URLs,
     `[sic]` and footnote marks stay visible. A web link opens on click (⌘-click while editing),
     after the web-link dialog.
