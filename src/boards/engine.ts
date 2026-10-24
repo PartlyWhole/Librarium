@@ -4,7 +4,7 @@
  */
 import { createElement, Fragment, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, FONT_FAMILY, sceneCoordsToViewportCoords, Sidebar, exportToBlob, exportToSvg, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, FONT_FAMILY, reconcileElements, sceneCoordsToViewportCoords, Sidebar, exportToBlob, exportToSvg, getSceneVersion, restore, restoreElements, serializeAsJSON, viewportCoordsToSceneCoords } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { passThrough } from "../ui/keys";
 import { boxText, hasRefs, isTextBox, RECORD_LINK, recordOf, TEXT_BOX, UUID, wordsAndLinks, type BoardElement, type BoardLink } from "./links";
@@ -115,7 +115,29 @@ export interface BoardEngine {
   undo(): boolean;
   redo(): boolean;
   setTheme(theme: "light" | "dark"): void;
+  /**
+   * Takes in a shared board's elements (each kept here when this one is newer, as Excalidraw's
+   * collaboration does) and its text boxes' Markdown, not as a step to undo. Returns whether the
+   * drawing changed.
+   */
+  applyRemote(elements: readonly unknown[], boxes: Record<string, string>): boolean;
+  /** Colleagues' pointers and names, by who they are. */
+  setPeers(peers: Map<string, Peer>): void;
+  /** The board is shared (or no longer is). */
+  setShared(on: boolean): void;
+  /** Tells `to` where the pointer is on the drawing (in its coordinates), and when it is pressed
+   * or let go; `undefined` stops. */
+  followPointer(to: ((p: { x: number; y: number; button: "down" | "up" }) => void) | undefined): void;
   destroy(): void;
+}
+
+/** A colleague on a shared board: where their pointer is, and who they are. */
+export interface Peer {
+  x: number;
+  y: number;
+  button: "down" | "up";
+  name: string;
+  color: string;
 }
 
 /** The page's own DOM, held by React where Excalidraw puts it (a card, the sidebar, its button's icon). */
@@ -181,6 +203,10 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
   let quiet: "replay" | "load" = "replay";
   let version = getSceneVersion(initial.elements);
   let stepPending = false;
+  /** Whether the board is shared (its text boxes' words are then no steps to undo). */
+  let shared = false;
+  /** Who is told where the pointer is (a shared board). */
+  let pointerTo: ((p: { x: number; y: number; button: "down" | "up" }) => void) | undefined;
 
   const onChange = (elements: Parameters<typeof getSceneVersion>[0], state: AppState) => {
     keepLinks(state);
@@ -214,6 +240,7 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
         viewModeEnabled: o.readOnly,
         aiEnabled: false,
         onChange,
+        onPointerUpdate: (p: { pointer: { x: number; y: number }; button: "down" | "up" }) => pointerTo?.({ x: p.pointer.x, y: p.pointer.y, button: p.button }),
         onLinkOpen: (element: { id: string; link: string | null; customData?: unknown }, event: CustomEvent<{ nativeEvent: MouseEvent | { metaKey?: boolean; clientX?: number; clientY?: number } }>) => {
           if (!element.link) return;
           event.preventDefault();
@@ -334,11 +361,14 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     if (!all.some((e) => e.id === id && !e.isDeleted)) return;
     const gone = commit && !text.trim();
     const next = all.map((e) => (e.id !== id ? e : gone ? { ...e, ...touched(e), isDeleted: true } : { ...e, ...touched(e), customData: { ...(e.customData ?? {}), librarium: { ...((e.customData as BoardElement["customData"])?.librarium ?? {}), text } } }));
-    if (!commit) {
+    // On a shared board a box's words are no step to undo: undoing one would put back its whole
+    // earlier text over colleagues' words. Its editor undoes what was typed in it.
+    const unrecorded = shared && !gone;
+    if (!commit || unrecorded) {
       quiet = "replay";
       quietUntil = performance.now() + 50;
     }
-    api.updateScene({ elements: next as never, captureUpdate: commit ? CaptureUpdateAction.IMMEDIATELY : CaptureUpdateAction.EVENTUALLY });
+    api.updateScene({ elements: next as never, captureUpdate: unrecorded ? CaptureUpdateAction.NEVER : commit ? CaptureUpdateAction.IMMEDIATELY : CaptureUpdateAction.EVENTUALLY });
   }
   /** Boxes show their words as the drawing has them (after undo, redo or a load), and the box
    * made active (selected, then clicked) is written in. */
@@ -717,6 +747,42 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
       api?.updateScene({ elements: d.elements, appState: { viewBackgroundColor: d.appState.viewBackgroundColor }, captureUpdate: CaptureUpdateAction.NEVER });
       if (d.files) api?.addFiles(Object.values(d.files));
       loadPictures();
+    },
+    applyRemote(remote, texts) {
+      if (!api) return false;
+      const before = getSceneVersion(api.getSceneElementsIncludingDeleted());
+      const local = api.getSceneElementsIncludingDeleted();
+      const merged = reconcileElements(local as never, restoreElements(remote as never, null) as never, api.getAppState()) as unknown as readonly Drawn[];
+      let boxChanged = false;
+      // A text box's words are the shared document's (merged character by character there).
+      const next = merged.map((e) => {
+        const text = texts[e.id];
+        if (text === undefined || !isTextBox(e) || boxText(e) === text) return e;
+        boxChanged = true;
+        const c = (e.customData ?? {}) as { librarium?: object };
+        return { ...e, customData: { ...c, librarium: { ...c.librarium, text } } };
+      });
+      if (getSceneVersion(next as never) === before && !boxChanged) return false;
+      quiet = "replay";
+      quietUntil = performance.now() + 50;
+      api.updateScene({ elements: next as never, captureUpdate: CaptureUpdateAction.NEVER });
+      // A box being written in shows the merged words, its cursor kept.
+      for (const [elementId, text] of Object.entries(texts)) {
+        const box = boxes.get(elementId);
+        if (box && box.text !== text) ((box.text = text), box.view.set(text));
+      }
+      loadPictures();
+      return true;
+    },
+    setShared(on) {
+      shared = on;
+    },
+    followPointer(to) {
+      pointerTo = to;
+    },
+    setPeers(peers) {
+      const collaborators = new Map([...peers].map(([id, p]) => [id, { pointer: { x: p.x, y: p.y, tool: "pointer" }, button: p.button, username: p.name, color: { background: p.color, stroke: p.color }, id }]));
+      api?.updateScene({ collaborators: collaborators as never });
     },
     undo: () => key(false),
     redo: () => key(true),

@@ -71,6 +71,25 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         "folder.reveal" => ok(app::reveal(&lib()?.root)?),
         "sharing.status" => ok(app.sharing.status()),
         "sharing.setServer" => ok(app.set_sync_server(p::<SharingServerParams>(params)?.server)?),
+        "sharing.watchBoard" => {
+            let q = p::<SharingWatchParams>(params)?;
+            ok(app.sharing.boards()?.watch(q.id, q.open))
+        }
+        "sharing.shareBoard" => ok(app.sharing.boards()?.share(p::<IdParams>(params)?.id)?),
+        "sharing.unshareBoard" => ok(app.sharing.boards()?.unshare(p::<IdParams>(params)?.id)?),
+        "sharing.openBoard" => {
+            let q = p::<SharingOpenParams>(params)?;
+            ok(app.sharing.boards()?.open_shared(&q.link, q.folder.as_deref())?)
+        }
+        "sharing.push" => {
+            let q = p::<SharingPushParams>(params)?;
+            ok(app.sharing.boards()?.push(q.id, &q.elements, &q.heads)?)
+        }
+        "sharing.presence" => {
+            let q = p::<SharingPresenceParams>(params)?;
+            let name = app.settings.get(crate::sharing::NAME).and_then(|v| v.as_str().map(str::to_string));
+            ok(app.sharing.boards()?.presence(q.id, q.data, name))
+        }
         "settings.get" => ok(app.settings.all()),
         "bible.status" => ok(app.bible.data.status()),
         "bible.download" => ok(app.bible.data.download()),

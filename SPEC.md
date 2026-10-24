@@ -783,9 +783,9 @@ Preferences are per device, in app data (`settings.json`), never in WebKit stora
 
 ## Sharing
 
-Boards are to be shared with colleagues through a sync server the user runs, reachable only on
-their private network (Tailscale). For now Librarium connects to the server and shows the
-connection; nothing is shared over it yet.
+Boards are shared with colleagues through a sync server the user runs, reachable only on their
+private network (Tailscale). Each person keeps a shared board as an ordinary board in their own
+library; it works offline and catches up when the connection is back.
 
 - **The address** is set in Settings ▸ Sharing (Return or Connect), for example
   `https://name.your-tailnet.ts.net:8443`. It is empty by default, and while it is empty
@@ -795,12 +795,39 @@ connection; nothing is shared over it yet.
   - An address that isn't on a private network (a `.ts.net` name, a Tailscale `100.64–127.x`
     address, a local network address or this Mac) is used, with a warning: "This server is on
     the public internet. Anyone who finds it can read and change what's shared on it."
-- **The connection** starts when the address is set and at launch, and is retried for as long
-  as the server can't be reached (at most 30 seconds apart). Settings shows "Connected to
-  <address>", "Connecting…", or why it is offline ("Can't reach the server. Trying again…").
+  - **Your name** (Settings ▸ Sharing) is what colleagues see beside your pointer; "Colleague"
+    when it is empty.
+- **The connection** starts when the address is set and when a library opens, and is retried for
+  as long as the server can't be reached (at most 30 seconds apart). Settings shows "Connected
+  to <address>", "Connecting…", or why it is offline ("Can't reach the server. Trying again…").
+- **Sharing a board.** Share… in a board's header (shown while Sharing is set up), or File ▸
+  Share Board…, saves the board, shares it and copies its link (`librarium://board/…`) to send
+  to colleagues. The header then shows "Shared" (with "· N here" while colleagues are on it),
+  Copy link and Stop sharing.
+- **Opening one.** File ▸ Open Shared Board… takes the link and makes the board in the Notes
+  folder being looked at (or at the top), with the sharer's title; it looks for up to 30
+  seconds, as a board shared a moment ago may not have reached the server. Opening a link
+  again opens the board already made.
+- **Drawing together.** What anyone draws shows on everyone's board a moment later.
+  - Of two changes to one element at once, Excalidraw's rule keeps one, the same everywhere
+    (the newer version). Text boxes merge by character: two people typing in one box both keep
+    their words, offline too.
+  - Colleagues' pointers show with their names.
+  - ⌘Z undoes only your own steps. On a shared board, a text box's words aren't canvas steps
+    (undoing one would put back the whole earlier text over colleagues' words); while writing
+    in a box, ⌘Z undoes what you typed there.
+  - Titles and folders stay each person's own.
+  - A card or picture of an item someone else has, but you don't, says "Not in your library: a
+    colleague put it here."
+- **While a board isn't open,** what colleagues draw is written to its drawing, and its
+  readable page is brought up to date when it next opens. When a shared board's drawing changed
+  on disk while it had unsaved changes, the two are merged (each element the newer) rather than
+  kept apart.
+- **Stop sharing** (header or File ▸ Stop Sharing This Board…, after asking) leaves this copy an
+  ordinary board. Colleagues keep theirs; nothing is deleted.
 - The server is the stock Automerge sync server (`@automerge/automerge-repo-sync-server`).
   Whoever runs it can read what passes through it; the private network is what keeps everyone
-  else out.
+  else out. Pointers pass through it and are never stored.
 
 ## Updates and releases
 

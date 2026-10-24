@@ -1,13 +1,17 @@
-//! Sharing: the connection to the sync server named by the `sync.server` setting. While it is
-//! empty there is none, so Librarium dials nowhere until someone gives it an address. The
-//! connection is samod's (automerge-repo's protocol), retried with backoff while the server
-//! can't be reached; its state goes out as `sharing.status` events. Nothing is shared over it
-//! yet.
+//! Sharing: the connection to the sync server named by the `sync.server` setting, and the
+//! shared boards that travel over it. While the setting is empty there is no connection, so
+//! Librarium dials nowhere until someone gives it an address. Each open library has a samod
+//! repo (automerge-repo's protocol) keeping its shared documents in its app data
+//! (`libraries/<id>/sharing/`); the connection is that repo's, retried with backoff while the
+//! server can't be reached, and its state goes out as `sharing.status` events.
+
+pub mod boards;
 
 use crate::error::{Error, Result};
-use crate::store::Emit;
+use crate::store::{Emit, Library};
 use crate::types::SharingStatus;
 use futures::StreamExt;
+use samod::storage::TokioFilesystemStorage;
 use samod::{BackoffConfig, DialerEvent, DialerHandle, Repo};
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -16,15 +20,27 @@ use url::{Host, Url};
 
 /// The settings key holding the sync server's address.
 pub const SERVER: &str = "sync.server";
+/// The settings key holding the name colleagues see.
+pub const NAME: &str = "sharing.name";
 
-type Conn = (Repo, DialerHandle);
+/// Runs a future to its end from ordinary (non-async) code.
+pub(crate) fn block_on<F: std::future::Future>(f: F) -> F::Output {
+    tauri::async_runtime::handle().block_on(f)
+}
+
+/// The open library's repo, its shared boards, and the dialer while a server is set.
+struct Open {
+    repo: Repo,
+    boards: Arc<boards::Boards>,
+    dialer: Option<DialerHandle>,
+}
 
 pub struct Sharing {
     emit: Emit,
     state: Arc<Mutex<SharingStatus>>,
-    /// The repo and its dialer, while an address is set.
-    conn: Arc<Mutex<Option<Conn>>>,
-    /// Bumped on every change of address, so an old connection's events are ignored.
+    server: Mutex<Option<String>>,
+    open: Mutex<Option<Open>>,
+    /// Bumped on every change of address or library, so an old connection's events are ignored.
     generation: Arc<AtomicU64>,
 }
 
@@ -76,7 +92,8 @@ impl Sharing {
         Sharing {
             emit,
             state: Arc::new(Mutex::new(SharingStatus { state: "off".into(), server: None, private: false, error: None })),
-            conn: Arc::default(),
+            server: Mutex::new(None),
+            open: Mutex::new(None),
             generation: Arc::default(),
         }
     }
@@ -85,38 +102,55 @@ impl Sharing {
         self.state.lock().unwrap().clone()
     }
 
-    /// Connects to `server` (a checked address), or to nothing; any earlier connection stops.
-    pub fn connect(&self, server: Option<&str>) -> SharingStatus {
-        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
-        if let Some((repo, dialer)) = self.conn.lock().unwrap().take() {
-            dialer.close();
-            tauri::async_runtime::spawn(async move { repo.stop().await });
+    /// The open library's shared boards.
+    pub fn boards(&self) -> Result<Arc<boards::Boards>> {
+        self.open.lock().unwrap().as_ref().map(|o| o.boards.clone()).ok_or_else(|| Error::invalid("No library is open."))
+    }
+
+    /// Starts sharing for a library that has just opened: its repo, its shared boards, and the
+    /// connection if a server is set.
+    pub fn open_library(&self, lib: Arc<Library>) {
+        self.close_library();
+        let dir = lib.app_dir.join("sharing");
+        let repo = block_on(async move { Repo::build_tokio().with_storage(TokioFilesystemStorage::new(dir)).load().await });
+        let boards = boards::Boards::new(lib, repo.clone(), self.emit.clone());
+        *self.open.lock().unwrap() = Some(Open { repo, boards: boards.clone(), dialer: None });
+        let server = self.server.lock().unwrap().clone();
+        self.connect(server.as_deref());
+        boards.follow_all();
+    }
+
+    /// Stops sharing for the library that is closing.
+    pub fn close_library(&self) {
+        if let Some(o) = self.open.lock().unwrap().take() {
+            if let Some(d) = o.dialer {
+                d.close();
+            }
+            o.boards.stop();
+            tauri::async_runtime::spawn(async move { o.repo.stop().await });
         }
-        let url = server.and_then(|s| ws_url(s).ok());
+    }
+
+    /// Connects to `server` (a checked address), or to nothing; any earlier connection stops.
+    /// With no library open, it connects when one opens.
+    pub fn connect(&self, server: Option<&str>) -> SharingStatus {
+        *self.server.lock().unwrap() = server.map(str::to_string);
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let set = setter(self.emit.clone(), self.state.clone(), self.generation.clone(), generation);
-        let Some(url) = url else {
+        let mut open = self.open.lock().unwrap();
+        if let Some(d) = open.as_mut().and_then(|o| o.dialer.take()) {
+            d.close();
+        }
+        let Some(url) = server.and_then(|s| ws_url(s).ok()) else {
             return set("off", None, false, None);
         };
         let first = set("connecting", server.map(str::to_string), is_private(&url), None);
-        let (conn, current) = (self.conn.clone(), self.generation.clone());
+        let Some(o) = open.as_mut() else { return first };
+        let Ok(dialer) = o.repo.dial_websocket(url, BackoffConfig::default()) else { return first };
+        o.dialer = Some(dialer.clone());
         let (server, private) = (first.server.clone(), first.private);
         tauri::async_runtime::spawn(async move {
-            let repo = Repo::build_tokio().load().await;
-            let Ok(dialer) = repo.dial_websocket(url, BackoffConfig::default()) else { return };
             let mut events = dialer.events();
-            let stale = {
-                let mut slot = conn.lock().unwrap();
-                let stale = current.load(Ordering::SeqCst) != generation;
-                if !stale {
-                    *slot = Some((repo.clone(), dialer.clone()));
-                }
-                stale
-            };
-            if stale {
-                dialer.close();
-                repo.stop().await;
-                return;
-            }
             while let Some(event) = events.next().await {
                 let s = server.clone();
                 match event {

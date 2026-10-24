@@ -2459,6 +2459,7 @@ dependencies = [
 name = "librarium"
 version = "0.2.15"
 dependencies = [
+ "automerge",
  "base64 0.22.1",
  "block2",
  "flate2",
@@ -2494,6 +2495,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+ "tokio",
  "ts-rs",
  "unicode-normalization",
  "url",

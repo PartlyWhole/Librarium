@@ -13,6 +13,8 @@ import { router } from "../app/router";
 import { errorText } from "../ui/dom";
 import { effect, untracked } from "../ui/signal";
 import { toast } from "../ui/toast";
+import { prompt } from "../ui/dialog";
+import { showStatus } from "../app/status";
 import type { Draft, Written } from "../types";
 import { renderBoard, shownBoard } from "./page";
 import "./boards.css";
@@ -37,9 +39,30 @@ async function newBoard(where?: { folder: string }): Promise<void> {
 
 const onBoard = () => !!shownBoard();
 
+/** Asks for the link a colleague sent, then opens the board (made in the Notes folder being looked
+ * at, the first time). */
+async function openShared(): Promise<void> {
+  const link = await prompt("Open a shared board", { label: "Link", action: "Open", check: (v) => (/^\s*(librarium:\/\/board\/|automerge:)\S+\s*$/.test(v) ? null : "Paste the link a colleague sent. It starts with librarium://board/") });
+  if (!link) return;
+  const at = here.peek();
+  showStatus("Finding the shared board…", 0);
+  try {
+    const w = await call<Written>("sharing.openBoard", { link, folder: at?.kind === "note" ? at.folder || null : null });
+    putRecord(w.info);
+    router.go("board", { id: w.info.id });
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    showStatus("");
+  }
+}
+
 defineAction({ id: "boards.new", title: "New board", keys: ["Mod+Alt+N"], reserved: true, when: isOpen, run: newBoard, menu: { name: "file", group: 0.5 }, icon: Shapes });
 defineAction({ id: "boards.linkTo", title: "Link to…", keys: ["Mod+Alt+K"], reserved: true, when: onBoard, run: () => shownBoard()?.linkTo(), menu: { name: "edit", group: 3.1, title: "Link to a note or item…" } });
 defineAction({ id: "boards.insert", title: "Put on the board…", keys: ["Mod+Alt+I"], reserved: true, when: onBoard, run: () => shownBoard()?.insert(), menu: { name: "edit", group: 3.2, title: "Put a capture, note or item on the board…" } });
+defineAction({ id: "boards.share", title: "Share Board…", when: () => !!shownBoard() && !shownBoard()!.shared(), run: () => void shownBoard()?.share(), menu: { name: "file", group: 2.9 } });
+defineAction({ id: "boards.unshare", title: "Stop Sharing This Board…", when: () => !!shownBoard()?.shared(), run: () => void shownBoard()?.unshare(), menu: { name: "file", group: 2.9 } });
+defineAction({ id: "boards.openShared", title: "Open Shared Board…", when: isOpen, run: () => void openShared(), menu: { name: "file", group: 0.5 } });
 for (const [as, title, n] of [["png", "Export board as a picture (PNG)…", 0.3], ["svg", "Export board as a picture (SVG)…", 0.4], ["excalidraw", "Export board as an Excalidraw file…", 0.5]] as const) {
   defineAction({ id: `boards.export.${as}`, title, when: onBoard, run: () => void shownBoard()?.exportAs(as), menu: { name: "file", group: 3 + n } });
 }

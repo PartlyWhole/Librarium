@@ -31,7 +31,7 @@ function recordCard(r: RecordInfo): HTMLElement {
 }
 
 /** Draws a record's card into `host`, again whenever the record changes; returns how to stop. */
-export function renderCard(id: string, host: HTMLElement): () => void {
+export function renderCard(id: string, host: HTMLElement, shared: () => boolean = () => false): () => void {
   let shown: string | null = null;
   return effect(() => {
     const r = getRecord(id);
@@ -39,7 +39,8 @@ export function renderCard(id: string, host: HTMLElement): () => void {
     if (v === shown) return;
     shown = v;
     untracked(() => {
-      if (!r) return replace(host, h("div", { class: "board-card missing" }, "This was deleted or can’t be found."));
+      // On a shared board it may be a colleague's, not (yet) in this library.
+      if (!r) return replace(host, h("div", { class: "board-card missing" }, shared() ? "Not in your library: a colleague put it here." : "This was deleted or can’t be found."));
       replace(host, h("div", { class: `board-card kind-${r.kind}`, role: "group", "aria-label": `${kindName(r)}: ${r.title || "Untitled"}` },
         r.kind === "capture" ? captureCard(r) : recordCard(r),
         isArchived(r) ? h("p", { class: "muted small" }, "In the archive.") : null));

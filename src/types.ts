@@ -549,6 +549,44 @@ export type SharingServerParams = {
  */
 server: string | null, };
 
+/**
+ * A shared board as its document holds it: the link colleagues are sent, its elements (each the
+ * version Excalidraw's rule picks) and its text boxes' Markdown by element ID.
+ */
+export type SharedBoard = { link: string, elements: unknown[], boxes: { [key in string]: string }, 
+/**
+ * The document's heads: what the page's next push is based on.
+ */
+heads: Array<string>, };
+
+export type SharingWatchParams = { id: string, 
+/**
+ * The board's page opened (`true`) or closed.
+ */
+open: boolean, };
+
+export type SharingOpenParams = { 
+/**
+ * The link a colleague sent (`librarium://board/…`).
+ */
+link: string, folder: string | null, };
+
+export type SharingPushParams = { id: string, 
+/**
+ * The board's elements, after the page's own merge.
+ */
+elements: unknown[], 
+/**
+ * The document's heads the page last saw (its changes are since then).
+ */
+heads: Array<string>, };
+
+export type SharingPresenceParams = { id: string, 
+/**
+ * Where the pointer is, and what is selected.
+ */
+data: Record<string, unknown>, };
+
 export type EtymWordParams = { word: string, };
 
 export type EtymKeyParams = { 
