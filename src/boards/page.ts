@@ -6,7 +6,8 @@
  */
 import { BackendError, call, onFileDrop, pickSavePath } from "../backend";
 import { folderOf, spaceFor } from "../app/folders";
-import { moveTo } from "../app/folders/ops";
+import { moveInto, moveTo } from "../app/folders/ops";
+import { sharedFolderOf, sharedFolders } from "../app/folders/spaces";
 import { askToOpen } from "../app/links";
 import { fullScreen } from "../app/fullscreen";
 import type { PageContext, PageHandle } from "../app/pages";
@@ -22,7 +23,7 @@ import { dropTarget } from "../ui/dnd";
 import { errorText, h, replace } from "../ui/dom";
 import { icon, iconButton } from "../ui/icon";
 import { resizeHandle } from "../ui/resize";
-import { effect, untracked } from "../ui/signal";
+import { effect, signal, untracked } from "../ui/signal";
 import { toast } from "../ui/toast";
 import type { BoardLoaded, BoardSaved, Draft, ImportResult, RecordInfo, Written } from "../types";
 import type { BoardEngine, BoardInsert, TextBoxHost, TextBoxView } from "./engine";
@@ -124,6 +125,8 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   let engine: BoardEngine | null = null;
   /** While the board is shared: colleagues' changes in, this page's out. */
   let live: LiveBoard | null = null;
+  /** The live board once made (cards of items missing here follow whether it is shared). */
+  const liveNow = signal<LiveBoard | null>(null);
 
   // ---- What is on it, for VoiceOver ----
   let outlineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -245,7 +248,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     onChange: changed,
     onStep: () => typed(scope, "Drawing"),
     onFiles: (files) => void pasted(files),
-    renderCard: (target, cardHost) => renderCard(target, cardHost, () => !!live?.link.peek()),
+    renderCard: (target, cardHost) => renderCard(target, cardHost, () => !!liveNow()?.link()),
     imageOf: pictureData,
     onLinkStart: (elementId, at, byKeys) =>
       pickRecord(id, "Link these words to", (to) => engine?.link([elementId], to, { at, typed: byKeys }), () => byKeys && engine?.untype(elementId, at)),
@@ -277,6 +280,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   if (!readOnly) {
     const l = liveBoard(id, ready, () => (tellOutline(), saveSoon()));
     live = l;
+    liveNow.set(l);
     cleanup.push(() => ((live = null), l.stop()));
     // Shared: how many colleagues are here, the link again, and Stop sharing.
     cleanup.push(effect(() => {
@@ -369,6 +373,20 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   const insertRecords = (ids: string[], at?: { x: number; y: number }) => {
     const items = ids.flatMap(itemFor);
     if (items.length) void ready.insert(items, at);
+    offerShared(ids);
+  };
+  /** On a shared board, library items outside a shared folder are offered a move into one:
+   * colleagues get only what is in it. */
+  const offerShared = (ids: string[]) => {
+    const lib = spaceFor("item");
+    if (!live?.link.peek() || !lib) return;
+    const out = ids.map((i) => untracked(() => getRecord(i))).filter((r): r is RecordInfo => !!r && r.kind === "item" && sharedFolderOf(lib.kind, folderOf(r)) === null);
+    if (!out.length) return;
+    const what = out.length === 1 ? `“${out[0]!.title || "Untitled"}”` : `${out.length} items`;
+    const dest = untracked(() => sharedFolders(lib.kind))[0];
+    if (dest === undefined) return void toast(`Colleagues see ${what} only once it’s in a folder shared with them through Syncthing.`);
+    const name = dest ? dest.split("/").pop() : lib.title;
+    toast(`Colleagues get ${what} once it’s in “${name}”.`, { action: { label: `Move to “${name}”`, run: () => void moveInto(lib, { kind: lib.kind, records: out.map((r) => r.id), folders: [] }, dest) } });
   };
   /**
    * Pasted links and embeds (copied from a note or the Library): an embed on a line of its own

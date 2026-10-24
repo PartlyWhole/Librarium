@@ -67,6 +67,18 @@ window.addEventListener("focus", () => isOpen() && void refreshFolders());
 
 const mine = (kind: string) => listed().find((x) => x.kind === kind);
 
+/**
+ * The folder shared with other people through a sync tool (Syncthing) that `folder` is in (itself
+ * or one above it), or null. What leaves it, or is deleted in it, goes for them too.
+ */
+export function sharedFolderOf(kind: string, folder: string): string | null {
+  const shared = mine(kind)?.shared ?? [];
+  return shared.filter((s) => s === "" || folder === s || folder.startsWith(`${s}/`)).sort((a, b) => b.length - a.length)[0] ?? null;
+}
+
+/** The folders of a space shared with other people, the top level last. */
+export const sharedFolders = (kind: string): string[] => [...(mine(kind)?.shared ?? [])].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
+
 /** Whether records of a kind are kept in a space (boards: in Notes). */
 export const inSpace = (recordKind: string, sp: Space): boolean => (mine(sp.kind)?.kinds ?? [sp.kind]).includes(recordKind);
 

@@ -2,7 +2,7 @@
 import { call } from "../../backend";
 import { archiveRecords } from "../../archive";
 import { comboboxDialog } from "../../ui/combobox";
-import { ask } from "../../ui/dialog";
+import { ask, confirm } from "../../ui/dialog";
 import type { DragPayload } from "../../ui/dnd";
 import { errorText, h } from "../../ui/dom";
 import { count } from "../../ui/format";
@@ -13,8 +13,8 @@ import { getRecord, putRecord } from "../records";
 import { showStatus } from "../status";
 import { done } from "../undo";
 import { folderOf, join, keyOf, nameOf, parentOf, placed, within } from "./model";
-import { contents, inSpace, orderOf, refreshFolders, saveOrder, sorted, type Space } from "./spaces";
-import { Folder, Home } from "lucide";
+import { contents, inSpace, orderOf, refreshFolders, saveOrder, sharedFolderOf, sorted, type Space } from "./spaces";
+import { Folder, FolderSync, Home } from "lucide";
 
 const quoted = (sp: Space, path: string) => `“${path ? nameOf(path) : sp.title}”`;
 const moveFolder = (sp: Space, from: string, to: string) => call<FolderMoved>("folders.move", { kind: sp.kind, from, to });
@@ -47,6 +47,17 @@ export async function moveInto(sp: Space, p: DragPayload, dest: string): Promise
   const rs = p.records.map((id) => untracked(() => getRecord(id))).filter((r): r is RecordInfo => !!r && folderOf(r) !== dest);
   const from = new Map(rs.map((r) => [r.id, folderOf(r)]));
   const folders = p.folders.filter((f) => parentOf(f) !== dest && !within(dest, f));
+  // Leaving a folder shared with colleagues takes things out of their libraries too.
+  const into = sharedFolderOf(sp.kind, dest);
+  const leaving = [...rs.map((r) => ({ name: r.title || "Untitled", from: from.get(r.id) ?? "" })), ...folders.map((f) => ({ name: nameOf(f), from: f }))]
+    .filter((x) => { const s = sharedFolderOf(sp.kind, x.from); return s !== null && s !== into; });
+  if (leaving.length) {
+    const shared = sharedFolderOf(sp.kind, leaving[0]!.from)!;
+    const what = leaving.length === 1 ? `“${leaving[0]!.name}”` : count(leaving.length, "item");
+    const ok = await confirm(`Move ${what} out of ${quoted(sp, shared)}?`,
+      `${quoted(sp, shared)} is shared with colleagues, so ${leaving.length === 1 ? "it leaves" : "they leave"} their libraries too. Syncthing keeps removed files for 30 days on each Mac.`, "Move");
+    if (!ok) return;
+  }
   const movedFolders: { from: string; to: string }[] = [];
   try {
     for (const f of folders) {
@@ -238,7 +249,7 @@ export function chooseFolder(sp: Space, label: string, exclude: (f: string) => b
     const TOP = "\u0000";
     const choices = [
       ...(exclude("") ? [] : [{ id: TOP, label: sp.title, detail: "Top level", icon: Home }]),
-      ...untracked(() => contents(sp)).folders.filter((f) => !exclude(f)).map((f) => ({ id: f, label: nameOf(f), detail: parentOf(f) ? parentOf(f).replaceAll("/", " › ") : undefined, icon: Folder })),
+      ...untracked(() => contents(sp)).folders.filter((f) => !exclude(f)).map((f) => ({ id: f, label: nameOf(f), detail: parentOf(f) ? parentOf(f).replaceAll("/", " › ") : undefined, icon: untracked(() => sharedFolderOf(sp.kind, f)) === f ? FolderSync : Folder })),
     ];
     const m = comboboxDialog({
       label,

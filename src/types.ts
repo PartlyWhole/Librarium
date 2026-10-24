@@ -93,7 +93,12 @@ markdown_files: number, in_icloud: boolean, };
  * `{ folder: [record ID or "folder:<name>", …] }`, the top level as `""`. `kinds` lists every
  * kind kept in these folders, the space's own first (boards are kept beside notes).
  */
-export type FolderSpace = { kind: string, kinds: Array<string>, folders: Array<string>, order: Record<string, string[]>, };
+export type FolderSpace = { kind: string, kinds: Array<string>, folders: Array<string>, order: Record<string, string[]>, 
+/**
+ * Folders a sync tool shares with other people (Syncthing's `.stfolder` is in them); `""`
+ * is the top level.
+ */
+shared: Array<string>, };
 
 /**
  * The user's folders, for each kind kept in folders.

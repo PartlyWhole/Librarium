@@ -19,9 +19,9 @@ import { router } from "../router";
 import { folderOf } from "./model";
 import { goFolder, showFolderMenu } from "./menus";
 import { canMoveInto, canPlaceIn, moveInto, moveTo, place, renameRecord } from "./ops";
-import { sorted, spaceFor, spaceOf, type Space } from "./spaces";
+import { sharedFolderOf, sorted, spaceFor, spaceOf, type Space } from "./spaces";
 import { arriveWith, makeFolderHere, renderFolder } from "./view";
-import { Files, Folder, FolderOpen, Library } from "lucide";
+import { Files, Folder, FolderOpen, FolderSync, Library } from "lucide";
 
 export { SPACES, spaceFor, type Space } from "./spaces";
 export { folderOf } from "./model";
@@ -70,7 +70,8 @@ export function spaceTree(sp: Space): TreeNode[] {
       return {
         id: `folder:${sp.kind}:${f}`,
         label: e.name,
-        icon: at === f ? FolderOpen : Folder,
+        // A folder shared with colleagues (Syncthing's) shows it.
+        icon: sharedFolderOf(sp.kind, f) === f ? FolderSync : at === f ? FolderOpen : Folder,
         current: at === f,
         children: entries(f),
         onActivate: () => goFolder(sp, f),
