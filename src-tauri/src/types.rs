@@ -354,6 +354,50 @@ pub struct SharingStatus {
     pub error: Option<String>,
 }
 
+/// A shared board as its document holds it: the link colleagues are sent, its elements (each the
+/// version Excalidraw's rule picks) and its text boxes' Markdown by element ID.
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct SharedBoard {
+    pub link: String,
+    #[ts(type = "unknown[]")]
+    pub elements: Vec<serde_json::Value>,
+    pub boxes: std::collections::HashMap<String, String>,
+    /// The document's heads: what the page's next push is based on.
+    pub heads: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SharingWatchParams {
+    pub id: Id,
+    /// The board's page opened (`true`) or closed.
+    pub open: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SharingOpenParams {
+    /// The link a colleague sent (`librarium://board/…`).
+    pub link: String,
+    pub folder: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SharingPushParams {
+    pub id: Id,
+    /// The board's elements, after the page's own merge.
+    #[ts(type = "unknown[]")]
+    pub elements: Vec<serde_json::Value>,
+    /// The document's heads the page last saw (its changes are since then).
+    pub heads: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SharingPresenceParams {
+    pub id: Id,
+    /// Where the pointer is, and what is selected.
+    #[ts(type = "Record<string, unknown>")]
+    pub data: serde_json::Map<String, serde_json::Value>,
+}
+
 #[derive(Clone, Debug, Deserialize, TS)]
 pub struct SharingServerParams {
     /// The address, or `null` to stop sharing.
@@ -1098,6 +1142,11 @@ pub fn typescript() -> String {
         DataStatus,
         SharingStatus,
         SharingServerParams,
+        SharedBoard,
+        SharingWatchParams,
+        SharingOpenParams,
+        SharingPushParams,
+        SharingPresenceParams,
         EtymWordParams,
         EtymKeyParams,
         EtymTerm,

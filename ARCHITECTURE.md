@@ -30,7 +30,8 @@ src-tauri/src/            the backend: one crate, one module per concern
   reader.rs               files for the reader: the `bytes` command and the asset: protocol
   jobs.rs                 background work that resumes after a restart
   settings.rs             settings.json and drafts in app data
-  sharing.rs              the connection to the sync server (samod), and its status
+  sharing/                the connection to the sync server (samod), its status, and shared
+                          boards (their Automerge documents, merges, pointers)
   dataset.rs              a database downloaded once when asked: its download, check and opening
   etymology.rs            word origins: lookups in their database (read-only)
   bible.rs                the Bible: chapters, word studies, grammar and search (read-only)
@@ -47,6 +48,7 @@ src/                      the interface
   notes/                  the note page, embeds, history; editor/ is CodeMirror
   reader/                 the item page: pdf/, image/, epub/, and what captures draw with
   captures/  boards/  library/  websave/  search/  archive/  updates/
+                          (boards/live.ts: a shared board's changes in and out, and pointers)
   etymology/              the Word origins view and Look up word origin
   bible/                  the Bible page and the Word study view
 

@@ -3,6 +3,10 @@
 .page-scroll:has(> .board-page:not([hidden])) { overflow: hidden; }
 .board-head { padding: 10px 20px 6px; border-bottom: 1px solid var(--border); }
 .board-head .title-input { margin: 0; }
+.board-title-row { display: flex; align-items: center; gap: 8px; }
+.board-title-row .title-input { flex: 1; min-width: 0; }
+.board-share { display: flex; align-items: center; gap: 6px; flex: none; }
+.board-share:empty { display: none; }
 .board-head .notices:empty { display: none; }
 .board-head .notice { margin: 6px 0 0; }
 .board-host { flex: 1; min-height: 0; position: relative; }

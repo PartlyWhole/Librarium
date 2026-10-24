@@ -7,6 +7,10 @@ import { errorText, h, replace } from "../ui/dom";
 import { effect, signal } from "../ui/signal";
 import type { SharingStatus } from "../types";
 import { router } from "./router";
+import { pref } from "./prefs";
+
+/** The name colleagues see beside this person's pointer on a shared board. */
+const myName = pref("sharing.name", "");
 
 export const sharing = signal<SharingStatus | null>(null);
 void call<SharingStatus>("sharing.status").then((s) => sharing.set(s), () => {});
@@ -52,9 +56,13 @@ export function renderSharingSettings(host: HTMLElement): () => void {
         h("button", { class: "button primary", type: "button", onclick: () => void set(input.value) }, active ? "Connect to this address" : "Connect"),
         active ? h("button", { class: "button", type: "button", onclick: () => void set(null) }, "Stop sharing") : null));
   });
+  const name = h("input", { type: "text", id: "sharing-name", placeholder: "How colleagues see you", value: myName.peek(), autocomplete: "name" }) as HTMLInputElement;
+  name.addEventListener("change", () => myName.set(name.value.trim()));
   replace(host,
     h("p", { class: "muted small" }, "Share boards with colleagues through a sync server you run, reachable only on your private network. While this is empty, Librarium connects nowhere."),
     h("div", { class: "field" }, h("label", { for: "sync-server" }, "Sync server"), input),
-    problem, state);
+    problem, state,
+    h("div", { class: "field" }, h("label", { for: "sharing-name" }, "Your name"), name),
+    h("p", { class: "muted small" }, "Shown to colleagues beside your pointer on a shared board."));
   return stop;
 }

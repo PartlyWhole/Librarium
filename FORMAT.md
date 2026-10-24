@@ -162,6 +162,8 @@ daily.date: "2026-10-02"
 - **The `.md` file.**
   - Frontmatter: `kind: "board"` and `boards.scene-sha256` (the SHA-256 of the `.excalidraw`
     bytes the page was written from), plus `notes.folder` and `archive.at`.
+  - A shared board also has `sharing.doc`: its shared document's address,
+    `automerge:<document id>`. Removing it (Stop sharing) leaves an ordinary board.
   - The body is generated and never read back. Its first line is:
     ```
     <!-- Librarium writes this page from the board's drawing (<id>.excalidraw); edits here are replaced when the board is saved. -->
@@ -475,6 +477,7 @@ App data is per device and never synced.
   `{book, chapter}`
 - `daily.dayStart`: 0–12, default 4
 - `sync.server`: the sync server's address as typed (absent: no sharing)
+- `sharing.name`: the name colleagues see beside this person's pointer on a shared board
 - `reader.epub`: `{fontSize, font, matchApp, theme, layout, spacing, width, justify}`
 - `reader.place.<item id>`: a Readium locator
 
@@ -490,6 +493,12 @@ in the builder.
 - `device.json`: `{"device": "<uuid>"}`. This is the history log's name, so keep it.
 - `drafts/<id>.json`: `{"id", "base_version", "base_body", "body", "updated_ms"}`. Unsaved text,
   read at startup.
+- `sharing/`: the shared boards' Automerge documents as this device keeps them, in
+  automerge-repo's file layout (`@automerge/automerge-repo-storage-nodefs`). The board files in
+  the library are what matters; a document lost here is fetched again from the sync server.
+  - A shared board's document has `librarium: "board 1"`, `title` and `background` (the
+    sharer's), `elements` (each element's Excalidraw JSON, as a string under its ID, without a
+    text box's Markdown) and `boxes` (each text box's Markdown as Automerge text, under its ID).
 - Anything else here (indexes, job queue, change-replay state) may be replaced.
 
 Logs are written to `~/Library/Logs/local.librarium.desktop/`.

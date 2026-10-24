@@ -92,9 +92,17 @@ impl App {
     }
 
     fn set_state(&self, state: State) {
+        let opened = match &state {
+            State::Open(lib) => Some(lib.clone()),
+            _ => None,
+        };
         let old = std::mem::replace(&mut *self.state.write().unwrap(), state);
         if let State::Open(lib) = old {
+            self.sharing.close_library();
             lib.close();
+        }
+        if let Some(lib) = opened {
+            self.sharing.open_library(lib);
         }
         (self.emit)("library.status", serde_json::to_value(self.status()).unwrap_or_default());
     }

@@ -28,6 +28,9 @@ import type { BoardLoaded, BoardSaved, Draft, ImportResult, RecordInfo, Written 
 import type { BoardEngine, BoardInsert, TextBoxHost, TextBoxView } from "./engine";
 import { createEditor, replaceDoc, textHistory } from "../notes/editor/editor";
 import { boardOutline, boardPage } from "./mirror";
+import { liveBoard, type LiveBoard } from "./live";
+import { sharing } from "../app/sharing";
+import { confirm } from "../ui/dialog";
 import { recordOf, wordsAndLinks, type BoardElement, type BoardLink } from "./links";
 import { parseLinks } from "../notes/editor/links";
 import { isNamed } from "../captures/common";
@@ -50,7 +53,7 @@ const PANEL_USUAL = 302;
 const panelWidth = pref("boards.panelWidth", PANEL_USUAL);
 
 /** What the board's commands act on, for each board on screen. */
-const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void> }>();
+const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void>; share(): Promise<void>; unshare(): Promise<void>; shared(): boolean }>();
 
 /** The board in the tab shown, if it is one. */
 export function shownBoard() {
@@ -113,11 +116,14 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
 
   const titleInput = h("input", { class: "title-input", value: info.title, "aria-label": "Title", spellcheck: true, readOnly, placeholder: "Untitled board" });
   const notices = h("div", { class: "notices" });
+  const shareBar = h("div", { class: "board-share" });
   const outline = h("ul", { class: "board-outline", "aria-label": "What is on the board" });
   const canvasHost = h("div", { class: "board-host", role: "region", "aria-label": `Drawing: ${info.title || "Untitled board"}`, [OWN_DROPS]: "" });
-  replace(host, h("div", { class: "board-head" }, titleInput, notices), canvasHost, outline);
+  replace(host, h("div", { class: "board-head" }, h("div", { class: "board-title-row" }, titleInput, shareBar), notices), canvasHost, outline);
   const status = (text: string, persistent = false) => showStatus(text, persistent ? 0 : 4000);
   let engine: BoardEngine | null = null;
+  /** While the board is shared: colleagues' changes in, this page's out. */
+  let live: LiveBoard | null = null;
 
   // ---- What is on it, for VoiceOver ----
   let outlineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -142,6 +148,11 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   const changed = () => {
     tellOutline();
     if (readOnly) return;
+    live?.changed();
+    saveSoon();
+  };
+  /** Saves a second from now (what colleagues drew is saved, not sent back). */
+  const saveSoon = () => {
     dirty = true;
     clearTimeout(draftTimer);
     draftTimer = setTimeout(keepDraft, DRAFT_MS);
@@ -180,13 +191,17 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   };
   /**
    * The board changed elsewhere while it had unsaved changes here: the other version is kept as
-   * a board beside it, and this one is saved over it. Never merged silently.
+   * a board beside it, and this one is saved over it. Never merged silently, except on a shared
+   * board, where merging is what sharing does.
    */
   const keepTheirs = async () => {
     try {
       const fresh = await call<BoardLoaded>("boards.load", { id });
-      // Only the readable page changed (names refreshed): it is rewritten anyway.
-      if (fresh.scene_sha !== base.sha) {
+      // When only the readable page changed (names refreshed), it is rewritten anyway. A shared
+      // board's drawing on disk holds what colleagues drew: merged in (each element the newer).
+      if (fresh.scene_sha !== base.sha && live?.link.peek() && engine) {
+        engine.applyRemote(elementsOf(fresh.scene), {});
+      } else if (fresh.scene_sha !== base.sha) {
         const w = await call<Written>("boards.create", { title: `${info.title} (version from elsewhere)`, folder: folderOf(info) || null });
         const copy = await call<BoardLoaded>("boards.load", { id: w.info.id });
         const saved = await call<BoardSaved>("boards.save", { id: w.info.id, base_version: copy.info.version, base_scene_sha: copy.scene_sha, scene: fresh.scene, page: boardPage(w.info.id, elementsOf(fresh.scene), titleOf) });
@@ -230,7 +245,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     onChange: changed,
     onStep: () => typed(scope, "Drawing"),
     onFiles: (files) => void pasted(files),
-    renderCard,
+    renderCard: (target, cardHost) => renderCard(target, cardHost, () => !!live?.link.peek()),
     imageOf: pictureData,
     onLinkStart: (elementId, at, byKeys) =>
       pickRecord(id, "Link these words to", (to) => engine?.link([elementId], to, { at, typed: byKeys }), () => byKeys && engine?.untype(elementId, at)),
@@ -259,6 +274,22 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   });
   if (!alive()) return ready.destroy();
   engine = ready;
+  if (!readOnly) {
+    const l = liveBoard(id, ready, () => (tellOutline(), saveSoon()));
+    live = l;
+    cleanup.push(() => ((live = null), l.stop()));
+    // Shared: how many colleagues are here, the link again, and Stop sharing.
+    cleanup.push(effect(() => {
+      const link = l.link();
+      const n = l.here();
+      ready.setShared(!!link);
+      replace(shareBar, link
+        ? [h("span", { class: "board-shared muted small", title: "Shared with colleagues through your sync server" }, n ? `Shared · ${n} here` : "Shared"),
+           h("button", { class: "button small", type: "button", onclick: () => void copyLink(link) }, "Copy link"),
+           h("button", { class: "button small", type: "button", onclick: () => void unshare() }, "Stop sharing")]
+        : sharing()?.state && sharing()!.state !== "off" ? h("button", { class: "button small", type: "button", title: "Draw on this board with colleagues", onclick: () => void share() }, "Share…") : null);
+    }));
+  }
   cleanup.push(effect(() => canvasHost.style.setProperty("--board-panel-width", `${panelWidth()}px`)));
   tellOutline();
   const detach = attachEditor(engine.el, scope, { undo: () => ready.undo(), redo: () => ready.redo(), canUndo: () => true, canRedo: () => true, isolate() {} });
@@ -433,7 +464,44 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
       toast(`The board couldn’t be exported: ${errorText(e)}`);
     }
   };
-  shownBoards.set(id, { linkTo, insert: () => pickRecord(id, "Put on the board", (to) => insertRecords([to.id])), exportAs });
+  /** Copies the link colleagues open the board with. */
+  async function copyLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast("Link copied. A colleague opens it with File ▸ Open Shared Board…");
+    } catch {
+      toast(link);
+    }
+  }
+  /** Shares the board (saved first): its link is copied to send to colleagues. */
+  async function share() {
+    if (readOnly || !live) return;
+    if (!sharing.peek() || sharing.peek()!.state === "off") {
+      return void toast("Set up Sharing first: the address of your sync server.", { action: { label: "Open Settings", run: () => router.go("settings") } });
+    }
+    try {
+      await save();
+      const s = await call<{ link: string }>("sharing.shareBoard", { id });
+      await live.refresh();
+      await copyLink(s.link);
+    } catch (e) {
+      toast(errorText(e));
+    }
+  }
+  /** Stops sharing: this copy stays as an ordinary board, and colleagues keep theirs. */
+  async function unshare() {
+    if (!live?.link.peek()) return;
+    const ok = await confirm("Stop sharing this board?", "Your copy stays here as an ordinary board, and colleagues keep theirs. Nothing is deleted.", "Stop sharing");
+    if (!ok) return;
+    try {
+      await save();
+      await call("sharing.unshareBoard", { id });
+      await live.refresh();
+    } catch (e) {
+      toast(errorText(e));
+    }
+  }
+  shownBoards.set(id, { linkTo, insert: () => pickRecord(id, "Put on the board", (to) => insertRecords([to.id])), exportAs, share, unshare, shared: () => !!live?.link.peek() });
   cleanup.push(() => shownBoards.delete(id));
 
   // ---- Changes made elsewhere ----
