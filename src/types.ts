@@ -564,6 +564,32 @@ export type SharedBoard = { link: string, elements: unknown[], boxes: { [key in 
  */
 heads: Array<string>, };
 
+/**
+ * How the shared folder (Library ▸ Shared, kept by Syncthing) is doing.
+ */
+export type SharedFolderStatus = { 
+/**
+ * `off` (no join code), `starting`, `waiting` (the server can't be reached), `syncing`,
+ * `ready` or `error`.
+ */
+state: string, detail: string | null, 
+/**
+ * Files still to fetch or remove.
+ */
+need: number, };
+
+export type SharingJoinParams = { 
+/**
+ * The join code (`librarium-join:…`).
+ */
+code: string, };
+
+export type SharingSetupParams = { 
+/**
+ * The server as you'd SSH to it: its address, or user@address (root by default).
+ */
+target: string, };
+
 export type SharingWatchParams = { id: string, 
 /**
  * The board's page opened (`true`) or closed.

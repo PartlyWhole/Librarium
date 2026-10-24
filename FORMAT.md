@@ -478,6 +478,8 @@ App data is per device and never synced.
 - `daily.dayStart`: 0–12, default 4
 - `sync.server`: the sync server's address as typed (absent: no sharing)
 - `sharing.name`: the name colleagues see beside this person's pointer on a shared board
+- `sharing.join`: `{server, device, address}`, what the join code said: the sync server's
+  address, and its Syncthing's device ID and address (absent: the shared folder isn't kept)
 - `reader.epub`: `{fontSize, font, matchApp, theme, layout, spacing, width, justify}`
 - `reader.place.<item id>`: a Readium locator
 
@@ -488,6 +490,10 @@ written. `etymology.db.gz.part` and `etymology.db.part` are a download in progre
 **`bible.db`:** the Bible, as built by `tools/bible/build.py` (schema version 1), downloaded when
 asked and checked against its SHA-256; opened read-only, never written. Its tables are described
 in the builder.
+
+**`syncthing/`:** the home of Librarium's own Syncthing (its keys, settings and database), made
+the first time a join code is given; Syncthing's own format. `librarium.pid` names the one
+running.
 
 **`libraries/<library id>/`:**
 - `device.json`: `{"device": "<uuid>"}`. This is the history log's name, so keep it.

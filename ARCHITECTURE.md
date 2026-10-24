@@ -30,8 +30,10 @@ src-tauri/src/            the backend: one crate, one module per concern
   reader.rs               files for the reader: the `bytes` command and the asset: protocol
   jobs.rs                 background work that resumes after a restart
   settings.rs             settings.json and drafts in app data
-  sharing/                the connection to the sync server (samod), its status, and shared
-                          boards (their Automerge documents, merges, pointers)
+  sharing/                the connection to the sync server (samod), its status, shared boards
+                          (their Automerge documents, merges, pointers), and the shared folder
+                          (folder.rs: runs and sets up the bundled Syncthing through its API),
+                          and setting up the user's server over SSH (server.rs)
   dataset.rs              a database downloaded once when asked: its download, check and opening
   etymology.rs            word origins: lookups in their database (read-only)
   bible.rs                the Bible: chapters, word studies, grammar and search (read-only)
@@ -52,6 +54,10 @@ src/                      the interface
   etymology/              the Word origins view and Look up word origin
   bible/                  the Bible page and the Word study view
 
+scripts/syncthing.mjs     fetches the pinned Syncthing (checked by SHA-256) into
+                          src-tauri/binaries/, which Tauri bundles beside the app
+deploy/sync/              the sync server's setup script (Tailscale, boards' sync server, Syncthing,
+                          the job that lets Macs in) and its README; built into the app
 tools/bible/build.py      builds bible.db (English versions, the Hebrew and Greek word by
                           word, lexicons) from its sources; not part of the app
 ```

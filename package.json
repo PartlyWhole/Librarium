@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit",
     "test": "cd src-tauri && cargo test && cd .. && vitest run --passWithNoTests",
     "assets": "node scripts/assets.mjs",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "syncthing": "node scripts/syncthing.mjs",
+    "postinstall": "node scripts/syncthing.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",

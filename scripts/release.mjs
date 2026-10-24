@@ -52,6 +52,8 @@ writeFileSync(cargo, readFileSync(cargo, "utf8").replace(/(\[package\][^[]*?\nve
 run("npm install --package-lock-only --silent");
 run("cargo update -p librarium --quiet", { cwd: "src-tauri" });
 
+// The Syncthing bundled for the shared folder, pinned (it must be there before anything builds).
+run("node scripts/syncthing.mjs");
 if (!skipTests) run("npm test");
 
 // Built and signed for updates.

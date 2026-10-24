@@ -357,6 +357,29 @@ pub struct SharingStatus {
     pub error: Option<String>,
 }
 
+/// How the shared folder (Library ▸ Shared, kept by Syncthing) is doing.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+pub struct SharedFolderStatus {
+    /// `off` (no join code), `starting`, `waiting` (the server can't be reached), `syncing`,
+    /// `ready` or `error`.
+    pub state: String,
+    pub detail: Option<String>,
+    /// Files still to fetch or remove.
+    pub need: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SharingSetupParams {
+    /// The server as you'd SSH to it: its address, or user@address (root by default).
+    pub target: String,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SharingJoinParams {
+    /// The join code (`librarium-join:…`).
+    pub code: String,
+}
+
 /// A shared board as its document holds it: the link colleagues are sent, its elements (each the
 /// version Excalidraw's rule picks) and its text boxes' Markdown by element ID.
 #[derive(Clone, Debug, Serialize, TS)]
@@ -1146,6 +1169,9 @@ pub fn typescript() -> String {
         SharingStatus,
         SharingServerParams,
         SharedBoard,
+        SharedFolderStatus,
+        SharingJoinParams,
+        SharingSetupParams,
         SharingWatchParams,
         SharingOpenParams,
         SharingPushParams,
