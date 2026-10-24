@@ -84,7 +84,10 @@
 .sharing-dot.offline { border-color: var(--destructive); }
 .sharing-state { margin: 6px 0; }
 .sharing-warning { color: var(--destructive); margin: 6px 0; }
-#sync-server, #sharing-name, #join-code { width: 100%; max-width: 420px; }
+#sync-server, #sharing-name, #join-code, #setup-server { width: 100%; max-width: 420px; }
+.setup-server { margin-top: 14px; }
+.setup-server summary { cursor: pointer; font-size: var(--small); }
+.setup-log { margin-top: 8px; max-height: 220px; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: var(--r1); font-family: ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sharing-sub { font-size: var(--small); margin: 16px 0 4px; }
 .job-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .jobs-head { align-items: baseline; gap: 10px; }

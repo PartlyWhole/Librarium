@@ -34,14 +34,64 @@ function folderLine(s: SharedFolderStatus): string {
   return s.detail && s.state !== "ready" ? s.detail : (FOLDER_STATE[s.state] ?? s.state);
 }
 
+/** A line of the setup's output, its web addresses as links (Tailscale's sign-in, say). */
+function logLine(text: string): HTMLElement {
+  const parts = text.split(/(https?:\/\/\S+)/);
+  return h("div", null, parts.map((p, i) => (i % 2 ? h("a", { href: "#", onclick: (e: Event) => (e.preventDefault(), document.dispatchEvent(new CustomEvent("open-link", { detail: { url: p, text: p } }))) }, p) : p)));
+}
+
+/** Set up your server…: runs the server's setup over SSH with this Mac's key, shows what it
+ * does, and joins with the code it ends with. */
+function renderSetup(join: (code: string) => Promise<void>): HTMLElement {
+  const target = h("input", { type: "text", id: "setup-server", placeholder: "root@203.0.113.7", spellcheck: false, autocomplete: "off" }) as HTMLInputElement;
+  const log = h("div", { class: "setup-log small", hidden: true, role: "log", "aria-live": "polite" });
+  const button = h("button", { class: "button", type: "button" }, "Set up") as HTMLButtonElement;
+  let off: (() => void) | null = null;
+  const run = async () => {
+    const t = target.value.trim();
+    if (!t) return void target.focus();
+    const ok = await confirm(`Set up ${t} as your sync server?`,
+      "Librarium connects with this Mac’s SSH key and, as root, installs and sets up the sync server for boards, Syncthing for the Shared folder, and Tailscale if it isn’t there. It changes only what it sets up, and it is safe to run again. You need Tailscale’s access policy ready (README in deploy/sync).", "Set up");
+    if (!ok) return;
+    replace(log);
+    log.hidden = false;
+    button.disabled = true;
+    off?.();
+    off = on<{ line?: string; done?: boolean; code?: string; error?: string }>("sharing.setup", (m) => {
+      if (m.line) {
+        log.append(logLine(m.line));
+        log.scrollTop = log.scrollHeight;
+      }
+      if (!m.done) return;
+      button.disabled = false;
+      off?.();
+      if (m.error) log.append(h("div", { class: "sharing-warning" }, m.error));
+      else if (m.code) void join(m.code).then(() => log.append(h("div", null, "Done. This Mac has joined; Invite a colleague to send them the code.")));
+    });
+    try {
+      await call("sharing.setupServer", { target: t });
+    } catch (e) {
+      button.disabled = false;
+      log.append(h("div", { class: "sharing-warning" }, errorText(e)));
+    }
+  };
+  button.addEventListener("click", () => void run());
+  return h("details", { class: "setup-server" },
+    h("summary", null, "Set up your server…"),
+    h("p", { class: "muted small" }, "For whoever runs the sync server: Librarium sets it up over SSH and gives you the join code. The server must run Ubuntu, and this Mac must be able to SSH to it as root with its key."),
+    h("div", { class: "field" }, h("label", { for: "setup-server" }, "Server"), target),
+    h("div", { class: "row" }, button),
+    log);
+}
+
 /** Settings ▸ Sharing's Shared folder: Join with a code, or how it's doing, Invite and Leave. */
 function renderFolder(host: HTMLElement): () => void {
   const code = h("input", { type: "text", id: "join-code", placeholder: "librarium-join:…", spellcheck: false, autocomplete: "off" }) as HTMLInputElement;
   const problem = h("p", { class: "small sharing-warning", hidden: true });
-  const join = async () => {
+  const join = async (given?: string) => {
     problem.hidden = true;
     try {
-      sharedFolder.set(await call<SharedFolderStatus>("sharing.join", { code: code.value }));
+      sharedFolder.set(await call<SharedFolderStatus>("sharing.join", { code: given ?? code.value }));
       sharing.set(await call<SharingStatus>("sharing.status"));
       joined.set(true);
       code.value = "";
@@ -69,6 +119,8 @@ function renderFolder(host: HTMLElement): () => void {
       toast(errorText(e));
     }
   };
+  // Kept across redraws: a setup may be running.
+  const setup = renderSetup((c) => join(c));
   return effect(() => {
     const s = sharedFolder();
     replace(host,
@@ -86,7 +138,8 @@ function renderFolder(host: HTMLElement): () => void {
             problem,
             h("div", { class: "row" }, h("button", { class: "button primary", type: "button", onclick: () => void join() }, "Join")),
             h("p", { class: "muted small" }, "The code comes from your sync server’s setup, or from a colleague’s Invite. Joining also sets the sync server above."),
-          ]);
+          ],
+      setup);
   });
 }
 

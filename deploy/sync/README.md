@@ -6,8 +6,9 @@ the Tailscale access policy is the list of who can get in.
 
 ## Before you start
 
-1. **Tailscale.** The server is on your Tailscale network, tagged `tag:librarium-sync` (Machines
-   ▸ … ▸ Edit ACL tags), with MagicDNS and HTTPS certificates on (DNS page).
+1. **Tailscale.** MagicDNS and HTTPS certificates are on (Tailscale's DNS page). The server joins
+   your network tagged `tag:librarium-sync`: the setup does this if it isn't on it yet (you
+   approve it with the link it shows), or tag it yourself (Machines ▸ … ▸ Edit ACL tags).
 2. **The access policy** lets your colleagues reach the server's two ports, and nothing else:
 
    ```json
@@ -23,7 +24,11 @@ the Tailscale access policy is the list of who can get in.
 
 ## Setting it up
 
-From this repository on your Mac:
+In Librarium: **Settings ▸ Sharing ▸ Set up your server…**, give the server's address, and follow
+along. It connects with your Mac's SSH key, puts the server on your Tailscale network if it isn't
+(showing the sign-in link), sets everything up, and joins your Mac.
+
+Or by hand, from this repository on your Mac:
 
 ```sh
 scp -r deploy/sync root@<server>:/root/

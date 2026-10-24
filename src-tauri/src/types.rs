@@ -369,6 +369,12 @@ pub struct SharedFolderStatus {
 }
 
 #[derive(Clone, Debug, Deserialize, TS)]
+pub struct SharingSetupParams {
+    /// The server as you'd SSH to it: its address, or user@address (root by default).
+    pub target: String,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
 pub struct SharingJoinParams {
     /// The join code (`librarium-join:…`).
     pub code: String,
@@ -1165,6 +1171,7 @@ pub fn typescript() -> String {
         SharedBoard,
         SharedFolderStatus,
         SharingJoinParams,
+        SharingSetupParams,
         SharingWatchParams,
         SharingOpenParams,
         SharingPushParams,

@@ -74,6 +74,7 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         "sharing.folderStatus" => ok(app.sharing.folder.status()),
         "sharing.join" => ok(app.join_with(&p::<SharingJoinParams>(params)?.code)?),
         "sharing.leave" => ok(app.leave_folder()?),
+        "sharing.setupServer" => ok(app.sharing.setup.start(&p::<SharingSetupParams>(params)?.target)?),
         "sharing.invite" => ok(app.invite()?),
         "sharing.watchBoard" => {
             let q = p::<SharingWatchParams>(params)?;

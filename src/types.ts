@@ -584,6 +584,12 @@ export type SharingJoinParams = {
  */
 code: string, };
 
+export type SharingSetupParams = { 
+/**
+ * The server as you'd SSH to it: its address, or user@address (root by default).
+ */
+target: string, };
+
 export type SharingWatchParams = { id: string, 
 /**
  * The board's page opened (`true`) or closed.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Librarium's sync server, set up in one go on a Linux server (Ubuntu 24.04) already on your
-# Tailscale network. Safe to run again. Run as root from your Mac:
+# Librarium's sync server, set up in one go on a Linux server (Ubuntu 24.04), put on your Tailscale
+# network first if it isn't. Safe to run again. Librarium runs it for you (Settings ▸ Sharing ▸
+# Set up your server…); by hand, as root from your Mac:
 #
 #   scp -r deploy/sync root@<server>:/root/ && ssh root@<server> 'bash /root/sync/setup.sh'
 #
@@ -24,7 +25,16 @@ say() { printf '\n== %s\n' "$*"; }
 die() { printf '\nStopped: %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" = 0 ] || die "run this as root."
-command -v tailscale >/dev/null || die "Tailscale isn't installed here. Put the server on your Tailscale network first (README.md)."
+# ---- Tailscale: installed and signed in if it isn't yet -------------------------------------
+if ! command -v tailscale >/dev/null; then
+  say "Installing Tailscale"
+  curl -fsSL https://tailscale.com/install.sh | sh >/dev/null
+fi
+if ! tailscale ip -4 >/dev/null 2>&1; then
+  say "Signing the server in to Tailscale"
+  echo "Open the link below and approve the server (as the owner of tag:librarium-sync)."
+  tailscale up --advertise-tags=tag:librarium-sync --hostname=librarium-sync
+fi
 TS_IP="$(tailscale ip -4 2>/dev/null | head -1)"
 [ -n "$TS_IP" ] || die "this server isn't connected to your Tailscale network (tailscale up)."
 TS_NAME="$(tailscale status --json | python3 -c 'import sys, json; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
@@ -84,7 +94,8 @@ systemctl daemon-reload
 systemctl enable librarium-sync >/dev/null 2>&1
 systemctl restart librarium-sync
 # Published on the private network only, over HTTPS (Tailscale's certificate).
-tailscale serve --bg --https=8443 "${SYNC_PORT}" >/dev/null
+tailscale serve --bg --https=8443 "${SYNC_PORT}" >/dev/null \
+  || die "Tailscale couldn't publish the sync server over HTTPS. Turn on MagicDNS and HTTPS Certificates on Tailscale's DNS page, then run this again."
 
 # ---- Syncthing for the Shared folder --------------------------------------------------------
 say "Syncthing (Shared folder)"

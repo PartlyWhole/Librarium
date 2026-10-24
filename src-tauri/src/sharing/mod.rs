@@ -7,6 +7,7 @@
 
 pub mod boards;
 pub mod folder;
+pub mod server;
 
 use crate::error::{Error, Result};
 use crate::store::{Emit, Library};
@@ -41,6 +42,8 @@ pub struct Sharing {
     emit: Emit,
     /// The shared folder's Syncthing.
     pub folder: folder::Folder,
+    /// Setting up the user's server over SSH.
+    pub setup: server::ServerSetup,
     state: Arc<Mutex<SharingStatus>>,
     server: Mutex<Option<String>>,
     open: Mutex<Option<Open>>,
@@ -95,6 +98,7 @@ impl Sharing {
     pub fn new(emit: Emit, app_data: &std::path::Path, logs: &std::path::Path) -> Sharing {
         Sharing {
             folder: folder::Folder::new(app_data, logs, emit.clone()),
+            setup: server::ServerSetup::new(emit.clone()),
             emit,
             state: Arc::new(Mutex::new(SharingStatus { state: "off".into(), server: None, private: false, error: None })),
             server: Mutex::new(None),
