@@ -139,6 +139,9 @@ pub struct FolderSpace {
     pub folders: Vec<String>,
     #[ts(type = "Record<string, string[]>")]
     pub order: BTreeMap<String, Vec<String>>,
+    /// Folders a sync tool shares with other people (Syncthing's `.stfolder` is in them); `""`
+    /// is the top level.
+    pub shared: Vec<String>,
 }
 
 /// The user's folders, for each kind kept in folders.

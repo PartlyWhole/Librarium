@@ -128,11 +128,16 @@ pub fn list(lib: &Library) -> Result<FoldersList> {
     let mut orders = all_orders(lib);
     let mut spaces = vec![];
     for k in KINDS.iter().filter(|k| k.folder_field.is_some() && space_kinds(k)[0] == *k) {
+        let folders = folders_of(lib, k)?;
+        // Syncthing marks each folder it shares with a `.stfolder` folder of its own.
+        let top = lib.root.join(k.folder);
+        let shared = std::iter::once(String::new()).chain(folders.iter().cloned()).filter(|f| top.join(f).join(".stfolder").exists()).collect();
         spaces.push(FolderSpace {
             kind: k.name.into(),
             kinds: space_kinds(k).iter().map(|k| k.name.to_string()).collect(),
-            folders: folders_of(lib, k)?,
+            folders,
             order: orders.remove(k.folder).unwrap_or_default(),
+            shared,
         });
     }
     Ok(FoldersList { spaces })

@@ -10,6 +10,8 @@ import { pages } from "../app/pages";
 import { ARCHIVED, getRecord, isArchived, openRecord, putRecord, records } from "../app/records";
 import { recordActionsFor, addRecordAction, showRecordMenu } from "../app/recordmenu";
 import { router } from "../app/router";
+import { folderOf } from "../app/folders/model";
+import { sharedFolderOf, spaceFor } from "../app/folders/spaces";
 import { showStatus } from "../app/status";
 import { done } from "../app/undo";
 import { ask } from "../ui/dialog";
@@ -74,9 +76,16 @@ async function deletePermanently(ids: string[]): Promise<void> {
     return toast(errorText(e));
   }
   const n = p.records.length;
+  // In a folder shared with colleagues, it goes from their libraries too.
+  const shared = p.records.some((x) => {
+    const r = getRecord(x.id);
+    const sp = r && spaceFor(r.kind);
+    return !!sp && sharedFolderOf(sp.kind, folderOf(r)) !== null;
+  });
   const ok = await ask(n === 1 ? `Delete “${p.records[0]!.title || "Untitled"}” permanently?` : `Delete ${n} records permanently?`,
     h("div", null,
       h("p", null, `This removes ${count(p.files, "file")} from the library folder. It can’t be undone.`),
+      shared ? h("p", null, `${n === 1 ? "It is" : "Some are"} in a folder shared with colleagues, so ${n === 1 ? "it goes" : "they go"} from their libraries too. Syncthing keeps removed files for 30 days on each Mac.`) : null,
       n > 1 ? h("ul", { class: "delete-list" }, p.records.map((r) => h("li", null, r.title || "Untitled"))) : null),
     [{ label: "Cancel", value: false }, { label: "Delete permanently", value: true, destructive: true }]);
   if (!ok) return;

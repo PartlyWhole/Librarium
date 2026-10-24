@@ -817,14 +817,27 @@ library; it works offline and catches up when the connection is back.
     (undoing one would put back the whole earlier text over colleagues' words); while writing
     in a box, ⌘Z undoes what you typed there.
   - Titles and folders stay each person's own.
-  - A card or picture of an item someone else has, but you don't, says "Not in your library: a
-    colleague put it here."
+  - A card of an item someone else has, but you don't, says "Not in your library yet: a
+    colleague put it here. It arrives once it's in your shared folder."
 - **While a board isn't open,** what colleagues draw is written to its drawing, and its
   readable page is brought up to date when it next opens. When a shared board's drawing changed
   on disk while it had unsaved changes, the two are merged (each element the newer) rather than
   kept apart.
 - **Stop sharing** (header or File ▸ Stop Sharing This Board…, after asking) leaves this copy an
   ordinary board. Colleagues keep theirs; nothing is deleted.
+- **Library items** reach colleagues through a folder Syncthing keeps the same on everyone's Mac
+  (Library ▸ Shared, set up in Syncthing, not in Librarium). An item there arrives in their
+  libraries with the same ID, so cards and links to it work for everyone.
+  - Librarium recognises such a folder by Syncthing's marker (`.stfolder`) and shows it with a
+    shared-folder icon, in the sidebar and in Move to….
+  - Moving anything out of it (Move to… or dragging) asks first: "Move “…” out of “Shared”?
+    “Shared” is shared with colleagues, so it leaves their libraries too. Syncthing keeps
+    removed files for 30 days on each Mac." Deleting permanently says the same. Archiving is
+    shared too (the item stays where it is, archived for everyone) and can be undone.
+  - On a shared board, putting on an item that isn't in a shared folder offers to move it there
+    ("Colleagues get “…” once it's in “Shared”." **Move to “Shared”**), as a step to undo.
+  - Items arrive file by file: a folder whose `record.json` hasn't come yet is neither shown nor
+    touched, and the item appears when it does.
 - The server is the stock Automerge sync server (`@automerge/automerge-repo-sync-server`).
   Whoever runs it can read what passes through it; the private network is what keeps everyone
   else out. Pointers pass through it and are never stored.

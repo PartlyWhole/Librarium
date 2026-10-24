@@ -35,12 +35,13 @@ export function renderCard(id: string, host: HTMLElement, shared: () => boolean 
   let shown: string | null = null;
   return effect(() => {
     const r = getRecord(id);
-    const v = r ? `${r.version}${r.title}${isArchived(r)}` : "";
+    // On a shared board a missing one may be a colleague's, not (yet) in this library.
+    const theirs = !r && shared();
+    const v = r ? `${r.version}${r.title}${isArchived(r)}` : `missing ${theirs}`;
     if (v === shown) return;
     shown = v;
     untracked(() => {
-      // On a shared board it may be a colleague's, not (yet) in this library.
-      if (!r) return replace(host, h("div", { class: "board-card missing" }, shared() ? "Not in your library: a colleague put it here." : "This was deleted or can’t be found."));
+      if (!r) return replace(host, h("div", { class: "board-card missing" }, theirs ? "Not in your library yet: a colleague put it here. It arrives once it’s in your shared folder." : "This was deleted or can’t be found."));
       replace(host, h("div", { class: `board-card kind-${r.kind}`, role: "group", "aria-label": `${kindName(r)}: ${r.title || "Untitled"}` },
         r.kind === "capture" ? captureCard(r) : recordCard(r),
         isArchived(r) ? h("p", { class: "muted small" }, "In the archive.") : null));
