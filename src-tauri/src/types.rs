@@ -342,6 +342,24 @@ pub struct Resolved {
 
 // ---- parameters ------------------------------------------------------------------------------
 
+/// The connection to the sync server (Settings ▸ Sharing).
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct SharingStatus {
+    /// `off` (no address set), `connecting`, `connected` or `offline`.
+    pub state: String,
+    /// The address as set.
+    pub server: Option<String>,
+    /// Whether the address is on a private network (a Tailscale name, say).
+    pub private: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SharingServerParams {
+    /// The address, or `null` to stop sharing.
+    pub server: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, TS)]
 pub struct PathParams {
     pub path: String,
@@ -1078,6 +1096,8 @@ pub fn typescript() -> String {
         BoardSaveParams,
         BoardSaved,
         DataStatus,
+        SharingStatus,
+        SharingServerParams,
         EtymWordParams,
         EtymKeyParams,
         EtymTerm,

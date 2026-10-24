@@ -526,6 +526,29 @@ state: string, received: number,
  */
 download_bytes: number, disk_bytes: number, error: string | null, };
 
+/**
+ * The connection to the sync server (Settings ▸ Sharing).
+ */
+export type SharingStatus = { 
+/**
+ * `off` (no address set), `connecting`, `connected` or `offline`.
+ */
+state: string, 
+/**
+ * The address as set.
+ */
+server: string | null, 
+/**
+ * Whether the address is on a private network (a Tailscale name, say).
+ */
+private: boolean, error: string | null, };
+
+export type SharingServerParams = { 
+/**
+ * The address, or `null` to stop sharing.
+ */
+server: string | null, };
+
 export type EtymWordParams = { word: string, };
 
 export type EtymKeyParams = { 

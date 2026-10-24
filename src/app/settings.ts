@@ -9,6 +9,7 @@ import { toast } from "../ui/toast";
 import { library, chooseFolder, isOpen } from "./library";
 import { rebuildIndex } from "./jobs";
 import { pref } from "./prefs";
+import { renderSharingSettings } from "./sharing";
 
 export const theme = pref<"system" | "light" | "dark">("ui.theme", "system");
 const textSize = pref("ui.textSize", 16);
@@ -51,6 +52,7 @@ function sections(): [string, Render][] {
       const select = h("select", { id: "day-start", onchange: () => dayStart.set(Number(select.value)) }, [0, 1, 2, 3, 4, 5, 6].map((hr) => h("option", { value: String(hr), selected: hr === dayStart.peek() }, hr === 0 ? "Midnight" : `${hr} a.m.`)));
       replace(host, h("div", { class: "field" }, h("label", { for: "day-start" }, "The day starts at "), select), h("p", { class: "muted small" }, "Writing after midnight but before this hour lands on the day before."));
     }],
+    ["Sharing", renderSharingSettings],
     ["Index", (host) => replace(host, h("p", { class: "muted small" }, "The index is rebuilt from your files whenever it is missing. Rebuilding never changes your files."), row(["Rebuild index", () => void rebuildIndex()]))],
     ...[later.captures, later.version].filter((s) => !!s).map((s): [string, Render] => [s.title, s.render]),
     ["Troubleshooting", (host) => replace(host, row(["Reveal logs", revealLogs]))],

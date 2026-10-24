@@ -474,6 +474,7 @@ App data is per device and never synced.
 - `bible.versions` (version ids shown, in order), `bible.interlinear`, `bible.place`:
   `{book, chapter}`
 - `daily.dayStart`: 0–12, default 4
+- `sync.server`: the sync server's address as typed (absent: no sharing)
 - `reader.epub`: `{fontSize, font, matchApp, theme, layout, spacing, width, justify}`
 - `reader.place.<item id>`: a Readium locator
 

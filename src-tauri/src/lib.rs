@@ -20,6 +20,7 @@ pub mod links;
 pub mod notes;
 pub mod reader;
 pub mod settings;
+pub mod sharing;
 pub mod store;
 pub mod types;
 pub mod util;
