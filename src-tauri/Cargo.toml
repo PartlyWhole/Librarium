@@ -1,6 +1,6 @@
 [package]
 name = "librarium"
-version = "0.2.17"
+version = "0.2.18"
 description = "Librarium: a notebook and library for slow, careful reading and writing."
 edition = "2021"
 license = "MIT"
