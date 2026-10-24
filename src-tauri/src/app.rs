@@ -7,7 +7,7 @@ use crate::etymology::Etymology;
 use crate::settings::{Settings, LIBRARY_PATH};
 use crate::sharing::{self, Sharing};
 use crate::store::{Emit, Library};
-use crate::types::{FolderInfo, LibraryState, LibraryStatus, SharingStatus};
+use crate::types::{FolderInfo, LibraryState, LibraryStatus, SharedFolderStatus, SharingStatus};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -45,7 +45,7 @@ pub fn in_icloud(path: &Path) -> bool {
 impl App {
     pub fn new(app_data: PathBuf, logs: PathBuf, emit: Emit) -> App {
         let settings = Settings::load(&app_data);
-        let sharing = Sharing::new(emit.clone());
+        let sharing = Sharing::new(emit.clone(), &app_data, &logs);
         sharing.connect(settings.get(sharing::SERVER).as_ref().and_then(|v| v.as_str()));
         App {
             settings,
@@ -102,7 +102,7 @@ impl App {
             lib.close();
         }
         if let Some(lib) = opened {
-            self.sharing.open_library(lib);
+            self.sharing.open_library(lib, self.join(), self.my_name());
         }
         (self.emit)("library.status", serde_json::to_value(self.status()).unwrap_or_default());
     }
@@ -156,11 +156,48 @@ impl App {
         if values.contains_key(LIBRARY_PATH) {
             return Err(Error::invalid("The library folder is changed by opening another."));
         }
-        if values.contains_key(sharing::SERVER) {
+        if values.contains_key(sharing::SERVER) || values.contains_key(sharing::folder::JOIN) {
             return Err(Error::invalid("The sync server is set with sharing.setServer, which checks it."));
         }
         self.settings.set(values)?;
         Ok(self.settings.all())
+    }
+
+    /// The name colleagues see (Settings ▸ Sharing).
+    pub fn my_name(&self) -> Option<String> {
+        self.settings.get(sharing::NAME).and_then(|v| v.as_str().map(str::to_string))
+    }
+
+    /// The join code's contents, if one was given.
+    fn join(&self) -> Option<sharing::folder::Join> {
+        self.settings.get(sharing::folder::JOIN).and_then(|v| serde_json::from_value(v).ok())
+    }
+
+    /// Joins with a code: its sync server becomes the one connected to, and the shared folder is
+    /// kept with its Syncthing (in the open library).
+    pub fn join_with(&self, code: &str) -> Result<SharedFolderStatus> {
+        let j = sharing::folder::parse_code(code)?;
+        self.set_sync_server(Some(j.server.clone()))?;
+        let mut v = Map::new();
+        v.insert(sharing::folder::JOIN.into(), serde_json::to_value(&j).unwrap_or_default());
+        self.settings.set(v)?;
+        let lib = self.library()?;
+        self.sharing.folder.start(&lib, &j, self.my_name());
+        Ok(self.sharing.folder.status())
+    }
+
+    /// Stops keeping the shared folder here (its files stay, as an ordinary folder).
+    pub fn leave_folder(&self) -> Result<SharedFolderStatus> {
+        self.sharing.folder.stop();
+        let mut v = Map::new();
+        v.insert(sharing::folder::JOIN.into(), Value::Null);
+        self.settings.set(v)?;
+        Ok(self.sharing.folder.status())
+    }
+
+    /// The join code to send a colleague.
+    pub fn invite(&self) -> Result<String> {
+        self.join().map(|j| sharing::folder::code_of(&j)).ok_or_else(|| Error::invalid("Join with a code first: the code from your sync server’s setup."))
     }
 
     /// Sets the sync server's address (`None`: none) after checking it, and connects to it.

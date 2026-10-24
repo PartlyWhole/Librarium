@@ -4,6 +4,7 @@ public/pdfjs
 public/excalidraw
 src-tauri/target
 src-tauri/gen
+src-tauri/binaries
 .secrets/
 release-*.log
 .DS_Store

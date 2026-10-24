@@ -825,9 +825,20 @@ library; it works offline and catches up when the connection is back.
   kept apart.
 - **Stop sharing** (header or File ▸ Stop Sharing This Board…, after asking) leaves this copy an
   ordinary board. Colleagues keep theirs; nothing is deleted.
-- **Library items** reach colleagues through a folder Syncthing keeps the same on everyone's Mac
-  (Library ▸ Shared, set up in Syncthing, not in Librarium). An item there arrives in their
-  libraries with the same ID, so cards and links to it work for everyone.
+- **Joining.** The server's setup script (`deploy/sync/`) prints a join code
+  (`librarium-join:…`). Settings ▸ Sharing ▸ **Join** takes it: the code's sync server becomes the
+  one connected to, and the shared folder starts. Once joined, Settings shows the folder's state
+  ("Up to date", "Fetching 3 files…", "Waiting for the sync server", or what went wrong), **Invite
+  a colleague** (copies the code, to send) and **Stop sharing the folder** (after asking; the
+  folder and everything in it stay, as an ordinary folder).
+- **Library items** reach colleagues through Library ▸ Shared, which Syncthing keeps the same on
+  everyone's Mac through the server. Librarium runs its own Syncthing (built in) while a library
+  is open and a join code is set, made so it talks to nobody but the server: no discovery,
+  relays, NAT traversal, usage reports or self-upgrades, listening on this Mac only. It goes by
+  the name in Settings, keeps removed files for 30 days in the folder's `.stversions`, and is
+  stopped when the library closes. An item put in Shared arrives in colleagues' libraries with
+  the same ID, usually within seconds, so cards and links to it work for everyone. Changing
+  library starts the folder afresh in the new one (nothing is taken for deleted).
   - Librarium recognises such a folder by Syncthing's marker (`.stfolder`) and shows it with a
     shared-folder icon, in the sidebar and in Move to….
   - Moving anything out of it (Move to… or dragging) asks first: "Move “…” out of “Shared”?

@@ -6,6 +6,7 @@
 //! server can't be reached, and its state goes out as `sharing.status` events.
 
 pub mod boards;
+pub mod folder;
 
 use crate::error::{Error, Result};
 use crate::store::{Emit, Library};
@@ -23,9 +24,10 @@ pub const SERVER: &str = "sync.server";
 /// The settings key holding the name colleagues see.
 pub const NAME: &str = "sharing.name";
 
-/// Runs a future to its end from ordinary (non-async) code.
+/// Runs a future to its end from ordinary code, on any thread: a blocking one, or one driving
+/// async work (quitting is answered on one), which `block_in_place` hands over first.
 pub(crate) fn block_on<F: std::future::Future>(f: F) -> F::Output {
-    tauri::async_runtime::handle().block_on(f)
+    tokio::task::block_in_place(|| tauri::async_runtime::handle().block_on(f))
 }
 
 /// The open library's repo, its shared boards, and the dialer while a server is set.
@@ -37,6 +39,8 @@ struct Open {
 
 pub struct Sharing {
     emit: Emit,
+    /// The shared folder's Syncthing.
+    pub folder: folder::Folder,
     state: Arc<Mutex<SharingStatus>>,
     server: Mutex<Option<String>>,
     open: Mutex<Option<Open>>,
@@ -88,8 +92,9 @@ pub fn is_private(url: &Url) -> bool {
 }
 
 impl Sharing {
-    pub fn new(emit: Emit) -> Sharing {
+    pub fn new(emit: Emit, app_data: &std::path::Path, logs: &std::path::Path) -> Sharing {
         Sharing {
+            folder: folder::Folder::new(app_data, logs, emit.clone()),
             emit,
             state: Arc::new(Mutex::new(SharingStatus { state: "off".into(), server: None, private: false, error: None })),
             server: Mutex::new(None),
@@ -107,21 +112,25 @@ impl Sharing {
         self.open.lock().unwrap().as_ref().map(|o| o.boards.clone()).ok_or_else(|| Error::invalid("No library is open."))
     }
 
-    /// Starts sharing for a library that has just opened: its repo, its shared boards, and the
-    /// connection if a server is set.
-    pub fn open_library(&self, lib: Arc<Library>) {
+    /// Starts sharing for a library that has just opened: its repo, its shared boards, the
+    /// connection if a server is set, and the shared folder if a join code is.
+    pub fn open_library(&self, lib: Arc<Library>, join: Option<folder::Join>, name: Option<String>) {
         self.close_library();
         let dir = lib.app_dir.join("sharing");
         let repo = block_on(async move { Repo::build_tokio().with_storage(TokioFilesystemStorage::new(dir)).load().await });
-        let boards = boards::Boards::new(lib, repo.clone(), self.emit.clone());
+        let boards = boards::Boards::new(lib.clone(), repo.clone(), self.emit.clone());
         *self.open.lock().unwrap() = Some(Open { repo, boards: boards.clone(), dialer: None });
         let server = self.server.lock().unwrap().clone();
         self.connect(server.as_deref());
         boards.follow_all();
+        if let Some(j) = join {
+            self.folder.start(&lib, &j, name);
+        }
     }
 
     /// Stops sharing for the library that is closing.
     pub fn close_library(&self) {
+        self.folder.stop();
         if let Some(o) = self.open.lock().unwrap().take() {
             if let Some(d) = o.dialer {
                 d.close();
@@ -189,6 +198,14 @@ fn setter(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn block_on_from_any_thread() {
+        // A thread driving async work (Quit is answered on one), and a plain thread (start-up).
+        let on_worker = tauri::async_runtime::block_on(async { tauri::async_runtime::spawn(async { block_on(async { 1 }) }).await.unwrap() });
+        let on_thread = std::thread::spawn(|| block_on(async { 2 })).join().unwrap();
+        assert_eq!((on_worker, on_thread), (1, 2));
+    }
 
     #[test]
     fn addresses() {

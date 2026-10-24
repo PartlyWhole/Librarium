@@ -51,6 +51,12 @@
     "macOS": {
       "minimumSystemVersion": "15.0",
       "signingIdentity": "-"
+    },
+    "externalBin": [
+      "binaries/syncthing"
+    ],
+    "resources": {
+      "binaries/syncthing-LICENSE.txt": "syncthing-LICENSE.txt"
     }
   },
   "plugins": {
