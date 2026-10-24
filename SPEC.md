@@ -97,7 +97,9 @@ One window. Only regions scroll, never the window.
   - About this item (items)
   - Jobs
 - **Status bar.**
-  - Left: messages, then running jobs (a button that opens Jobs; marked when something failed).
+  - Left: messages, then running jobs (a button that opens Jobs; marked when something failed),
+    then, while a sync server is set, "Sharing: Connected" (or Connecting… / Offline), which opens
+    Settings.
   - Right: the note's word and character counts (and the selection's), then
     "Checking…" / "N records".
 - Every icon button has a spoken label and a tooltip with its shortcut.
@@ -771,12 +773,34 @@ Boards use Excalidraw. React is used only here.
 - **Appearance:** Theme (Follow the system / Light / Dark); Text size (14 / 16 / 18).
 - **Library folder:** the path, Choose another folder…, Show in Finder.
 - **Daily notes:** the hour the day starts.
+- **Sharing:** the sync server's address (see Sharing).
 - **Index:** Rebuild index.
 - **Captures:** orphan files.
 - **Version:** "Librarium x.y.z" and Check for Updates….
 - **Troubleshooting:** Reveal logs.
 
 Preferences are per device, in app data (`settings.json`), never in WebKit storage.
+
+## Sharing
+
+Boards are to be shared with colleagues through a sync server the user runs, reachable only on
+their private network (Tailscale). For now Librarium connects to the server and shows the
+connection; nothing is shared over it yet.
+
+- **The address** is set in Settings ▸ Sharing (Return or Connect), for example
+  `https://name.your-tailnet.ts.net:8443`. It is empty by default, and while it is empty
+  Librarium makes no connection at all. Stop sharing empties it.
+  - `https://` and `wss://` addresses are used as is; a bare name gets `wss://`. An unencrypted
+    one (`http://`, `ws://`) is refused unless it is on a private network.
+  - An address that isn't on a private network (a `.ts.net` name, a Tailscale `100.64–127.x`
+    address, a local network address or this Mac) is used, with a warning: "This server is on
+    the public internet. Anyone who finds it can read and change what's shared on it."
+- **The connection** starts when the address is set and at launch, and is retried for as long
+  as the server can't be reached (at most 30 seconds apart). Settings shows "Connected to
+  <address>", "Connecting…", or why it is offline ("Can't reach the server. Trying again…").
+- The server is the stock Automerge sync server (`@automerge/automerge-repo-sync-server`).
+  Whoever runs it can read what passes through it; the private network is what keeps everyone
+  else out.
 
 ## Updates and releases
 

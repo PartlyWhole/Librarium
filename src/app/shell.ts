@@ -20,6 +20,7 @@ import { getRecord, loadRecords, records } from "./records";
 import { placeOf, router, sameRoute, type Route, type SavedTabs } from "./router";
 import { renderSettings } from "./settings";
 import { context, message } from "./status";
+import { sharingStatus } from "./sharing";
 import { sidebar } from "./sidebar";
 import { recent, renderNewTab, tabBar } from "./tabs";
 import { ChevronLeft, ChevronRight, Command, PanelLeft, PanelRight, Settings } from "lucide";
@@ -81,7 +82,7 @@ export function startApp(root: HTMLElement): void {
   scrollLongText(panel);
   const statusLeft = h("div", { class: "status-left", role: "status", "aria-live": "polite" });
   const statusRight = h("div", { class: "status-right" });
-  const app = h("div", { class: "app" }, nav, side, workspace, panel, h("footer", { class: "status-bar" }, h("div", { class: "status-group" }, statusLeft, jobsStatus()), statusRight));
+  const app = h("div", { class: "app" }, nav, side, workspace, panel, h("footer", { class: "status-bar" }, h("div", { class: "status-group" }, statusLeft, jobsStatus(), sharingStatus()), statusRight));
   replace(root, app);
   guardLinks(() => titleEl.textContent || undefined);
 

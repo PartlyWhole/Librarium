@@ -30,6 +30,7 @@ src-tauri/src/            the backend: one crate, one module per concern
   reader.rs               files for the reader: the `bytes` command and the asset: protocol
   jobs.rs                 background work that resumes after a restart
   settings.rs             settings.json and drafts in app data
+  sharing.rs              the connection to the sync server (samod), and its status
   dataset.rs              a database downloaded once when asked: its download, check and opening
   etymology.rs            word origins: lookups in their database (read-only)
   bible.rs                the Bible: chapters, word studies, grammar and search (read-only)
@@ -41,7 +42,8 @@ src/                      the interface
   types.ts                generated from types.rs (ts-rs); never edited by hand
   ui/                     a small DOM kit: h(), signals, dialogs, menus, toasts, tree, pickers
   app/                    the shell: layout, tabs, router, actions (menu bar, palette, keys),
-                          undo, side panel, jobs, settings, the Notes and Library folder pages
+                          undo, side panel, jobs, settings, sharing's address and status, the
+                          Notes and Library folder pages
   notes/                  the note page, embeds, history; editor/ is CodeMirror
   reader/                 the item page: pdf/, image/, epub/, and what captures draw with
   captures/  boards/  library/  websave/  search/  archive/  updates/

@@ -5,8 +5,9 @@ use crate::bible::Bible;
 use crate::error::{Code, Context, Error, Result};
 use crate::etymology::Etymology;
 use crate::settings::{Settings, LIBRARY_PATH};
+use crate::sharing::{self, Sharing};
 use crate::store::{Emit, Library};
-use crate::types::{FolderInfo, LibraryState, LibraryStatus};
+use crate::types::{FolderInfo, LibraryState, LibraryStatus, SharingStatus};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -29,6 +30,8 @@ pub struct App {
     /// Word origins and the Bible (the app's, not a library's).
     pub etymology: Etymology,
     pub bible: Bible,
+    /// The connection to the sync server, if one is set.
+    pub sharing: Sharing,
     state: RwLock<State>,
     opening: Mutex<()>,
 }
@@ -41,8 +44,12 @@ pub fn in_icloud(path: &Path) -> bool {
 
 impl App {
     pub fn new(app_data: PathBuf, logs: PathBuf, emit: Emit) -> App {
+        let settings = Settings::load(&app_data);
+        let sharing = Sharing::new(emit.clone());
+        sharing.connect(settings.get(sharing::SERVER).as_ref().and_then(|v| v.as_str()));
         App {
-            settings: Settings::load(&app_data),
+            settings,
+            sharing,
             etymology: Etymology::new(&app_data, emit.clone()),
             bible: Bible::new(&app_data, emit.clone()),
             app_data,
@@ -141,8 +148,23 @@ impl App {
         if values.contains_key(LIBRARY_PATH) {
             return Err(Error::invalid("The library folder is changed by opening another."));
         }
+        if values.contains_key(sharing::SERVER) {
+            return Err(Error::invalid("The sync server is set with sharing.setServer, which checks it."));
+        }
         self.settings.set(values)?;
         Ok(self.settings.all())
+    }
+
+    /// Sets the sync server's address (`None`: none) after checking it, and connects to it.
+    pub fn set_sync_server(&self, server: Option<String>) -> Result<SharingStatus> {
+        let server = server.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        if let Some(s) = &server {
+            sharing::ws_url(s)?;
+        }
+        let mut v = Map::new();
+        v.insert(sharing::SERVER.into(), server.clone().map_or(Value::Null, Value::String));
+        self.settings.set(v)?;
+        Ok(self.sharing.connect(server.as_deref()))
     }
 
     /// Writes an export to a path the user chose: never inside the library, except its

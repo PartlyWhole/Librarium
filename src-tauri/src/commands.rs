@@ -69,6 +69,8 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         "folder.open" => ok(app.open(Path::new(&p::<PathParams>(params)?.path))?),
         "folder.inspect" => ok(app::inspect(Path::new(&p::<PathParams>(params)?.path))),
         "folder.reveal" => ok(app::reveal(&lib()?.root)?),
+        "sharing.status" => ok(app.sharing.status()),
+        "sharing.setServer" => ok(app.set_sync_server(p::<SharingServerParams>(params)?.server)?),
         "settings.get" => ok(app.settings.all()),
         "bible.status" => ok(app.bible.data.status()),
         "bible.download" => ok(app.bible.data.download()),
