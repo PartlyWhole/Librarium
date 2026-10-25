@@ -201,7 +201,17 @@ export const openEpub: Engine = async (host, src, events) => {
   };
   const savedPlace = placePref.peek();
   const initial = savedPlace ? Locator.deserialize(savedPlace) : undefined;
-  nav = new EpubNavigator(stage, book.publication, listeners as EpubNavigatorListeners, book.positions, initial, { preferences: toPreferences(chrome.settings()), defaults: {} });
+  // Readium reports loads in its first frame only. A chapter loaded ahead in the other frame is
+  // wired as it loads, or its links, keys and selection would be dead once it's shown.
+  const wired = new WeakSet<HTMLIFrameElement>();
+  new MutationObserver(() => {
+    for (const el of stage.querySelectorAll("iframe")) {
+      if (wired.has(el)) continue;
+      wired.add(el);
+      el.addEventListener("load", () => el.contentWindow && attach(el.contentWindow));
+    }
+  }).observe(stage, { childList: true, subtree: true });
+  nav = new EpubNavigator(stage,book.publication, listeners as EpubNavigatorListeners, book.positions, initial, { preferences: toPreferences(chrome.settings()), defaults: {} });
   const navi = nav;
   const turner = pageTurner(stage, (side) => new Promise<void>((res) => (side === "right" ? navi.goRight(false, () => res()) : navi.goLeft(false, () => res()))), () => current?.locations.position ?? current?.locations.totalProgression, b.scrolling);
   await navi.load();
@@ -243,7 +253,13 @@ export const openEpub: Engine = async (host, src, events) => {
     const to = resolveLink(a, doc);
     if (!to) return;
     if ("web" in to) return void document.dispatchEvent(new CustomEvent("open-link", { detail: { url: to.web, text: a.textContent ?? "" } }));
-    const go = () => (keepPlace(), goHref(to.frag ? `${to.path}#${to.frag}` : to.path));
+    const href = to.frag ? `${to.path}#${to.frag}` : to.path;
+    const go = () => {
+      keepPlace();
+      // A note (or the reference it leads back to) is shown on screen and brightened.
+      if (to.frag && isNoteRef(a)) void places.showId(to.path, to.frag).then((ok) => ok || goHref(href));
+      else goHref(href);
+    };
     if (!to.frag || !isNoteRef(a)) return go();
     void noteTarget(to.path, to.frag).then((t) => {
       const note = noteAt(t, a);

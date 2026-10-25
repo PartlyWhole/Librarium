@@ -289,6 +289,22 @@ export function bookPlaces(b: BookView, text: () => Promise<Extracted | null>) {
     });
   }
 
+  /**
+   * Shows a note, or a reference a note leads back to (the element with `id` in a chapter), and
+   * brightens it for a moment. An empty anchor stands for the paragraph it begins.
+   */
+  async function showId(path: string, id: string): Promise<boolean> {
+    const range = await showRange(path, (doc) => {
+      const t = doc.getElementById(id);
+      if (!t) return null;
+      const r = doc.createRange();
+      r.selectNodeContents((t.textContent ?? "").trim() ? t : (t.closest("p, li, dd, aside, div") ?? t));
+      return r;
+    });
+    if (range) brighten(book.spine.findIndex((s) => s.href === path), range);
+    return !!range;
+  }
+
   return {
     resolveCFI,
     draw,
@@ -300,6 +316,7 @@ export function bookPlaces(b: BookView, text: () => Promise<Extracted | null>) {
     selOf,
     screenRects,
     showCfi,
+    showId,
     wordsShown,
     find,
     findClear,
