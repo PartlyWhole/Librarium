@@ -463,6 +463,11 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
     if (ta.value.slice(Math.max(0, at - 2), at) === "[[") startLink(true);
     else placeChip();
   }, true);
+  // Excalidraw takes keys as tool shortcuts unless they're typed into a text, number or password
+  // field; the sidebar's search fields are `search`, so their keys stop here.
+  el.addEventListener("keydown", (e) => {
+    if ((e.target as HTMLElement).closest?.("input[type=search]") && e.key !== "Escape") e.stopPropagation();
+  });
 
   // Under a text being written, a Link button does what `[[` does, and says so.
   const chip = document.createElement("button");
