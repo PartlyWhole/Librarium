@@ -21,7 +21,7 @@ const POINTER_MS = 33;
 const GLIDE_MS = 45;
 /** A colleague who hasn't moved for this long is taken off the board. */
 const GONE_MS = 20_000;
-const COLORS = ["#e8590c", "#1971c2", "#2f9e44", "#9c36b5", "#c2255c", "#0c8599", "#f08c00"];
+export const COLORS = ["#e8590c", "#1971c2", "#2f9e44", "#9c36b5", "#c2255c", "#0c8599", "#f08c00"];
 
 interface Arrived {
   id: string;
@@ -47,6 +47,8 @@ export interface LiveBoard {
 export function liveBoard(id: string, engine: BoardEngine, drew: () => void): LiveBoard {
   const link = signal<string | null>(null);
   const here = signal(0);
+  /** This page, told apart from the same board open elsewhere (another window or tab). */
+  const page = Math.random().toString(36).slice(2);
   let heads: string[] = [];
   let unpushed = false;
   let pushing = 0;
@@ -59,7 +61,7 @@ export function liveBoard(id: string, engine: BoardEngine, drew: () => void): Li
     if (engine.applyRemote(s.elements, s.boxes)) drew();
   };
   const refresh = async () => {
-    const s = await call<SharedBoard | null>("sharing.watchBoard", { id, open: true }).catch(() => null);
+    const s = await call<SharedBoard | null>("sharing.watchBoard", { id, open: true, page }).catch(() => null);
     if (stopped) return;
     link.set(s?.link ?? null);
     if (s && s.heads.length) apply(s);
@@ -158,7 +160,7 @@ export function liveBoard(id: string, engine: BoardEngine, drew: () => void): Li
       offArrived();
       offPresence();
       engine.followPointer(undefined);
-      void call("sharing.watchBoard", { id, open: false }).catch(() => {});
+      void call("sharing.watchBoard", { id, open: false, page }).catch(() => {});
     },
   };
 }

@@ -790,9 +790,9 @@ Preferences are per device, in app data (`settings.json`), never in WebKit stora
 
 ## Sharing
 
-Boards are shared with colleagues through a sync server the user runs, reachable only on their
-private network (Tailscale). Each person keeps a shared board as an ordinary board in their own
-library; it works offline and catches up when the connection is back.
+Boards and notes are shared with colleagues through a sync server the user runs, reachable only
+on their private network (Tailscale). Each person keeps a shared board or note as an ordinary one
+in their own library; it works offline and catches up when the connection is back.
 
 - **The address** is set in Settings ▸ Sharing (Return or Connect), for example
   `https://name.your-tailnet.ts.net:8443`. It is empty by default, and while it is empty
@@ -802,8 +802,8 @@ library; it works offline and catches up when the connection is back.
   - An address that isn't on a private network (a `.ts.net` name, a Tailscale `100.64–127.x`
     address, a local network address or this Mac) is used, with a warning: "This server is on
     the public internet. Anyone who finds it can read and change what's shared on it."
-  - **Your name** (Settings ▸ Sharing) is what colleagues see beside your pointer; "Colleague"
-    when it is empty.
+  - **Your name** (Settings ▸ Sharing) is what colleagues see beside your pointer or cursor;
+    "Colleague" when it is empty.
 - **The connection** starts when the address is set and when a library opens, and is retried for
   as long as the server can't be reached (at most 30 seconds apart). Settings shows "Connected
   to <address>", "Connecting…", or why it is offline ("Can't reach the server. Trying again…").
@@ -838,6 +838,25 @@ library; it works offline and catches up when the connection is back.
   kept apart.
 - **Stop sharing** (header or File ▸ Stop Sharing This Board…, after asking) leaves this copy an
   ordinary board. Colleagues keep theirs; nothing is deleted.
+- **A board or note open in two windows or tabs** gets what colleagues do in both.
+- **Sharing a note.** Share… beside a note's title (shown while Sharing is set up), or File ▸
+  Share Note…, saves the note, shares it and copies its link (`librarium://note/…`). Beside the
+  title then: "Shared" (with "· N here" while colleagues are in it), Copy link and Stop sharing.
+  File ▸ Open Shared Note… takes the link and makes the note in the Notes folder being looked
+  at (or at the top), with the sharer's title, as for boards; opening it again opens the same
+  note.
+- **Writing together.** What anyone types shows in everyone's note a moment later. Two people
+  typing at once both keep their words, merged by character, offline too.
+  - Colleagues' cursors and selections show in their colour with their name, and are never
+    stored. The same person with the note open twice shows twice; "N here" counts people.
+  - ⌘Z undoes only what you typed.
+  - Titles and folders stay each person's own.
+  - While the note isn't open, what colleagues type is written into its file.
+  - The shared text is what a shared note shows: an edit made to its file outside Librarium is
+    replaced when it next opens or changes (the note's history keeps it), and unsaved text kept
+    from an earlier run isn't offered back.
+  - Stop sharing (beside the title or File ▸ Stop Sharing This Note…, after asking) leaves this
+    copy an ordinary note; colleagues keep theirs.
 - **Setting up the server.** Settings ▸ Sharing ▸ **Set up your server…** (folded, for whoever
   runs it) takes the server as you'd SSH to it (`203.0.113.7` means root; or `user@host`), asks
   first, then copies the setup script (`deploy/sync/`, built into the app) over SSH with this

@@ -565,6 +565,26 @@ export type SharedBoard = { link: string, elements: unknown[], boxes: { [key in 
 heads: Array<string>, };
 
 /**
+ * A shared note as its document holds it: the link colleagues are sent, and its text (absent
+ * while the document is still being fetched).
+ */
+export type SharedNote = { link: string, text: string | null, 
+/**
+ * The document's heads: what the page's next push is based on.
+ */
+heads: Array<string>, };
+
+export type SharingPushNoteParams = { id: string, 
+/**
+ * The note's text as the page has it.
+ */
+text: string, 
+/**
+ * The document's heads the page last saw (its changes are since then).
+ */
+heads: Array<string>, };
+
+/**
  * How the shared folder (Library ▸ Shared, kept by Syncthing) is doing.
  */
 export type SharedFolderStatus = { 
@@ -592,9 +612,13 @@ target: string, };
 
 export type SharingWatchParams = { id: string, 
 /**
- * The board's page opened (`true`) or closed.
+ * The page opened (`true`) or closed.
  */
-open: boolean, };
+open: boolean, 
+/**
+ * Which page: one the page makes up (a note or board can be open in two at once).
+ */
+page: string, };
 
 export type SharingOpenParams = { 
 /**

@@ -142,6 +142,8 @@ Fields:
 - `notes.folder`
 - `daily.date: "YYYY-MM-DD"`: a local date fixed at creation
 - `archive.at`
+- `sharing.doc`: on a shared note, its shared document's address, `automerge:<document id>`.
+  Removing it (Stop sharing) leaves an ordinary note.
 
 A **daily note** is created at the top of `notes/`, titled with its date, with an empty body.
 Example:
@@ -479,7 +481,8 @@ App data is per device and never synced.
   `{book, chapter}`
 - `daily.dayStart`: 0–12, default 4
 - `sync.server`: the sync server's address as typed (absent: no sharing)
-- `sharing.name`: the name colleagues see beside this person's pointer on a shared board
+- `sharing.name`: the name colleagues see beside this person's pointer on a shared board, or
+  cursor in a shared note
 - `sharing.join`: `{server, device, address}`, what the join code said: the sync server's
   address, and its Syncthing's device ID and address (absent: the shared folder isn't kept)
 - `reader.epub`: `{fontSize, font, matchApp, theme, layout, spacing, width, justify}`
@@ -501,13 +504,16 @@ running.
 - `device.json`: `{"device": "<uuid>"}`. This is the history log's name, so keep it.
 - `drafts/<id>.json`: `{"id", "base_version", "base_body", "body", "updated_ms"}`. Unsaved text,
   read at startup.
-- `sharing/`: the shared boards' Automerge documents as this device keeps them, in
-  automerge-repo's file layout (`@automerge/automerge-repo-storage-nodefs`). The board files in
-  the library are what matters; a document lost here is fetched again from the sync server.
+- `sharing/`: the shared boards' and notes' Automerge documents as this device keeps them, in
+  automerge-repo's file layout (`@automerge/automerge-repo-storage-nodefs`). The board and note
+  files in the library are what matters; a document lost here is fetched again from the sync
+  server.
   - A shared board's document has `librarium: "board 1"`, `title` and `background` (the
     sharer's), `captures` (each capture on the board, by ID: `title`, `fields` as JSON, `words`,
     `anchor` as JSON, and `regions`, each region picture's bytes by its suffix), `elements` (each element's Excalidraw JSON, as a string under its ID, without a
     text box's Markdown) and `boxes` (each text box's Markdown as Automerge text, under its ID).
+  - A shared note's document has `librarium: "note 1"`, `title` (the sharer's) and `text` (the
+    note's body, its Markdown without the frontmatter, as Automerge text).
 - Anything else here (indexes, job queue, change-replay state) may be replaced.
 
 Logs are written to `~/Library/Logs/local.librarium.desktop/`.

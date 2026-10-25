@@ -1,5 +1,5 @@
 //! Sharing: the connection to the sync server named by the `sync.server` setting, and the
-//! shared boards that travel over it. While the setting is empty there is no connection, so
+//! shared boards and notes that travel over it. While the setting is empty there is no connection, so
 //! Librarium dials nowhere until someone gives it an address. Each open library has a samod
 //! repo (automerge-repo's protocol) keeping its shared documents in its app data
 //! (`libraries/<id>/sharing/`); the connection is that repo's, retried with backoff while the
@@ -8,6 +8,7 @@
 pub mod boards;
 pub mod captures;
 pub mod folder;
+pub mod notes;
 pub mod server;
 
 use crate::error::{Error, Result};
@@ -32,10 +33,11 @@ pub(crate) fn block_on<F: std::future::Future>(f: F) -> F::Output {
     tokio::task::block_in_place(|| tauri::async_runtime::handle().block_on(f))
 }
 
-/// The open library's repo, its shared boards, and the dialer while a server is set.
+/// The open library's repo, its shared boards and notes, and the dialer while a server is set.
 struct Open {
     repo: Repo,
     boards: Arc<boards::Boards>,
+    notes: Arc<notes::Notes>,
     dialer: Option<DialerHandle>,
 }
 
@@ -117,6 +119,11 @@ impl Sharing {
         self.open.lock().unwrap().as_ref().map(|o| o.boards.clone()).ok_or_else(|| Error::invalid("No library is open."))
     }
 
+    /// The open library's shared notes.
+    pub fn notes(&self) -> Result<Arc<notes::Notes>> {
+        self.open.lock().unwrap().as_ref().map(|o| o.notes.clone()).ok_or_else(|| Error::invalid("No library is open."))
+    }
+
     /// Starts sharing for a library that has just opened: its repo, its shared boards, the
     /// connection if a server is set, and the shared folder if a join code is.
     pub fn open_library(&self, lib: Arc<Library>, join: Option<folder::Join>, name: Option<String>) {
@@ -124,10 +131,12 @@ impl Sharing {
         let dir = lib.app_dir.join("sharing");
         let repo = block_on(async move { Repo::build_tokio().with_storage(TokioFilesystemStorage::new(dir)).load().await });
         let boards = boards::Boards::new(lib.clone(), repo.clone(), self.emit.clone());
-        *self.open.lock().unwrap() = Some(Open { repo, boards: boards.clone(), dialer: None });
+        let notes = notes::Notes::new(lib.clone(), repo.clone(), self.emit.clone());
+        *self.open.lock().unwrap() = Some(Open { repo, boards: boards.clone(), notes: notes.clone(), dialer: None });
         let server = self.server.lock().unwrap().clone();
         self.connect(server.as_deref());
         boards.follow_all();
+        notes.follow_all();
         if let Some(j) = join {
             self.folder.start(&lib, &j, name);
         }
@@ -141,6 +150,7 @@ impl Sharing {
                 d.close();
             }
             o.boards.stop();
+            o.notes.stop();
             tauri::async_runtime::spawn(async move { o.repo.stop().await });
         }
     }

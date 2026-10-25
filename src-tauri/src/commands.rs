@@ -78,7 +78,7 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         "sharing.invite" => ok(app.invite()?),
         "sharing.watchBoard" => {
             let q = p::<SharingWatchParams>(params)?;
-            ok(app.sharing.boards()?.watch(q.id, q.open))
+            ok(app.sharing.boards()?.watch(q.id, q.open, &q.page))
         }
         "sharing.shareBoard" => ok(app.sharing.boards()?.share(p::<IdParams>(params)?.id)?),
         "sharing.unshareBoard" => ok(app.sharing.boards()?.unshare(p::<IdParams>(params)?.id)?),
@@ -93,6 +93,24 @@ pub fn dispatch(app: &App, method: &str, params: Value) -> Result<Value> {
         "sharing.presence" => {
             let q = p::<SharingPresenceParams>(params)?;
             ok(app.sharing.boards()?.presence(q.id, q.data, app.my_name()))
+        }
+        "sharing.watchNote" => {
+            let q = p::<SharingWatchParams>(params)?;
+            ok(app.sharing.notes()?.watch(q.id, q.open, &q.page))
+        }
+        "sharing.shareNote" => ok(app.sharing.notes()?.share(p::<IdParams>(params)?.id)?),
+        "sharing.unshareNote" => ok(app.sharing.notes()?.unshare(p::<IdParams>(params)?.id)?),
+        "sharing.openNote" => {
+            let q = p::<SharingOpenParams>(params)?;
+            ok(app.sharing.notes()?.open_shared(&q.link, q.folder.as_deref())?)
+        }
+        "sharing.pushNote" => {
+            let q = p::<SharingPushNoteParams>(params)?;
+            ok(app.sharing.notes()?.push(q.id, &q.text, &q.heads)?)
+        }
+        "sharing.cursor" => {
+            let q = p::<SharingPresenceParams>(params)?;
+            ok(app.sharing.notes()?.cursor(q.id, q.data, app.my_name()))
         }
         "settings.get" => ok(app.settings.all()),
         "bible.status" => ok(app.bible.data.status()),
