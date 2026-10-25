@@ -20,7 +20,7 @@ import type { Engine, ReaderView } from "../types";
 import { bookChrome } from "./chrome";
 import { editBookParts } from "./edit";
 import { isNoteRef, nearNoteRef, noteAt, notePopover } from "./notes";
-import { HIGHLIGHT_CSS, laidOut, onScreenX, onScreenY, pictureIn, pictureToPng } from "./pages";
+import { HIGHLIGHT_CSS, laidOut, onScreenX, onScreenY, pictureIn, pictureToPng, zoomOf } from "./pages";
 import { bookPlaces, hrefOf, pathOf, type BookView, type Frame } from "./places";
 import { themeOf, THEMES, toPreferences } from "./settings";
 import { openBook } from "./streamer";
@@ -266,9 +266,11 @@ export const openEpub: Engine = async (host, src, events) => {
       if (!note) return go();
       chrome.closePopover();
       const fb = frames().find((x) => x.doc === doc)?.el.getBoundingClientRect() ?? new DOMRect();
+      // Measured in the page's own units, which differ from the screen's when its text is zoomed.
       const r = a.getBoundingClientRect();
+      const z = zoomOf(doc);
       const theme = THEMES[themeOf(chrome.settings())];
-      chrome.showNote(notePopover(note, new DOMRect(fb.left + r.left, fb.top + r.top, r.width, r.height), { bg: theme.backgroundColor, text: theme.textColor }, () => (chrome.closePopover(), frame.focus()), go));
+      chrome.showNote(notePopover(note, new DOMRect(fb.left + onScreenX(doc, r.left), fb.top + onScreenY(doc, r.top), r.width * z, r.height * z), { bg: theme.backgroundColor, text: theme.textColor }, () => (chrome.closePopover(), frame.focus()), go));
     }, go);
   }
   /** The element a note link targets: in the page shown, else in its file. */
