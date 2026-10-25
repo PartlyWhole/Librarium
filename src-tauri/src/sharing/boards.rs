@@ -32,7 +32,7 @@ pub const DOC: &str = "sharing.doc";
 /// A text box's link (its Markdown is in `customData.librarium.text`).
 const TEXT_BOX: &str = "librarium://text";
 /// How long opening a shared board waits for the server to hand over its document.
-const FIND_WAIT: Duration = Duration::from_secs(30);
+pub(super) const FIND_WAIT: Duration = Duration::from_secs(30);
 
 pub struct Boards {
     lib: Arc<Library>,
@@ -41,7 +41,8 @@ pub struct Boards {
     /// Shared boards being followed, by board ID.
     handles: Mutex<HashMap<Id, DocHandle>>,
     /// Boards open in the interface: what arrives goes there instead of to the file.
-    open: Mutex<HashSet<Id>>,
+    /// The pages each is open in (it can be open in two windows or tabs at once).
+    open: Mutex<HashMap<Id, HashSet<String>>>,
     stopped: AtomicBool,
 }
 
@@ -60,7 +61,7 @@ pub fn link_of(url: &AutomergeUrl) -> String {
 
 /// A message as a CBOR text string: the sync server decodes each passing (ephemeral) message as
 /// CBOR before forwarding it, and drops what doesn't decode.
-fn cbor_text(json: &[u8]) -> Vec<u8> {
+pub(super) fn cbor_text(json: &[u8]) -> Vec<u8> {
     let n = json.len();
     let mut out = match n {
         0..=23 => vec![0x60 | n as u8],
@@ -73,7 +74,7 @@ fn cbor_text(json: &[u8]) -> Vec<u8> {
 }
 
 /// The text of a CBOR text string (what `cbor_text` makes).
-fn from_cbor_text(m: &[u8]) -> Option<&[u8]> {
+pub(super) fn from_cbor_text(m: &[u8]) -> Option<&[u8]> {
     let skip = match *m.first()? {
         b @ 0x60..=0x77 => return m.get(1..1 + (b & 0x1f) as usize),
         0x78 => 2,
@@ -136,7 +137,7 @@ fn state_of(doc: &Automerge) -> (Vec<Value>, HashMap<String, String>, Vec<String
 }
 
 /// A string value's text.
-fn scalar_str(v: &AmValue) -> Option<String> {
+pub(super) fn scalar_str(v: &AmValue) -> Option<String> {
     match v {
         AmValue::Scalar(s) => match s.as_ref() {
             ScalarValue::Str(t) => Some(t.to_string()),
@@ -298,7 +299,7 @@ impl Boards {
         if let Err(e) = super::captures::receive(&self.lib, &handle.url().to_string(), carried) {
             log::warn!("captures from a shared board weren’t written: {e}");
         }
-        if self.open.lock().unwrap().contains(&id) {
+        if self.open.lock().unwrap().contains_key(&id) {
             (self.emit)("sharing.board", json!({ "id": id.to_string(), "elements": elements, "boxes": boxes, "heads": heads }));
         } else if let Err(e) = self.write_file(id, &elements, &boxes) {
             log::warn!("a shared board’s changes weren’t written to {id}: {e}");
@@ -321,14 +322,23 @@ impl Boards {
         files::write_sidecar(&w, id, SCENE, &bytes)
     }
 
-    /// The board's page opened (`true`) or closed: while open, what arrives goes to it. Returns
+    /// The board's page `page` opened (`true`) or closed: while it is open in any, what arrives
+    /// goes there. Returns
     /// the shared document's state when the board is shared.
-    pub fn watch(self: &Arc<Self>, id: Id, open: bool) -> Option<SharedBoard> {
-        if !open {
-            self.open.lock().unwrap().remove(&id);
-            return None;
+    pub fn watch(self: &Arc<Self>, id: Id, open: bool, page: &str) -> Option<SharedBoard> {
+        {
+            let mut open_in = self.open.lock().unwrap();
+            let pages = open_in.entry(id).or_default();
+            if open {
+                pages.insert(page.to_string());
+            } else {
+                pages.remove(page);
+                if pages.is_empty() {
+                    open_in.remove(&id);
+                }
+                return None;
+            }
         }
-        self.open.lock().unwrap().insert(id);
         let url = self.entry(id).ok()?.field_str(DOC).and_then(|d| AutomergeUrl::from_str(d).ok())?;
         let handle = self.handles.lock().unwrap().get(&id).cloned();
         let Some(handle) = handle else {

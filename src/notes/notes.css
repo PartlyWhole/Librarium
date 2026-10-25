@@ -131,3 +131,13 @@
 .diff-key { font-family: var(--font-mono); font-size: 11px; padding: 0 4px; border-radius: 3px; }
 /* A title that wraps instead of being cut short (a textarea that grows with it). */
 .title-input.wrapping { display: block; resize: none; overflow: hidden; font-family: inherit; }
+
+/* The title, and beside it a shared note's or board's "Shared", Copy link and Stop sharing. */
+.title-row { display: flex; align-items: center; gap: 8px; }
+.title-row .title-input { flex: 1; min-width: 0; }
+.share-bar { display: flex; align-items: center; gap: 6px; flex: none; }
+.share-bar:empty { display: none; }
+
+/* Colleagues' cursors in a shared note: a caret in their colour, their name above it. */
+.cm-peer-caret { position: relative; border-left: 2px solid; margin: 0 -1px; }
+.cm-peer-name { position: absolute; left: -2px; bottom: 100%; padding: 0 4px; border-radius: 3px; color: #fff; font: 500 11px/1.5 var(--font-ui); white-space: nowrap; pointer-events: none; user-select: none; }

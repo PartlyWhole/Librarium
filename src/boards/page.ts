@@ -117,10 +117,10 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
 
   const titleInput = h("input", { class: "title-input", value: info.title, "aria-label": "Title", spellcheck: true, readOnly, placeholder: "Untitled board" });
   const notices = h("div", { class: "notices" });
-  const shareBar = h("div", { class: "board-share" });
+  const shareBar = h("div", { class: "share-bar" });
   const outline = h("ul", { class: "board-outline", "aria-label": "What is on the board" });
   const canvasHost = h("div", { class: "board-host", role: "region", "aria-label": `Drawing: ${info.title || "Untitled board"}`, [OWN_DROPS]: "" });
-  replace(host, h("div", { class: "board-head" }, h("div", { class: "board-title-row" }, titleInput, shareBar), notices), canvasHost, outline);
+  replace(host, h("div", { class: "board-head" }, h("div", { class: "title-row" }, titleInput, shareBar), notices), canvasHost, outline);
   const status = (text: string, persistent = false) => showStatus(text, persistent ? 0 : 4000);
   let engine: BoardEngine | null = null;
   /** While the board is shared: colleagues' changes in, this page's out. */

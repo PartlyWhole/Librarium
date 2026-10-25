@@ -12,9 +12,10 @@ import type { PageContext, PageHandle } from "../app/pages";
 import { beforeQuit } from "../app/quit";
 import { canOpen, getRecord, listRecords, openRecord, putRecord, records } from "../app/records";
 import { router } from "../app/router";
+import { sharing } from "../app/sharing";
 import { context, showStatus } from "../app/status";
 import { attachEditor, done, editorChanged, keepText, recordScope, takeText, typed, within } from "../app/undo";
-import { ask, modal } from "../ui/dialog";
+import { ask, confirm, modal } from "../ui/dialog";
 import { dropTarget } from "../ui/dnd";
 import { errorText, h, replace } from "../ui/dom";
 import { iconButton } from "../ui/icon";
@@ -26,10 +27,14 @@ import { createEditor, historyJSON, positionOf, replaceDoc, textHistory } from "
 import { formatLink } from "./editor/links";
 import { NoteSession, type Resolution } from "./editor/session";
 import { countLabel } from "./editor/stats";
+import { liveNote, type LiveNote } from "./live";
 import { FolderInput } from "lucide";
 
 /** The notes on screen, by ID. */
-const open = new Map<string, { session: NoteSession; view: EditorView }>();
+const open = new Map<string, { session: NoteSession; view: EditorView; share(): Promise<void>; unshare(): Promise<void>; shared(): boolean }>();
+
+/** Sharing for the note shown (File ▸ Share Note…, Stop Sharing This Note…). */
+export const noteSharing = (id: string) => open.get(id);
 
 /** Saves a note's unsaved text now, if it is open (before restoring a version, or exporting). */
 export async function flushNote(id: string): Promise<void> {
@@ -99,13 +104,17 @@ function mount(host: HTMLElement, params: Record<string, string>, ctx: PageConte
   const readOnly = info.read_only;
   ctx.setTitle(info.title || "Untitled");
 
-  // Text kept from an earlier run (newer than the file) is offered back.
-  const recovered = draft && draft.body !== t.body ? draft : null;
+  // Text kept from an earlier run (newer than the file) is offered back, unless the note is
+  // shared: its typing reaches the shared document at once, which is then the newer text.
+  const shared = !!info.fields["sharing.doc"];
+  const recovered = draft && draft.body !== t.body && !shared ? draft : null;
+  if (draft && shared) void call("drafts.discard", { id }).catch(() => {});
   const startBody = recovered ? recovered.body : t.body;
   const notices = h("div", { class: "notices" });
   const titleInput = h("input", { class: "title-input", value: info.title, "aria-label": "Title", spellcheck: true, readOnly: !!readOnly, placeholder: "Untitled" });
   const editorHost = h("div", { class: "editor-host" });
-  replace(host, titleInput, notices, editorHost);
+  const shareBar = h("div", { class: "share-bar" });
+  replace(host, h("div", { class: "title-row" }, titleInput, shareBar), notices, editorHost);
 
   const session = new NoteSession(id, recovered ? recovered.base_version : info.version, recovered ? recovered.base_body : t.body, {
     current: () => view.state.doc.toString(),
@@ -161,7 +170,62 @@ function mount(host: HTMLElement, params: Record<string, string>, ctx: PageConte
   const showCount = () => shown() && context.set(countLabel(view.state));
   cleanup.push(effect(() => (router.active(), void queueMicrotask(showCount))));
 
-  const mine = { session, view };
+  // ---- Sharing: typed together with colleagues, live ----
+  let live: LiveNote | null = null;
+  if (!readOnly) {
+    const l = liveNote(id, view);
+    live = l;
+    cleanup.push(() => ((live = null), l.stop()));
+    cleanup.push(effect(() => {
+      const link = l.link();
+      const n = l.here();
+      replace(shareBar, link
+        ? [h("span", { class: "muted small", title: "Shared with colleagues through your sync server" }, n ? `Shared · ${n} here` : "Shared"),
+           h("button", { class: "button small", type: "button", onclick: () => void copyLink(link) }, "Copy link"),
+           h("button", { class: "button small", type: "button", onclick: () => void unshare() }, "Stop sharing")]
+        : sharing()?.state && sharing()!.state !== "off" ? h("button", { class: "button small", type: "button", title: "Write this note with colleagues", onclick: () => void share() }, "Share…") : null);
+    }));
+  }
+  /** Copies the link colleagues open the note with. After waiting (sharing first) the web view
+   * may refuse: Copy link in the header then does it within its click. */
+  async function copyLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast("Link copied. A colleague opens it with File ▸ Open Shared Note…");
+    } catch {
+      toast("Shared. Use Copy link (beside “Shared”) to copy the link for colleagues.");
+    }
+  }
+  /** Shares the note (saved first): its link is copied to send to colleagues. */
+  async function share() {
+    if (readOnly || !live) return;
+    if (!sharing.peek() || sharing.peek()!.state === "off") {
+      return void toast("Set up Sharing first: the address of your sync server.", { action: { label: "Open Settings", run: () => router.go("settings") } });
+    }
+    try {
+      await session.flush();
+      const s = await call<{ link: string }>("sharing.shareNote", { id });
+      await live.refresh();
+      await copyLink(s.link);
+    } catch (e) {
+      toast(errorText(e));
+    }
+  }
+  /** Stops sharing: this copy stays as an ordinary note, and colleagues keep theirs. */
+  async function unshare() {
+    if (!live?.link.peek()) return;
+    const ok = await confirm("Stop sharing this note?", "Your copy stays here as an ordinary note, and colleagues keep theirs. Nothing is deleted.", "Stop sharing");
+    if (!ok) return;
+    try {
+      await session.flush();
+      await call("sharing.unshareNote", { id });
+      await live.refresh();
+    } catch (e) {
+      toast(errorText(e));
+    }
+  }
+
+  const mine = { session, view, share, unshare, shared: () => !!live?.link.peek() };
   open.set(id, mine);
   editorChanged.set(editorChanged.peek() + 1);
   const detach = attachEditor(view.dom, scope, textHistory(view));
@@ -265,6 +329,9 @@ function mount(host: HTMLElement, params: Record<string, string>, ctx: PageConte
     const fresh = await call<RecordText>("records.read", { id }).catch(() => null);
     // Our own saves are shown already.
     if (!fresh || fresh.info.version === session.baseVersion) return;
+    // A shared note's text comes from its shared document only: taking the file's in as typing
+    // here would push colleagues' words back as new ones.
+    if (live?.link.peek()) return void (showTitle(fresh.info), session.rebase(fresh.info.version, session.savedBody));
     if (fresh.body === session.baseBody) session.rebase(fresh.info.version, fresh.body);
     else if (!session.dirty) {
       replaceDoc(view, fresh.body);

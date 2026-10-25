@@ -392,11 +392,33 @@ pub struct SharedBoard {
     pub heads: Vec<String>,
 }
 
+/// A shared note as its document holds it: the link colleagues are sent, and its text (absent
+/// while the document is still being fetched).
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct SharedNote {
+    pub link: String,
+    pub text: Option<String>,
+    /// The document's heads: what the page's next push is based on.
+    pub heads: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, TS)]
+pub struct SharingPushNoteParams {
+    pub id: Id,
+    /// The note's text as the page has it.
+    pub text: String,
+    /// The document's heads the page last saw (its changes are since then).
+    pub heads: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, TS)]
 pub struct SharingWatchParams {
     pub id: Id,
-    /// The board's page opened (`true`) or closed.
+    /// The page opened (`true`) or closed.
     pub open: bool,
+    /// Which page: one the page makes up (a note or board can be open in two at once).
+    #[serde(default)]
+    pub page: String,
 }
 
 #[derive(Clone, Debug, Deserialize, TS)]
@@ -1169,6 +1191,8 @@ pub fn typescript() -> String {
         SharingStatus,
         SharingServerParams,
         SharedBoard,
+        SharedNote,
+        SharingPushNoteParams,
         SharedFolderStatus,
         SharingJoinParams,
         SharingSetupParams,

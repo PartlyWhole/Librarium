@@ -22,7 +22,8 @@ import { activeEditor } from "./editor/editor";
 import { FORMATS } from "./editor/format";
 import { formatLink, parseLinks } from "./editor/links";
 import { embedMarkdown, TITLE, titledAt } from "./embeds";
-import { flushNote, renderNote } from "./page";
+import { flushNote, noteSharing, renderNote } from "./page";
+import { prompt } from "../ui/dialog";
 import "./history";
 import "./panels";
 import "./notes.css";
@@ -93,6 +94,28 @@ addRecordAction({ id: "copy-link", label: (n) => (n === 1 ? "Copy link" : `Copy 
 addRecordAction({ id: "copy-embed", label: (n) => (n === 1 ? "Copy embed" : `Copy ${n} embeds`), partial: true, applies: (r) => r.kind !== "capture" && r.kind !== "note" && !isArchived(r), run: (rs) => copyReferences(rs, true) });
 
 defineAction({ id: "notes.new", title: "New note", keys: ["Mod+N"], reserved: true, when: isOpen, run: newNote, menu: { name: "file", group: 0.3 }, icon: FilePlus });
+/** Asks for the link a colleague sent, then opens the note (made in the Notes folder being
+ * looked at, the first time). */
+async function openShared(): Promise<void> {
+  const link = await prompt("Open a shared note", { label: "Link", action: "Open", check: (v) => (/^\s*(librarium:\/\/note\/|automerge:)\S+\s*$/.test(v) ? null : "Paste the link a colleague sent. It starts with librarium://note/") });
+  if (!link) return;
+  const at = here.peek();
+  showStatus("Finding the shared note…", 0);
+  try {
+    const w = await call<Written>("sharing.openNote", { link, folder: at?.kind === "note" ? at.folder || null : null });
+    putRecord(w.info);
+    router.go("note", { id: w.info.id });
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    showStatus("");
+  }
+}
+const shownSharing = () => noteSharing(shownNote() ?? "");
+
+defineAction({ id: "notes.share", title: "Share Note…", when: () => !!shownSharing() && !shownSharing()!.shared(), run: () => void shownSharing()?.share(), menu: { name: "file", group: 2.9 } });
+defineAction({ id: "notes.unshare", title: "Stop Sharing This Note…", when: () => !!shownSharing()?.shared(), run: () => void shownSharing()?.unshare(), menu: { name: "file", group: 2.9 } });
+defineAction({ id: "notes.openShared", title: "Open Shared Note…", when: isOpen, run: () => void openShared(), menu: { name: "file", group: 0.5 } });
 defineAction({ id: "notes.history", title: "Show history", keys: ["Mod+Alt+Y"], when: () => !!shownNote(), run: () => showPanelView("history"), menu: { name: "file", group: 3.1 } });
 defineAction({ id: "notes.export", title: "Export with quotations…", when: () => !!shownNote(), run: exportWithQuotations, menu: { name: "file", group: 3.2 } });
 

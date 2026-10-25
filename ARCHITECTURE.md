@@ -32,7 +32,8 @@ src-tauri/src/            the backend: one crate, one module per concern
   settings.rs             settings.json and drafts in app data
   sharing/                the connection to the sync server (samod), its status, shared boards
                           (their Automerge documents, merges, pointers, and the captures that
-                          travel with them: captures.rs), and the shared folder
+                          travel with them: captures.rs), shared notes (notes.rs: their text
+                          and cursors), and the shared folder
                           (folder.rs: runs and sets up the bundled Syncthing through its API),
                           and setting up the user's server over SSH (server.rs)
   dataset.rs              a database downloaded once when asked: its download, check and opening
@@ -49,6 +50,7 @@ src/                      the interface
                           undo, side panel, jobs, settings, sharing's address and status, the
                           Notes and Library folder pages
   notes/                  the note page, embeds, history; editor/ is CodeMirror
+                          (live.ts: a shared note's typing in and out, and colleagues' cursors)
   reader/                 the item page: pdf/, image/, epub/, and what captures draw with
   captures/  boards/  library/  websave/  search/  archive/  updates/
                           (boards/live.ts: a shared board's changes in and out, and pointers)
