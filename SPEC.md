@@ -434,8 +434,9 @@ dragged out for capture.
   - This covers chapter-end notes, separate notes files and empty-anchor notes.
   - Notes over 3000 words, and links that aren't notes, go to their place instead.
   - A note's own number, at the start of the note, goes back to where the note is referred to.
-  - **Go to note**, and a note's number, show the note (or the reference) on screen, at the top
-    when scrolling, and brighten it for a moment. The same in every layout.
+  - **Go to note**, a note's number and its arrow back (↵) show the note (or the reference) on
+    screen, at the top when scrolling, and brighten it for a moment. The same in every layout.
+    Other links within the book land the same way, without the brightening.
   - Footnote marks are small, so a click within 12 px of one, with no text selected, opens it.
 - **Back.** After following a link or **Go to note**, the bottom left shows **‹ Back to page N**,
   the page you were on; clicking it returns there and it goes away.

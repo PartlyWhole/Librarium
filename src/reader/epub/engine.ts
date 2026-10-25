@@ -19,7 +19,7 @@ import { snapToWords } from "../marks";
 import type { Engine, ReaderView } from "../types";
 import { bookChrome } from "./chrome";
 import { editBookParts } from "./edit";
-import { isNoteRef, nearNoteRef, noteAt, notePopover } from "./notes";
+import { isBackArrow, isNoteRef, nearNoteRef, noteAt, notePopover } from "./notes";
 import { HIGHLIGHT_CSS, laidOut, onScreenX, onScreenY, pictureIn, pictureToPng, zoomOf } from "./pages";
 import { bookPlaces, hrefOf, pathOf, type BookView, type Frame } from "./places";
 import { themeOf, THEMES, toPreferences } from "./settings";
@@ -256,8 +256,9 @@ export const openEpub: Engine = async (host, src, events) => {
     const href = to.frag ? `${to.path}#${to.frag}` : to.path;
     const go = () => {
       keepPlace();
-      // A note (or the reference it leads back to) is shown on screen and brightened.
-      if (to.frag && isNoteRef(a)) void places.showId(to.path, to.frag).then((ok) => ok || goHref(href));
+      // A place in a chapter is brought on screen by measuring it (Readium's own jump misses in a
+      // zoomed page); a note, or the reference it leads back to, is brightened too.
+      if (to.frag) void places.showId(to.path, to.frag, isNoteRef(a) || isBackArrow(a)).then((ok) => ok || goHref(href));
       else goHref(href);
     };
     if (!to.frag || !isNoteRef(a)) return go();

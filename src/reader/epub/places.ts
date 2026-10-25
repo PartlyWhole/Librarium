@@ -290,11 +290,11 @@ export function bookPlaces(b: BookView, text: () => Promise<Extracted | null>) {
   }
 
   /**
-   * Shows a note, or a reference a note leads back to (the element with `id` in a chapter), and
-   * brightens it for a moment. An empty anchor stands for the paragraph it begins, or, inside a
-   * paragraph, for what follows it (the reference mark), not for where the paragraph starts.
+   * Shows the element with `id` in a chapter (a note, a reference a note leads back to, any
+   * link's target), brightened for a moment when `flash`. An empty anchor stands for the
+   * paragraph it begins, or, inside a paragraph, for the reference link beside it.
    */
-  async function showId(path: string, id: string): Promise<boolean> {
+  async function showId(path: string, id: string, flash: boolean): Promise<boolean> {
     const range = await showRange(path, (doc) => {
       const t = doc.getElementById(id);
       if (!t) return null;
@@ -309,7 +309,7 @@ export function bookPlaces(b: BookView, text: () => Promise<Extracted | null>) {
       }
       return r;
     });
-    if (range) brighten(book.spine.findIndex((s) => s.href === path), range);
+    if (range && flash) brighten(book.spine.findIndex((s) => s.href === path), range);
     return !!range;
   }
 

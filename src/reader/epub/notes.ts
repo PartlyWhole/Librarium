@@ -63,6 +63,11 @@ const BLOCK = new Set(["p", "li", "div", "aside", "section", "blockquote", "dd",
 /** A link back to the reference (↵, ↩, "Back", its number). */
 const BACKLINK = /^(↵|↩|⤴|\^|back|return|[[(]?(\d{1,4}|[*†‡§¶]{1,3})[\])]?\.?)$/i;
 
+/** Whether a link is a note's arrow back to its reference (↵, ↩, "Back"). */
+export function isBackArrow(a: HTMLAnchorElement): boolean {
+  return /^(↵|↩|⤴|\^|back|return)$/i.test((a.textContent ?? "").trim());
+}
+
 /** The note as plain formatting only, its links back to the text left out. */
 function noteBody(note: Element): HTMLElement {
   const out = h("div", { class: "epub-note-body" });
