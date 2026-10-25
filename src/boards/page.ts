@@ -482,13 +482,14 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
       toast(`The board couldn’t be exported: ${errorText(e)}`);
     }
   };
-  /** Copies the link colleagues open the board with. */
+  /** Copies the link colleagues open the board with. Called after waiting (sharing first), the
+   * web view may refuse: Copy link in the header then does it within its click. */
   async function copyLink(link: string) {
     try {
       await navigator.clipboard.writeText(link);
       toast("Link copied. A colleague opens it with File ▸ Open Shared Board…");
     } catch {
-      toast(link);
+      toast("Shared. Use Copy link (beside “Shared”) to copy the link for colleagues.");
     }
   }
   /** Shares the board (saved first): its link is copied to send to colleagues. */

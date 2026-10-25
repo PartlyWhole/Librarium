@@ -84,7 +84,8 @@
 .sharing-dot.offline { border-color: var(--destructive); }
 .sharing-state { margin: 6px 0; }
 .sharing-warning { color: var(--destructive); margin: 6px 0; }
-#sync-server, #sharing-name, #join-code, #setup-server { width: 100%; max-width: 420px; }
+#sync-server, #sharing-name, #join-code, #setup-server, #invite-code { width: 100%; max-width: 420px; }
+#invite-code { font-family: ui-monospace, Menlo, monospace; font-size: var(--tiny); }
 .setup-server { margin-top: 14px; }
 .setup-server summary { cursor: pointer; font-size: var(--small); }
 .setup-log { margin-top: 8px; max-height: 220px; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: var(--r1); font-family: ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }

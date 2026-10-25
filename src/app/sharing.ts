@@ -22,9 +22,12 @@ on<SharingStatus>("sharing.status", (s) => sharing.set(s));
 export const sharedFolder = signal<SharedFolderStatus | null>(null);
 void call<SharedFolderStatus>("sharing.folderStatus").then((s) => sharedFolder.set(s), () => {});
 on<SharedFolderStatus>("sharing.folder", (s) => sharedFolder.set(s));
-/** Whether this Mac joined with a code (the shared folder is then kept while a library is open). */
-const joined = signal(false);
-void call<string>("sharing.invite").then(() => joined.set(true), () => joined.set(false));
+/** The join code to send colleagues, once this Mac has joined (the shared folder is then kept
+ * while a library is open). Known ahead, so Copy copies within the click: the web view refuses
+ * a copy made after waiting for the backend. */
+const inviteCode = signal<string | null>(null);
+const loadInvite = () => call<string>("sharing.invite").then((c) => inviteCode.set(c), () => inviteCode.set(null));
+void loadInvite();
 
 const FOLDER_STATE: Record<string, string> = { starting: "Starting…", waiting: "Waiting for the sync server", syncing: "Fetching", ready: "Up to date", error: "Not kept in step" };
 
@@ -66,7 +69,7 @@ function renderSetup(join: (code: string) => Promise<void>): HTMLElement {
       button.disabled = false;
       off?.();
       if (m.error) log.append(h("div", { class: "sharing-warning" }, m.error));
-      else if (m.code) void join(m.code).then(() => log.append(h("div", null, "Done. This Mac has joined; Invite a colleague to send them the code.")));
+      else if (m.code) void join(m.code).then(() => log.append(h("div", null, "Done. This Mac has joined; the code to send colleagues is under Invite a colleague.")));
     });
     try {
       await call("sharing.setupServer", { target: t });
@@ -93,7 +96,7 @@ function renderFolder(host: HTMLElement): () => void {
     try {
       sharedFolder.set(await call<SharedFolderStatus>("sharing.join", { code: given ?? code.value }));
       sharing.set(await call<SharingStatus>("sharing.status"));
-      joined.set(true);
+      await loadInvite();
       code.value = "";
     } catch (e) {
       problem.textContent = errorText(e);
@@ -101,20 +104,22 @@ function renderFolder(host: HTMLElement): () => void {
     }
   };
   code.addEventListener("keydown", (e) => e.key === "Enter" && void join());
-  const invite = async () => {
-    try {
-      const c = await call<string>("sharing.invite");
-      await navigator.clipboard.writeText(c).then(() => toast("Join code copied. A colleague pastes it in Settings ▸ Sharing (after joining your Tailscale network)."), () => toast(c));
-    } catch (e) {
-      toast(errorText(e));
-    }
+  // The code, shown to select and copy by hand too.
+  const codeBox = h("input", { type: "text", id: "invite-code", readOnly: true, "aria-label": "Join code to send", onfocus: (e: Event) => (e.target as HTMLInputElement).select() }) as HTMLInputElement;
+  const copyCode = () => {
+    const c = inviteCode.peek();
+    if (!c) return;
+    codeBox.focus();
+    navigator.clipboard.writeText(c).then(
+      () => toast("Join code copied. Send it to a colleague: they paste it in Settings ▸ Sharing ▸ Join."),
+      () => toast("Press ⌘C to copy the code (it’s selected)."));
   };
   const leave = async () => {
     const ok = await confirm("Stop sharing the folder on this Mac?", "Library ▸ Shared stays here with everything in it, as an ordinary folder, and colleagues keep theirs. Nothing is deleted.", "Stop sharing");
     if (!ok) return;
     try {
       sharedFolder.set(await call<SharedFolderStatus>("sharing.leave"));
-      joined.set(false);
+      inviteCode.set(null);
     } catch (e) {
       toast(errorText(e));
     }
@@ -126,11 +131,13 @@ function renderFolder(host: HTMLElement): () => void {
     replace(host,
       h("h3", { class: "sharing-sub" }, "Shared folder"),
       h("p", { class: "muted small" }, "Library ▸ Shared is kept the same on colleagues’ Macs, through your sync server. What you put there, they get."),
-      joined()
+      inviteCode()
         ? [
             s ? h("p", { class: "small sharing-state" }, h("span", { class: `sharing-dot ${s.state === "ready" ? "connected" : s.state === "error" || s.state === "waiting" ? "offline" : "connecting"}`, "aria-hidden": "true" }), folderLine(s)) : null,
+            h("div", { class: "field" }, h("label", { for: "invite-code" }, "Invite a colleague"), ((codeBox.value = inviteCode()!), codeBox)),
+            h("p", { class: "muted small" }, "Send this code to a colleague you've let into your Tailscale network. They paste it in Settings ▸ Sharing ▸ Join."),
             h("div", { class: "row" },
-              h("button", { class: "button", type: "button", onclick: () => void invite() }, "Invite a colleague"),
+              h("button", { class: "button", type: "button", onclick: copyCode }, "Copy code"),
               h("button", { class: "button", type: "button", onclick: () => void leave() }, "Stop sharing the folder")),
           ]
         : [
