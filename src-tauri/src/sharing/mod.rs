@@ -6,6 +6,7 @@
 //! server can't be reached, and its state goes out as `sharing.status` events.
 
 pub mod boards;
+pub mod captures;
 pub mod folder;
 pub mod server;
 

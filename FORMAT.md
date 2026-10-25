@@ -207,6 +207,8 @@ Fields, in order after the envelope:
 - `captures.parts`: an integer
 - `captures.locator`: the first part's place (`"p. 3"`, a chapter title); removed when no part
   has one
+- `sharing.from`: on a capture received from a shared board, that board's shared document
+  (`automerge:<document id>`); the capture keeps its ID from where it was made
 
 The title, and the body:
 - **Title.** The first 8 words of the quote, plus `…` if there were more. With no quote, the
@@ -503,7 +505,8 @@ running.
   automerge-repo's file layout (`@automerge/automerge-repo-storage-nodefs`). The board files in
   the library are what matters; a document lost here is fetched again from the sync server.
   - A shared board's document has `librarium: "board 1"`, `title` and `background` (the
-    sharer's), `elements` (each element's Excalidraw JSON, as a string under its ID, without a
+    sharer's), `captures` (each capture on the board, by ID: `title`, `fields` as JSON, `words`,
+    `anchor` as JSON, and `regions`, each region picture's bytes by its suffix), `elements` (each element's Excalidraw JSON, as a string under its ID, without a
     text box's Markdown) and `boxes` (each text box's Markdown as Automerge text, under its ID).
 - Anything else here (indexes, job queue, change-replay state) may be replaced.
 

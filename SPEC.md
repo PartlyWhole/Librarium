@@ -817,8 +817,14 @@ library; it works offline and catches up when the connection is back.
     (undoing one would put back the whole earlier text over colleagues' words); while writing
     in a box, ⌘Z undoes what you typed there.
   - Titles and folders stay each person's own.
-  - A card of an item someone else has, but you don't, says "Not in your library yet: a
-    colleague put it here. It arrives once it's in your shared folder."
+  - **Captures travel with the board.** A capture on a shared board (its card, or a link or embed
+    in a text box) is carried in the board's shared document when the board is pushed or opened,
+    and written into each colleague's library as an ordinary capture with the same ID, marked as
+    received from the board. It is then their copy: later edits stay on the side they're made.
+    The item it quotes comes through the shared folder. A capture deleted for good is written
+    again while it's still on a shared board.
+  - A card of something you don't have yet says "Not in your library yet: a colleague put it
+    here. A capture comes with the board in a moment; an item, once it's in your shared folder."
 - **While a board isn't open,** what colleagues draw is written to its drawing, and its
   readable page is brought up to date when it next opens. When a shared board's drawing changed
   on disk while it had unsaved changes, the two are merged (each element the newer) rather than

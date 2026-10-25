@@ -41,7 +41,7 @@ export function renderCard(id: string, host: HTMLElement, shared: () => boolean 
     if (v === shown) return;
     shown = v;
     untracked(() => {
-      if (!r) return replace(host, h("div", { class: "board-card missing" }, theirs ? "Not in your library yet: a colleague put it here. It arrives once it’s in your shared folder." : "This was deleted or can’t be found."));
+      if (!r) return replace(host, h("div", { class: "board-card missing" }, theirs ? "Not in your library yet: a colleague put it here. A capture comes with the board in a moment; an item, once it’s in your shared folder." : "This was deleted or can’t be found."));
       replace(host, h("div", { class: `board-card kind-${r.kind}`, role: "group", "aria-label": `${kindName(r)}: ${r.title || "Untitled"}` },
         r.kind === "capture" ? captureCard(r) : recordCard(r),
         isArchived(r) ? h("p", { class: "muted small" }, "In the archive.") : null));
