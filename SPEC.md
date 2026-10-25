@@ -836,7 +836,8 @@ library; it works offline and catches up when the connection is back.
 - **Joining.** The server's setup prints a join code (`librarium-join:…`). Settings ▸ Sharing ▸ **Join** takes it: the code's sync server becomes the
   one connected to, and the shared folder starts. Once joined, Settings shows the folder's state
   ("Up to date", "Fetching 3 files…", "Waiting for the sync server", or what went wrong), **Invite
-  a colleague** (copies the code, to send) and **Stop sharing the folder** (after asking; the
+  a colleague** (the code to send, in a box that selects it all, with **Copy code**) and **Stop
+  sharing the folder** (after asking; the
   folder and everything in it stay, as an ordinary folder).
 - **Library items** reach colleagues through Library ▸ Shared, which Syncthing keeps the same on
   everyone's Mac through the server. Librarium runs its own Syncthing (built in) while a library

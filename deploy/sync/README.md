@@ -42,8 +42,8 @@ Sharing ▸ Join**. Running the script again is safe; it prints the same code.
 
 1. Invite them to your Tailscale network (Users ▸ Invite users) and add their login email to
    `group:librarium` in the policy. They install Tailscale and sign in.
-2. They install Librarium. You click **Invite a colleague** in Settings ▸ Sharing and send them
-   the code it copies; they paste it in **Join**.
+2. They install Librarium. You send them the code under **Invite a colleague** in Settings ▸
+   Sharing (**Copy code**); they paste it in **Join**.
 
 That's all: their Librarium connects to the sync server, makes Library ▸ Shared, and its own
 Syncthing (built into Librarium) starts keeping it with the server, which lets their Mac in.
