@@ -292,6 +292,12 @@ impl Boards {
     /// The document changed: the open page is told, or a closed board's drawing is updated.
     fn arrived(&self, id: Id, handle: &DocHandle) {
         let (elements, boxes, heads) = handle.with_document(|d| state_of(d));
+        // Captures on the board that this library hasn't got are written first, so the board's
+        // cards find them.
+        let carried = handle.with_document(|d| super::captures::all(&*d));
+        if let Err(e) = super::captures::receive(&self.lib, &handle.url().to_string(), carried) {
+            log::warn!("captures from a shared board weren’t written: {e}");
+        }
         if self.open.lock().unwrap().contains(&id) {
             (self.emit)("sharing.board", json!({ "id": id.to_string(), "elements": elements, "boxes": boxes, "heads": heads }));
         } else if let Err(e) = self.write_file(id, &elements, &boxes) {
@@ -329,6 +335,8 @@ impl Boards {
             self.follow(id, url.clone());
             return Some(SharedBoard { link: link_of(&url), elements: vec![], boxes: HashMap::new(), heads: vec![] });
         };
+        // Captures on a board shared before they travelled go across when it is opened here.
+        self.carry(&handle);
         let (elements, boxes, heads) = handle.with_document(|d| state_of(d));
         Some(SharedBoard { link: link_of(&url), elements, boxes, heads })
     }
@@ -355,6 +363,7 @@ impl Boards {
             let w = self.lib.write();
             save::set_fields(&w, id, None, &[(DOC.to_string(), Some(FmValue::Str(url.to_string())))])?;
         }
+        self.carry(&handle);
         self.handles.lock().unwrap().insert(id, handle);
         self.follow(id, url.clone());
         Ok(SharedBoard { link: link_of(&url), elements: vec![], boxes: HashMap::new(), heads: vec![] })
@@ -418,7 +427,25 @@ impl Boards {
         let Some(handle) = self.handles.lock().unwrap().get(&id).cloned() else { return Ok(heads.to_vec()) };
         let heads: Vec<ChangeHash> = heads.iter().filter_map(|h| ChangeHash::from_str(h).ok()).collect();
         let mine = handle.with_document(|d| push_at(d, elements, &heads))?;
+        self.carry(&handle);
         Ok(mine.iter().map(ToString::to_string).collect())
+    }
+
+    /// Puts into the document the captures the board refers to that it doesn't hold yet.
+    fn carry(&self, handle: &DocHandle) {
+        let (elements, boxes) = handle.with_document(|d| read_doc(&*d));
+        let held = handle.with_document(|d| super::captures::held(&*d));
+        let new: Vec<_> = super::captures::referenced(&elements, &boxes).into_iter()
+            .filter(|id| !held.contains(id))
+            .filter_map(|id| super::captures::carried(&self.lib, id).map(|c| (id, c)))
+            .collect();
+        if new.is_empty() {
+            return;
+        }
+        let done = handle.with_document(|d| d.transact(|tx| new.iter().try_for_each(|(id, c)| super::captures::put(tx, *id, c))).map(|_| ()));
+        if let Err(e) = done {
+            log::warn!("captures weren’t put on a shared board: {:?}", e.error);
+        }
     }
 
     /// Where this person's pointer is on a shared board (and who they are), to colleagues there.

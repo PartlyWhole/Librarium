@@ -31,7 +31,8 @@ src-tauri/src/            the backend: one crate, one module per concern
   jobs.rs                 background work that resumes after a restart
   settings.rs             settings.json and drafts in app data
   sharing/                the connection to the sync server (samod), its status, shared boards
-                          (their Automerge documents, merges, pointers), and the shared folder
+                          (their Automerge documents, merges, pointers, and the captures that
+                          travel with them: captures.rs), and the shared folder
                           (folder.rs: runs and sets up the bundled Syncthing through its API),
                           and setting up the user's server over SSH (server.rs)
   dataset.rs              a database downloaded once when asked: its download, check and opening
