@@ -4,6 +4,7 @@
  * that isn't a note (or a note over 3000 words) goes to its place instead.
  */
 import { h } from "../../ui/dom";
+import { onScreenX, onScreenY } from "./pages";
 
 /** Whether a link is a note's number: marked as one, or a short mark (1, [2], *, †, a). */
 export function isNoteRef(a: HTMLAnchorElement): boolean {
@@ -21,7 +22,9 @@ export function nearNoteRef(doc: Document, x: number, y: number, reach = 12): HT
   let bestD = reach;
   for (const a of doc.querySelectorAll<HTMLAnchorElement>("a[href]")) {
     if (!isNoteRef(a)) continue;
-    for (const r of a.getClientRects()) {
+    for (const m of a.getClientRects()) {
+      // The click is in screen pixels; the mark's box in the page's own (possibly zoomed) units.
+      const r = { left: onScreenX(doc, m.left), right: onScreenX(doc, m.right), top: onScreenY(doc, m.top), bottom: onScreenY(doc, m.bottom) };
       const d = Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom));
       if (d <= bestD) ((bestD = d), (best = a));
     }
