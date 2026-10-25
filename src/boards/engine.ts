@@ -127,15 +127,19 @@ export interface BoardEngine {
   setShared(on: boolean): void;
   /** Tells `to` where the pointer is on the drawing (in its coordinates), and when it is pressed
    * or let go; `undefined` stops. */
-  followPointer(to: ((p: { x: number; y: number; button: "down" | "up" }) => void) | undefined): void;
+  followPointer(to: ((p: { x: number; y: number; button: "down" | "up"; tool: PointerTool }) => void) | undefined): void;
   destroy(): void;
 }
 
-/** A colleague on a shared board: where their pointer is, and who they are. */
+/** Excalidraw's pointer, or its laser (a trail colleagues see while the button is down). */
+export type PointerTool = "pointer" | "laser";
+
+/** A colleague on a shared board: where their pointer is, which tool it is, and who they are. */
 export interface Peer {
   x: number;
   y: number;
   button: "down" | "up";
+  tool: PointerTool;
   name: string;
   color: string;
 }
@@ -206,7 +210,7 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
   /** Whether the board is shared (its text boxes' words are then no steps to undo). */
   let shared = false;
   /** Who is told where the pointer is (a shared board). */
-  let pointerTo: ((p: { x: number; y: number; button: "down" | "up" }) => void) | undefined;
+  let pointerTo: ((p: { x: number; y: number; button: "down" | "up"; tool: PointerTool }) => void) | undefined;
 
   const onChange = (elements: Parameters<typeof getSceneVersion>[0], state: AppState) => {
     keepLinks(state);
@@ -240,7 +244,7 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
         viewModeEnabled: o.readOnly,
         aiEnabled: false,
         onChange,
-        onPointerUpdate: (p: { pointer: { x: number; y: number }; button: "down" | "up" }) => pointerTo?.({ x: p.pointer.x, y: p.pointer.y, button: p.button }),
+        onPointerUpdate: (p: { pointer: { x: number; y: number; tool: PointerTool }; button: "down" | "up" }) => pointerTo?.({ x: p.pointer.x, y: p.pointer.y, button: p.button, tool: p.pointer.tool }),
         onLinkOpen: (element: { id: string; link: string | null; customData?: unknown }, event: CustomEvent<{ nativeEvent: MouseEvent | { metaKey?: boolean; clientX?: number; clientY?: number } }>) => {
           if (!element.link) return;
           event.preventDefault();
@@ -781,7 +785,7 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
       pointerTo = to;
     },
     setPeers(peers) {
-      const collaborators = new Map([...peers].map(([id, p]) => [id, { pointer: { x: p.x, y: p.y, tool: "pointer" }, button: p.button, username: p.name, color: { background: p.color, stroke: p.color }, id }]));
+      const collaborators = new Map([...peers].map(([id, p]) => [id, { pointer: { x: p.x, y: p.y, tool: p.tool }, button: p.button, username: p.name, color: { background: p.color, stroke: p.color }, id }]));
       api?.updateScene({ collaborators: collaborators as never });
     },
     undo: () => key(false),

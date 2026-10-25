@@ -819,7 +819,7 @@ library; it works offline and catches up when the connection is back.
   - Of two changes to one element at once, Excalidraw's rule keeps one, the same everywhere
     (the newer version). Text boxes merge by character: two people typing in one box both keep
     their words, offline too.
-  - Colleagues' pointers show with their names.
+  - Colleagues' pointers show with their names, and their laser pointer's trail as they draw it.
   - ⌘Z undoes only your own steps. On a shared board, a text box's words aren't canvas steps
     (undoing one would put back the whole earlier text over colleagues' words); while writing
     in a box, ⌘Z undoes what you typed there.
