@@ -14,7 +14,11 @@ import type { SharedBoard } from "../types";
 import type { BoardEngine, Peer } from "./engine";
 
 const PUSH_MS = 120;
-const POINTER_MS = 60;
+/** Pointers are sent at most this often (as excalidraw.com does). */
+const POINTER_MS = 33;
+/** A colleague's pointer glides to where it was last reported, closing most of the gap in about
+ * this long, so updates arriving unevenly over the network don't show as jumps. */
+const GLIDE_MS = 45;
 /** A colleague who hasn't moved for this long is taken off the board. */
 const GONE_MS = 20_000;
 const COLORS = ["#e8590c", "#1971c2", "#2f9e44", "#9c36b5", "#c2255c", "#0c8599", "#f08c00"];
@@ -86,7 +90,8 @@ export function liveBoard(id: string, engine: BoardEngine, drew: () => void): Li
   });
 
   // ---- Pointers ----
-  const peers = new Map<string, Peer & { at: number }>();
+  /** Each colleague: where their pointer is drawn (x, y), and where it was last reported. */
+  const peers = new Map<string, Peer & { at: number; toX: number; toY: number }>();
   const colorOf = (peer: string) => COLORS[[...peer].reduce((n, c) => n + c.charCodeAt(0), 0) % COLORS.length]!;
   const showPeers = () => {
     const now = Date.now();
@@ -94,10 +99,30 @@ export function liveBoard(id: string, engine: BoardEngine, drew: () => void): Li
     here.set(peers.size);
     engine.setPeers(new Map([...peers].map(([k, p]) => [k, p])));
   };
+  // Pointers glide frame by frame while any is short of where it was reported.
+  let frame = 0;
+  let lastFrame = 0;
+  const glide = (t: number) => {
+    const k = 1 - Math.exp(-(t - (lastFrame || t - 16)) / GLIDE_MS);
+    lastFrame = t;
+    let moving = false;
+    for (const p of peers.values()) {
+      p.x += (p.toX - p.x) * k;
+      p.y += (p.toY - p.y) * k;
+      if (Math.abs(p.toX - p.x) > 0.5 || Math.abs(p.toY - p.y) > 0.5) moving = true;
+      else ((p.x = p.toX), (p.y = p.toY));
+    }
+    showPeers();
+    frame = moving && !stopped ? requestAnimationFrame(glide) : 0;
+  };
   const offPresence = on<{ board: string; peer: string; name: string | null; x: number; y: number; button: "down" | "up" }>("sharing.presence", (p) => {
     if (p.board !== id || stopped) return;
-    peers.set(p.peer, { x: p.x, y: p.y, button: p.button, name: p.name || "Colleague", color: colorOf(p.peer), at: Date.now() });
-    showPeers();
+    const known = peers.get(p.peer);
+    // A first report, or a jump across the board, shows at once.
+    const far = !known || Math.hypot(p.x - known.toX, p.y - known.toY) > 2000;
+    peers.set(p.peer, { x: far ? p.x : known!.x, y: far ? p.y : known!.y, toX: p.x, toY: p.y, button: p.button, name: p.name || "Colleague", color: colorOf(p.peer), at: Date.now() });
+    if (far) showPeers();
+    if (!frame) ((lastFrame = 0), (frame = requestAnimationFrame(glide)));
   });
   const sweep = setInterval(showPeers, 5000);
   let lastPointer = 0;
@@ -129,6 +154,7 @@ export function liveBoard(id: string, engine: BoardEngine, drew: () => void): Li
       clearTimeout(pushTimer);
       clearTimeout(pointerTimer);
       clearInterval(sweep);
+      cancelAnimationFrame(frame);
       offArrived();
       offPresence();
       engine.followPointer(undefined);
