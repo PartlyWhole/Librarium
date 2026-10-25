@@ -11,7 +11,7 @@
 import { call, on } from "../backend";
 import { signal, type Signal } from "../ui/signal";
 import type { SharedBoard } from "../types";
-import type { BoardEngine, Peer } from "./engine";
+import type { BoardEngine, Peer, PointerTool } from "./engine";
 
 const PUSH_MS = 120;
 /** Pointers are sent at most this often (as excalidraw.com does). */
@@ -115,19 +115,19 @@ export function liveBoard(id: string, engine: BoardEngine, drew: () => void): Li
     showPeers();
     frame = moving && !stopped ? requestAnimationFrame(glide) : 0;
   };
-  const offPresence = on<{ board: string; peer: string; name: string | null; x: number; y: number; button: "down" | "up" }>("sharing.presence", (p) => {
+  const offPresence = on<{ board: string; peer: string; name: string | null; x: number; y: number; button: "down" | "up"; tool?: PointerTool }>("sharing.presence", (p) => {
     if (p.board !== id || stopped) return;
     const known = peers.get(p.peer);
     // A first report, or a jump across the board, shows at once.
     const far = !known || Math.hypot(p.x - known.toX, p.y - known.toY) > 2000;
-    peers.set(p.peer, { x: far ? p.x : known!.x, y: far ? p.y : known!.y, toX: p.x, toY: p.y, button: p.button, name: p.name || "Colleague", color: colorOf(p.peer), at: Date.now() });
+    peers.set(p.peer, { x: far ? p.x : known!.x, y: far ? p.y : known!.y, toX: p.x, toY: p.y, button: p.button, tool: p.tool === "laser" ? "laser" : "pointer", name: p.name || "Colleague", color: colorOf(p.peer), at: Date.now() });
     if (far) showPeers();
     if (!frame) ((lastFrame = 0), (frame = requestAnimationFrame(glide)));
   });
   const sweep = setInterval(showPeers, 5000);
   let lastPointer = 0;
   let pointerTimer: ReturnType<typeof setTimeout> | undefined;
-  const sendPointer = (p: { x: number; y: number; button: "down" | "up" }) => {
+  const sendPointer = (p: { x: number; y: number; button: "down" | "up"; tool: PointerTool }) => {
     if (!link.peek()) return;
     clearTimeout(pointerTimer);
     const wait = POINTER_MS - (Date.now() - lastPointer);
