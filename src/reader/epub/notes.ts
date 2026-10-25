@@ -32,14 +32,27 @@ export function nearNoteRef(doc: Document, x: number, y: number, reach = 12): HT
 /**
  * The note an anchor points at, given the element it targets: that element if it holds words,
  * else (an empty anchor, `<a id="n1"/>`) the paragraph it begins. Null when it isn't a note:
- * nothing there, the reference itself, or a whole section.
+ * nothing there, the reference itself, a whole section, or the text a note's own number goes
+ * back to.
  */
 export function noteAt(target: Element | null, from: HTMLAnchorElement): Element | null {
   if (!target) return null;
   const note = (target.textContent ?? "").trim().length > 4 ? target : (target.closest("p, li, aside, div, section, dd, blockquote") ?? target.parentElement);
   const words = (note?.textContent ?? "").trim();
-  if (!note || !words || note.contains(from) || words.length > 3000) return null;
+  if (!note || !words || note.contains(from) || words.length > 3000 || goesBack(from, note)) return null;
   return note;
+}
+
+/**
+ * Whether a link is a note's own number, leading back to the text: it begins its paragraph, and
+ * the paragraph it points at links back to this one.
+ */
+function goesBack(from: HTMLAnchorElement, to: Element): boolean {
+  const block = from.closest("p, li, dd, aside, div");
+  if (!block || !(block.textContent ?? "").trim().startsWith((from.textContent ?? "").trim())) return false;
+  const ids = new Set([block, ...block.querySelectorAll("[id]")].map((e) => e.id).filter(Boolean));
+  for (let e = block.parentElement; e; e = e.parentElement) if (e.id) ids.add(e.id);
+  return [...to.querySelectorAll("a[href*='#']")].some((a) => ids.has(decodeURIComponent(a.getAttribute("href")!.split("#")[1]!)));
 }
 
 const KEEP: Record<string, string> = { em: "em", i: "em", strong: "strong", b: "strong", sup: "sup", sub: "sub", br: "br", code: "code", small: "small" };
