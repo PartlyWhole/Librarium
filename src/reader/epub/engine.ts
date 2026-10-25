@@ -19,7 +19,7 @@ import { snapToWords } from "../marks";
 import type { Engine, ReaderView } from "../types";
 import { bookChrome } from "./chrome";
 import { editBookParts } from "./edit";
-import { isNoteRef, noteAt, notePopover } from "./notes";
+import { isNoteRef, nearNoteRef, noteAt, notePopover } from "./notes";
 import { HIGHLIGHT_CSS, laidOut, onScreenX, onScreenY, pictureIn, pictureToPng } from "./pages";
 import { bookPlaces, hrefOf, pathOf, type BookView, type Frame } from "./places";
 import { themeOf, THEMES, toPreferences } from "./settings";
@@ -41,7 +41,9 @@ export const openEpub: Engine = async (host, src, events) => {
   const head = h("div", { class: "epub-head", "aria-hidden": "true" });
   const left = h("span");
   const pct = h("span", { class: "epub-pct" });
-  const foot = h("div", { class: "epub-foot", "aria-live": "polite" }, h("span"), left, pct);
+  /** Back to where you were reading, after a link took you elsewhere in the book. */
+  const back = h("span", { class: "epub-back" });
+  const foot = h("div", { class: "epub-foot", "aria-live": "polite" }, back, left, pct);
   const prevBtn = h("button", { class: "epub-arrow prev", type: "button", title: "Previous page (←)", "aria-label": "Previous page", onclick: () => void turner.flip("left") }, "‹");
   const nextBtn = h("button", { class: "epub-arrow next", type: "button", title: "Next page (→)", "aria-label": "Next page", onclick: () => void turner.flip("right") }, "›");
   const frame = h("div", { class: "epub-container", tabindex: "0", "aria-label": `${src.title}, book` }, head, stage, foot, prevBtn, nextBtn);
@@ -132,7 +134,9 @@ export const openEpub: Engine = async (host, src, events) => {
     // Not to Readium as well (it would follow the link a second time).
     doc.addEventListener("pointerup", (e) => clickedLink(e) && still(e) && e.stopImmediatePropagation(), true);
     doc.addEventListener("click", (e) => {
-      const a = clickedLink(e);
+      // A click just beside a footnote number (a few pixels wide) opens it, as in Apple Books.
+      const collapsed = doc.getSelection()?.isCollapsed !== false;
+      const a = clickedLink(e) ?? (e.button === 0 && still(e) && collapsed ? nearNoteRef(doc, e.clientX, e.clientY) : null);
       if (!a || e.button !== 0) return;
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -239,7 +243,7 @@ export const openEpub: Engine = async (host, src, events) => {
     const to = resolveLink(a, doc);
     if (!to) return;
     if ("web" in to) return void document.dispatchEvent(new CustomEvent("open-link", { detail: { url: to.web, text: a.textContent ?? "" } }));
-    const go = () => goHref(to.frag ? `${to.path}#${to.frag}` : to.path);
+    const go = () => (keepPlace(), goHref(to.frag ? `${to.path}#${to.frag}` : to.path));
     if (!to.frag || !isNoteRef(a)) return go();
     void noteTarget(to.path, to.frag).then((t) => {
       const note = noteAt(t, a);
@@ -260,6 +264,18 @@ export const openEpub: Engine = async (host, src, events) => {
     if (!link) return null;
     const d = (await book.publication.get(link).readAsXML()) as Document | undefined;
     return d?.getElementById(frag) ?? null;
+  }
+  /** Remembers where you are before a link takes you elsewhere: Back returns there. */
+  function keepPlace() {
+    const from = current;
+    if (!from) return;
+    const page = from.locations.position;
+    const label = page ? `Back to page ${page}` : `Back to “${tocFor(from)?.title ?? "where you were"}”`;
+    const btn = h("button", { type: "button", class: "epub-back-button", title: "Back to where you were reading", onclick: () => {
+      back.replaceChildren();
+      navi.go(from, false, () => frame.focus());
+    } }, `‹ ${label}`);
+    back.replaceChildren(btn);
   }
   function goHref(href: string) {
     const [path, frag] = href.split("#");

@@ -13,6 +13,23 @@ export function isNoteRef(a: HTMLAnchorElement): boolean {
 }
 
 /**
+ * The note reference nearest a click that hit none, within `reach` pixels: footnote numbers are
+ * a few pixels wide, and a click just beside one means it.
+ */
+export function nearNoteRef(doc: Document, x: number, y: number, reach = 12): HTMLAnchorElement | null {
+  let best: HTMLAnchorElement | null = null;
+  let bestD = reach;
+  for (const a of doc.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+    if (!isNoteRef(a)) continue;
+    for (const r of a.getClientRects()) {
+      const d = Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom));
+      if (d <= bestD) ((bestD = d), (best = a));
+    }
+  }
+  return best;
+}
+
+/**
  * The note an anchor points at, given the element it targets: that element if it holds words,
  * else (an empty anchor, `<a id="n1"/>`) the paragraph it begins. Null when it isn't a note:
  * nothing there, the reference itself, or a whole section.
