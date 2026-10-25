@@ -89,6 +89,9 @@ body.dragging-handle { user-select: none; -webkit-user-select: none; }
 .epub-head, .epub-foot { flex: none; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--book-muted, var(--muted)); letter-spacing: 0.02em; user-select: none; -webkit-user-select: none; }
 .epub-head { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 64px; }
 .epub-foot { display: grid; grid-template-columns: 1fr auto 1fr; padding: 0 20px; }
+.epub-back { justify-self: start; }
+.epub-back-button { border: 0; border-radius: 999px; padding: 3px 10px; background: var(--book-hover, var(--hover)); color: inherit; font: inherit; cursor: pointer; }
+.epub-back-button:hover { color: var(--book-ink, var(--ink)); }
 .epub-pct { justify-self: end; font-variant-numeric: tabular-nums; }
 .epub-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 5; width: 36px; height: 72px; border: 0; border-radius: 10px; background: transparent; color: var(--book-muted, var(--muted)); font-size: 34px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 0.25s; }
 .epub-arrow.prev { left: 6px; }
