@@ -4,7 +4,7 @@
  * changes made elsewhere, ⌘Z through the board's place, and the board's own commands (link,
  * put on the board, export).
  */
-import { BackendError, call, onFileDrop, pickSavePath } from "../backend";
+import { BackendError, call, onFileDrop, pickFiles, pickSavePath } from "../backend";
 import { folderOf, spaceFor } from "../app/folders";
 import { moveInto, moveTo } from "../app/folders/ops";
 import { sharedFolderOf, sharedFolders } from "../app/folders/spaces";
@@ -15,7 +15,7 @@ import { pref } from "../app/prefs";
 import { beforeQuit } from "../app/quit";
 import { canOpen, getRecord, isArchived, kindName, listRecords, openRecord, putRecord, recordIcon, records } from "../app/records";
 import { router } from "../app/router";
-import { ATTACHMENTS, base64, isImagePath, MAX_PASTE, OWN_DROPS, pastedName } from "../library/files";
+import { ATTACHMENTS, base64, IMAGE_EXTENSIONS, isImagePath, MAX_PASTE, OWN_DROPS, pastedName } from "../library/files";
 import { showStatus } from "../app/status";
 import { attachEditor, done, recordScope, takeText, typed, within } from "../app/undo";
 import { comboboxDialog } from "../ui/combobox";
@@ -39,7 +39,7 @@ import { contextMenu } from "../ui/menu";
 import { renderPicker } from "../captures/picker";
 import { renderCard } from "./cards";
 import { appTheme, isPicture, loadEngine, pictureData, portable } from "./shared";
-import { FolderInput, NotebookPen, Quote } from "lucide";
+import { FolderInput, ImagePlus, NotebookPen, Quote } from "lucide";
 
 const SAVE_MS = 1000;
 const DRAFT_MS = 300;
@@ -54,7 +54,7 @@ const PANEL_USUAL = 302;
 const panelWidth = pref("boards.panelWidth", PANEL_USUAL);
 
 /** What the board's commands act on, for each board on screen. */
-const shownBoards = new Map<string, { linkTo(): void; insert(): void; exportAs(as: ExportAs): Promise<void>; share(): Promise<void>; unshare(): Promise<void>; shared(): boolean }>();
+const shownBoards = new Map<string, { linkTo(): void; insert(): void; pictures(): void; exportAs(as: ExportAs): Promise<void>; share(): Promise<void>; unshare(): Promise<void>; shared(): boolean }>();
 
 /** The board in the tab shown, if it is one. */
 export function shownBoard() {
@@ -262,7 +262,8 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     onPasteLinks: (text, at) => pasteLinks(text, at),
     renderTextBox: (host, box) => textBox(host, box),
     // A text box, for writing with links and embeds as in a note (not on read-only boards).
-    buttons: (bar) => bar.append(...(readOnly ? [] : [h("button", { type: "button", class: "board-full-button", "aria-label": "Text box", title: "Text box: write as in a note, with [[ links and ![[ embeds", onclick: () => engine?.addTextBox() }, icon(NotebookPen, 18))]), full.button),
+    buttons: (bar) => bar.append(...(readOnly ? [] : [h("button", { type: "button", class: "board-full-button", "aria-label": "Text box", title: "Text box: write as in a note, with [[ links and ![[ embeds", onclick: () => engine?.addTextBox() }, icon(NotebookPen, 18)),
+      h("button", { type: "button", class: "board-full-button", "aria-label": "Pictures", title: "Pictures: put pictures from your Mac on the board (they go to Library ▸ Attachments)", onclick: () => void addPictures() }, icon(ImagePlus, 18))]), full.button),
     sidebar: {
       title: "Captures and Library",
       icon: () => icon(Quote, 20),
@@ -430,7 +431,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     insertRecords(ids);
   };
   /** Files dropped from Finder: pictures go to Attachments, documents to the Library's top. */
-  const dropped = async (paths: string[], at: { x: number; y: number }) => {
+  const dropped = async (paths: string[], at?: { x: number; y: number }) => {
     const ids: string[] = [];
     for (const [list, folder] of [[paths.filter(isImagePath), ATTACHMENTS], [paths.filter((p) => !isImagePath(p)), null]] as const) {
       if (!list.length) continue;
@@ -443,6 +444,12 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
       }
     }
     insertRecords(ids, at);
+  };
+  /** Pictures picked from the Mac: as if dropped, in the middle of the view. */
+  const addPictures = async () => {
+    if (readOnly) return;
+    const paths = await pickFiles("Put pictures on the board", IMAGE_EXTENSIONS, "Pictures");
+    if (paths.length) await dropped(paths);
   };
   cleanup.push(onFileDrop((paths, at) => {
     const over = document.elementFromPoint(at.x, at.y);
@@ -520,7 +527,7 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
       toast(errorText(e));
     }
   }
-  shownBoards.set(id, { linkTo, insert: () => pickRecord(id, "Put on the board", (to) => insertRecords([to.id])), exportAs, share, unshare, shared: () => !!live?.link.peek() });
+  shownBoards.set(id, { linkTo, insert: () => pickRecord(id, "Put on the board", (to) => insertRecords([to.id])), pictures: () => void addPictures(), exportAs, share, unshare, shared: () => !!live?.link.peek() });
   cleanup.push(() => shownBoards.delete(id));
 
   // ---- Changes made elsewhere ----
