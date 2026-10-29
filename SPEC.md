@@ -110,7 +110,14 @@ One window. Only regions scroll, never the window.
   place). Tabs are saved and restored.
 - **No duplicates.** Opening something already in another tab switches to it, at the requested
   place.
-- **New tab.** ⌘-click (links, embeds, cards, sidebar rows), middle-click, or "Open in new tab".
+- **Where things open.**
+  - In a new tab: what is opened from the sidebar (a click or Enter on a note, board or item),
+    and a new note or board.
+  - In the same tab: links, embeds and cards within a page, and the ribbon's pages. A sidebar
+    folder goes to the same tab when it already shows that section's folders.
+  - In a new tab when asked: ⌘-click (links, embeds, cards), middle-click (these and sidebar
+    rows), or "Open in new tab".
+  - A tab showing the New tab page is filled instead of another being opened.
 - **Closing.**
   - ⌘W closes a tab. The last one leaves a **New tab** page: "Open a note or library item…", the
     ribbon pages, and "Opened recently" (10).
@@ -123,8 +130,8 @@ One window. Only regions scroll, never the window.
 ## Notes and the editor
 
 - **Creating and naming.**
-  - ⌘N makes a note beside the open note, or in the Notes folder being viewed, and focuses its
-    title.
+  - ⌘N makes a note beside the open note, or in the Notes folder being viewed, and opens it in a
+    new tab with its title focused.
   - The title renames on blur, and the file name follows. Enter goes to the text; Escape reverts.
   - The header has **Move to folder**.
 - **Editor.** CodeMirror 6 with Markdown live preview: marks are hidden except on the construct
@@ -605,7 +612,7 @@ CC-licensed).
 Boards use Excalidraw. React is used only here.
 
 - **Creating.** New board (⌥⌘N) is made beside the current note or board, or in the viewed Notes
-  folder, with its title focused. Boards are listed with notes.
+  folder, and opens in a new tab with its title focused. Boards are listed with notes.
 - **The page.**
   - A title (renaming is undoable) and Move to folder.
   - The canvas follows the app's light or dark look.
