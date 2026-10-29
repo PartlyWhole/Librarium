@@ -1,5 +1,6 @@
 /**
- * Lists, as in Obsidian: Tab and ⇧Tab (and ⌘] and ⌘[), on any line of a list item, move it
+ * Lists, as in Obsidian: Tab and ⇧Tab (and ⌘] and ⌘[), on any line of a list item (or a quote in
+ * or after a list), move it
  * with everything under it, by the width of its parent's marker (so items under "1." line up
  * with its text); ⌥↑ and ⌥↓ move it past the item before or after it, also with everything
  * under it; numbered lists are renumbered after each. Enter on an empty item ends the list (or, nested, moves it out a level), at the
@@ -162,6 +163,52 @@ const indentListItem: Command = (view) => {
   }
   if (changes.length) move(view, changes);
   return true;
+};
+
+/** The quote a line is in, when it isn't an item's line: the outermost of quotes in quotes. */
+function quoteOn(state: EditorState, lineNo: number): SyntaxNode | null {
+  if (itemOn(state, lineNo)) return null;
+  const line = state.doc.line(lineNo);
+  const text = /\S/.exec(line.text);
+  if (!text) return null;
+  let quote: SyntaxNode | null = null;
+  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(line.from + text.index, 1); n && n.name !== "ListItem"; n = n.parent) {
+    if (n.name === "Blockquote") quote = n;
+  }
+  return quote;
+}
+
+/**
+ * Tab and ⇧Tab on a quote (any of its lines): it moves as a whole, under the item before it, to
+ * that item's text, or out of the item it is under, to that item's level. A quote not in or
+ * after a list is left to the usual Tab.
+ */
+const moveQuote = (out: boolean): Command => (view) => {
+  const { state } = view;
+  const quotes: SyntaxNode[] = [];
+  for (const r of state.selection.ranges) {
+    for (let l = state.doc.lineAt(r.from).number; l <= state.doc.lineAt(r.to).number; l++) {
+      const q = quoteOn(state, l);
+      if (q && !quotes.some((o) => o.from === q.from)) quotes.push(q);
+    }
+  }
+  const changes: ChangeSpec[] = [];
+  let handled = false;
+  for (const q of quotes) {
+    const at = columnsOf(unquoted(state, state.doc.lineAt(q.from).number, quoteDepth(q)));
+    let to: number | null = null;
+    if (out) {
+      if (q.parent?.name === "ListItem") to = indentOf(state, q.parent);
+    } else {
+      const last = isList(q.prevSibling) ? q.prevSibling!.lastChild : null;
+      if (last?.name === "ListItem") to = contentColumn(state, last);
+    }
+    if (to === null && q.parent?.name !== "ListItem") continue;
+    handled = true;
+    if (to !== null && (out ? to < at : to > at)) shift(state, q, to - at, changes);
+  }
+  if (changes.length) move(view, changes);
+  return handled;
 };
 
 /** ⇧Tab on a list item: it (and what's under it) moves out, to its parent's level. */
@@ -590,14 +637,14 @@ export const markupKeymap = Prec.high(
     { key: "Shift-Enter", run: continueItem },
     { key: "Backspace", run: (v) => deleteTaskBox(v) || renumbered(deleteMarkupBackward)(v) },
     // ⌘] and ⌘[ as Tab and ⇧Tab in a list; elsewhere they indent the lines as ever.
-    { key: "Mod-]", run: indentListItem },
-    { key: "Mod-[", run: outdentListItem },
+    { key: "Mod-]", run: (v) => moveQuote(false)(v) || indentListItem(v) },
+    { key: "Mod-[", run: (v) => moveQuote(true)(v) || outdentListItem(v) },
     { key: "Alt-ArrowUp", run: moveItem(false) },
     { key: "Alt-ArrowDown", run: moveItem(true) },
   ]),
 );
 
 export const listKeymap = [
-  { key: "Tab", run: indentListItem },
-  { key: "Shift-Tab", run: outdentListItem },
+  { key: "Tab", run: (v: EditorView) => moveQuote(false)(v) || indentListItem(v) },
+  { key: "Shift-Tab", run: (v: EditorView) => moveQuote(true)(v) || outdentListItem(v) },
 ];
