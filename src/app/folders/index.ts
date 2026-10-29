@@ -54,7 +54,8 @@ export function spaceTree(sp: Space): TreeNode[] {
           label: e.name,
           icon: recordIcon(e.record),
           current: r.params.id === e.id,
-          onActivate: () => openRecord(e.id),
+          // Opened from the sidebar, it gets a tab of its own; links within a page stay in it.
+          onActivate: () => openRecord(e.id, {}, { newTab: true }),
           onOpenNew: () => openRecord(e.id, {}, { newTab: true }),
           drag: () => ({ records: [e.id], folders: [], kind: sp.kind }),
           // Dropped above or below it, things are arranged beside it.
@@ -74,7 +75,8 @@ export function spaceTree(sp: Space): TreeNode[] {
         icon: sharedFolderOf(sp.kind, f) === f ? FolderSync : at === f ? FolderOpen : Folder,
         current: at === f,
         children: entries(f),
-        onActivate: () => goFolder(sp, f),
+        // A tab already showing this space's folders goes to this one.
+        onActivate: () => goFolder(sp, f, router.current.peek().page !== sp.page),
         onOpenNew: () => goFolder(sp, f, true),
         onContext: (p) => showFolderMenu(sp, f, p),
         drag: () => ({ records: [], folders: [f], kind: sp.kind }),

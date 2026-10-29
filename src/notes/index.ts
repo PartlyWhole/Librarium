@@ -42,7 +42,7 @@ async function newNote(where?: { folder: string }): Promise<void> {
   try {
     const w = await call<Written>("notes.create", { folder: folder || null });
     putRecord(w.info);
-    router.go("note", { id: w.info.id, focus: "title" });
+    router.go("note", { id: w.info.id, focus: "title" }, { newTab: true });
   } catch (e) {
     toast(errorText(e));
   }

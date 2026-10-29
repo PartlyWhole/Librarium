@@ -49,6 +49,7 @@ const routeOf = (t: Tab): Route => t.stack[t.index] ?? NOWHERE;
 interface GoOptions {
   /** Replaces the current entry instead of adding one. */
   replace?: boolean;
+  /** Opens it in a new tab, unless this tab is empty (the New tab page), which it then fills. */
   newTab?: boolean;
   /** Asks for the route even if it is shown already (the page is told again). */
   again?: boolean;
@@ -83,6 +84,8 @@ class Router {
       this.at = other;
       return this.sync();
     }
+    // An empty tab is filled rather than another one opened.
+    if (opts.newTab && (this.tab.index < 0 || routeOf(this.tab).page === "newtab")) opts = { ...opts, newTab: false, replace: true };
     if (opts.newTab) {
       this.list.splice(this.at + 1, 0, newTab([r]));
       this.at += 1;

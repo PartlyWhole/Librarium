@@ -31,7 +31,7 @@ async function newBoard(where?: { folder: string }): Promise<void> {
   try {
     const w = await call<Written>("boards.create", { title: null, folder: folder || null });
     putRecord(w.info);
-    router.go("board", { id: w.info.id, focus: "title" });
+    router.go("board", { id: w.info.id, focus: "title" }, { newTab: true });
   } catch (e) {
     toast(errorText(e));
   }
