@@ -247,7 +247,8 @@ function mount(host: HTMLElement, params: Record<string, string>, ctx: PageConte
       h("button", { class: "link-button", onclick: () => compareCopies(info.conflicts, t.body) }, "Compare")));
   }
   if (recovered) {
-    const bar = h("p", { class: "notice" }, "Text you hadn’t saved was recovered. ", h("button", { class: "link-button", onclick: () => void discard() }, "Discard it"));
+    const bar = h("p", { class: "notice" }, "Text you hadn’t saved was recovered. ", h("button", { class: "link-button", onclick: () => void discard() }, "Discard it"), " · ",
+      h("button", { class: "link-button", onclick: () => bar.remove() }, "Keep it"));
     const discard = async () => {
       await call("drafts.discard", { id }).catch(() => {});
       replaceDoc(view, t.body);
