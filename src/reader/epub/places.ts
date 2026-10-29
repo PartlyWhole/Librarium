@@ -313,12 +313,15 @@ export function bookPlaces(b: BookView, text: () => Promise<Extracted | null>) {
     return !!range;
   }
 
-  /** The reference link beside an empty anchor (before or after it, past other empty anchors). */
+  /**
+   * The reference link right beside an empty anchor (before or after it, past other empty
+   * anchors, never past words: the next note's number can follow a few words on).
+   */
   function markBy(t: Element): Element | null {
-    for (const step of ["nextElementSibling", "previousElementSibling"] as const) {
-      for (let e = t[step]; e; e = e[step]) {
-        if (e.matches("a[href]") && (e.textContent ?? "").trim()) return e;
-        if ((e.textContent ?? "").trim()) break;
+    for (const step of ["nextSibling", "previousSibling"] as const) {
+      for (let n = t[step]; n; n = n[step]) {
+        if (n.nodeType === Node.ELEMENT_NODE && (n as Element).matches("a[href]") && (n.textContent ?? "").trim()) return n as Element;
+        if ((n.textContent ?? "").trim()) break;
       }
     }
     return null;
