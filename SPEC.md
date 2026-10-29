@@ -667,7 +667,10 @@ Boards use Excalidraw. React is used only here.
   - **Pasting** links and embeds (copied from a note or the Library): an embed on a line of its
     own becomes its card or picture, and other lines become words with each link written as its
     name, linked. Pasted into a text being written, they go in as their names, linked.
-  - Pictures are library items (pasted ones go to Attachments).
+  - **Pictures** are library items. The Pictures button at the canvas's top right (beside Text
+    box), or Edit ▸ Put pictures from your Mac on the board…, picks image files and puts them in
+    the middle of what is in view. Picked, pasted and dropped pictures go to Library ▸
+    Attachments.
   - A card's buttons work after selecting it and clicking again.
 - **Export.** PNG, SVG, or an Excalidraw file (with its pictures embedded). Cards are written out
   as boxes with words, and text boxes as texts of their words.

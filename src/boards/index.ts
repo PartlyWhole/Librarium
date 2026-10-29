@@ -60,6 +60,7 @@ async function openShared(): Promise<void> {
 defineAction({ id: "boards.new", title: "New board", keys: ["Mod+Alt+N"], reserved: true, when: isOpen, run: newBoard, menu: { name: "file", group: 0.5 }, icon: Shapes });
 defineAction({ id: "boards.linkTo", title: "Link to…", keys: ["Mod+Alt+K"], reserved: true, when: onBoard, run: () => shownBoard()?.linkTo(), menu: { name: "edit", group: 3.1, title: "Link to a note or item…" } });
 defineAction({ id: "boards.insert", title: "Put on the board…", keys: ["Mod+Alt+I"], reserved: true, when: onBoard, run: () => shownBoard()?.insert(), menu: { name: "edit", group: 3.2, title: "Put a capture, note or item on the board…" } });
+defineAction({ id: "boards.pictures", title: "Put pictures on the board…", when: onBoard, run: () => shownBoard()?.pictures(), menu: { name: "edit", group: 3.2, title: "Put pictures from your Mac on the board…" } });
 defineAction({ id: "boards.share", title: "Share Board…", when: () => !!shownBoard() && !shownBoard()!.shared(), run: () => void shownBoard()?.share(), menu: { name: "file", group: 2.9 } });
 defineAction({ id: "boards.unshare", title: "Stop Sharing This Board…", when: () => !!shownBoard()?.shared(), run: () => void shownBoard()?.unshare(), menu: { name: "file", group: 2.9 } });
 defineAction({ id: "boards.openShared", title: "Open Shared Board…", when: isOpen, run: () => void openShared(), menu: { name: "file", group: 0.5 } });

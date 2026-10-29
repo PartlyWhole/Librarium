@@ -113,10 +113,10 @@ export async function pickFolder(title: string): Promise<string | null> {
   return typeof r === "string" ? r : null;
 }
 
-/** Asks for files to add. */
-export async function pickFiles(title: string, extensions: string[]): Promise<string[]> {
+/** Asks for files to add (`kind` names them in the dialog's file type menu). */
+export async function pickFiles(title: string, extensions: string[], kind = "Library items"): Promise<string[]> {
   if (!inTauri) return [];
-  const r = await openDialog({ multiple: true, title, filters: [{ name: "Library items", extensions }] });
+  const r = await openDialog({ multiple: true, title, filters: [{ name: kind, extensions }] });
   return Array.isArray(r) ? r : typeof r === "string" ? [r] : [];
 }
 
