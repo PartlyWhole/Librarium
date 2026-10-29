@@ -427,6 +427,8 @@ dragged out for capture.
     Justify.
   - Reset. Fixed-layout books say they can't be restyled.
 - **Remembered.** Reading settings are per device, and each book reopens where it was left.
+- **Badly made pages** (broken XHTML, or a page that is only a picture's tag) are read as HTML,
+  as other readers do.
 - **Links.** Followed when the pointer is released within a few pixels; a drag still selects.
 - **Footnotes.**
   - A footnote reference opens a popover with the note (its back-link removed), plus

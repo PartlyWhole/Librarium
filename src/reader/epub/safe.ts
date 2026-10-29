@@ -57,11 +57,17 @@ export function addMeta(doc: Document, attrs: Record<string, string>): void {
   head.prepend(meta);
 }
 
-/** Parses a book page, falling back to HTML for broken XHTML (as readers do). */
+/**
+ * Parses a book page, falling back to HTML for broken XHTML (as readers do), and for XHTML
+ * without an XHTML `<html>` around it (a cover that is a bare `<img>`, say), which can't be
+ * shown or styled.
+ */
 export function parsePage(text: string, type: string): Document {
   const mime = type.split(";")[0]!.trim().toLowerCase();
   const doc = new DOMParser().parseFromString(text, mime as DOMParserSupportedType);
-  if (mime !== "text/html" && doc.querySelector("parsererror")) return new DOMParser().parseFromString(text, "text/html");
+  const root = doc.documentElement;
+  const unshowable = mime === "application/xhtml+xml" && !(root?.localName === "html" && root.namespaceURI === "http://www.w3.org/1999/xhtml");
+  if (mime !== "text/html" && (doc.querySelector("parsererror") || unshowable)) return new DOMParser().parseFromString(text, "text/html");
   return doc;
 }
 
