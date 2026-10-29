@@ -174,6 +174,9 @@ One window. Only regions scroll, never the window.
     item goes under the last item of a list just before (bullets after numbers). ⇧Tab takes it
     into its parent's list, with that list's marker; the items after it come under it. A first
     item, or a top-level one, stays.
+  - **A quote** (`>`) in or just after a list moves the same way, as a whole, from any of its
+    lines: Tab puts it under the item before it, at that item's text; ⇧Tab takes it out of the
+    item it is under, to that item's level. Other quotes take Tab as other lines do.
   - **Enter** continues the list with the same marker (a task's box empty). On an empty item it
     ends the list (top level) or makes it an item of its parent's list. At the start of an item's
     text it opens an empty item above. At the end of an item with items under it, it opens the
