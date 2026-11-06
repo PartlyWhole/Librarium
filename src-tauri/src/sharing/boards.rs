@@ -293,12 +293,14 @@ impl Boards {
     /// The document changed: the open page is told, or a closed board's drawing is updated.
     fn arrived(&self, id: Id, handle: &DocHandle) {
         let (elements, boxes, heads) = handle.with_document(|d| state_of(d));
-        // Captures on the board that this library hasn't got are written first, so the board's
-        // cards find them.
+        // Captures and pictures on the board that this library hasn't got are written first, so
+        // the board's cards and pictures find them.
         let carried = handle.with_document(|d| super::captures::all(&*d));
         if let Err(e) = super::captures::receive(&self.lib, &handle.url().to_string(), carried) {
             log::warn!("captures from a shared board weren’t written: {e}");
         }
+        let pictures = handle.with_document(|d| super::captures::missing_pictures(&self.lib, &*d));
+        super::captures::receive_pictures(&self.lib, &handle.url().to_string(), pictures);
         if self.open.lock().unwrap().contains_key(&id) {
             (self.emit)("sharing.board", json!({ "id": id.to_string(), "elements": elements, "boxes": boxes, "heads": heads }));
         } else if let Err(e) = self.write_file(id, &elements, &boxes) {
@@ -441,20 +443,24 @@ impl Boards {
         Ok(mine.iter().map(ToString::to_string).collect())
     }
 
-    /// Puts into the document the captures the board refers to that it doesn't hold yet.
+    /// Puts into the document the captures and pictures the board refers to that it doesn't
+    /// hold yet.
     fn carry(&self, handle: &DocHandle) {
+        use super::captures as c;
         let (elements, boxes) = handle.with_document(|d| read_doc(&*d));
-        let held = handle.with_document(|d| super::captures::held(&*d));
-        let new: Vec<_> = super::captures::referenced(&elements, &boxes).into_iter()
-            .filter(|id| !held.contains(id))
-            .filter_map(|id| super::captures::carried(&self.lib, id).map(|c| (id, c)))
-            .collect();
-        if new.is_empty() {
+        let (held, held_pictures) = handle.with_document(|d| (c::held(&*d, "captures"), c::held(&*d, "pictures")));
+        let referenced = c::referenced(&elements, &boxes);
+        let new: Vec<_> = referenced.iter().filter(|id| !held.contains(id)).filter_map(|&id| c::carried(&self.lib, id).map(|x| (id, x))).collect();
+        let pictures: Vec<_> = referenced.iter().filter(|id| !held_pictures.contains(id)).filter_map(|&id| c::picture(&self.lib, id).map(|p| (id, p))).collect();
+        if new.is_empty() && pictures.is_empty() {
             return;
         }
-        let done = handle.with_document(|d| d.transact(|tx| new.iter().try_for_each(|(id, c)| super::captures::put(tx, *id, c))).map(|_| ()));
+        let done = handle.with_document(|d| d.transact(|tx| {
+            new.iter().try_for_each(|(id, x)| c::put(tx, *id, x))?;
+            pictures.iter().try_for_each(|(id, p)| c::put_picture(tx, *id, p))
+        }).map(|_| ()));
         if let Err(e) = done {
-            log::warn!("captures weren’t put on a shared board: {:?}", e.error);
+            log::warn!("captures or pictures weren’t put on a shared board: {:?}", e.error);
         }
     }
 

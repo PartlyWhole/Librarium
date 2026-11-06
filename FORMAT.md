@@ -248,7 +248,10 @@ My own words.
 - `library.original: "original.<ext>"`, where `ext` comes from the magic bytes: `pdf`, `epub`,
   `png`, `jpg`, `gif`, `webp`, `heic` or `tiff`
 - `provenance: {"original-name", "saved-at", "saved-with": "Librarium <ver> (import)",
-  "source": null}`
+  "source": null}`; `(shared board)` in place of `(import)` for a picture received from a
+  shared board
+- `sharing.from`: on a picture received from a shared board, that board's shared document
+  (`automerge:<document id>`); the picture keeps its ID from where it was added
 - After extraction: `library.text: "extracted/text-v1.json"` and `library.pages` (pages or
   chapters)
 
@@ -510,7 +513,9 @@ running.
   server.
   - A shared board's document has `librarium: "board 1"`, `title` and `background` (the
     sharer's), `captures` (each capture on the board, by ID: `title`, `fields` as JSON, `words`,
-    `anchor` as JSON, and `regions`, each region picture's bytes by its suffix), `elements` (each element's Excalidraw JSON, as a string under its ID, without a
+    `anchor` as JSON, and `regions`, each region picture's bytes by its suffix), `pictures` (each
+    image item on the board that isn't in a shared folder, by ID: `title`, `name` (the file's
+    name when it was added) and `bytes`, the original), `elements` (each element's Excalidraw JSON, as a string under its ID, without a
     text box's Markdown) and `boxes` (each text box's Markdown as Automerge text, under its ID).
   - A shared note's document has `librarium: "note 1"`, `title` (the sharer's) and `text` (the
     note's body, its Markdown without the frontmatter, as Automerge text).
