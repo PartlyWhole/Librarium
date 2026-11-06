@@ -312,7 +312,8 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
 
   if (readOnly) notices.append(h("p", { class: "notice" }, `This board opens read-only. ${info.read_only}`));
   if (recovered) {
-    const bar = h("p", { class: "notice" }, "A drawing you hadn’t saved was recovered. ", h("button", { class: "link-button", onclick: () => void discard() }, "Discard it"));
+    const bar = h("p", { class: "notice" }, "A drawing you hadn’t saved was recovered. ", h("button", { class: "link-button", onclick: () => void discard() }, "Discard it"), " · ",
+      h("button", { class: "link-button", onclick: () => bar.remove() }, "Keep it"));
     const discard = async () => {
       await call("drafts.discard", { id }).catch(() => {});
       ready.load(loaded.scene);

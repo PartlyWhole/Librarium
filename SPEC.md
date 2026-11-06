@@ -51,7 +51,8 @@ detection.
 - **After opening.** The saved tabs come back. With none, Today opens.
 - **Recovery.**
   - Unsaved text is recovered with the toast "Text you hadn't saved was recovered" (**Show**), and
-    the note offers **Discard it**. Boards recover the same way.
+    the note offers **Discard it** or **Keep it** (which only closes the notice). Boards recover the
+    same way.
   - Interrupted jobs resume, with a note such as "Resumed 3 saves".
 - **Quit.**
   - ⌘Q and closing the window (red button, ⇧⌘W) both save, close the library and quit.
