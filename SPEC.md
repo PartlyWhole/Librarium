@@ -846,6 +846,11 @@ in their own library; it works offline and catches up when the connection is bac
     received from the board. It is then their copy: later edits stay on the side they're made.
     The item it quotes comes through the shared folder. A capture deleted for good is written
     again while it's still on a shared board.
+  - **Pictures travel with the board** the same way: each picture on it (up to 50 MB) is
+    carried in the board's shared document and written into each colleague's Library ▸
+    Attachments with the same ID, marked as received from the board, and shows on their board
+    once it's there. Pictures in a shared folder come through Syncthing instead, and larger ones
+    only that way.
   - A card of something you don't have yet says "Not in your library yet: a colleague put it
     here. A capture comes with the board in a moment; an item, once it's in your shared folder."
 - **While a board isn't open,** what colleagues draw is written to its drawing, and its
@@ -901,7 +906,8 @@ in their own library; it works offline and catches up when the connection is bac
     “Shared” is shared with colleagues, so it leaves their libraries too. Syncthing keeps
     removed files for 30 days on each Mac." Deleting permanently says the same. Archiving is
     shared too (the item stays where it is, archived for everyone) and can be undone.
-  - On a shared board, putting on an item that isn't in a shared folder offers to move it there
+  - On a shared board, putting on an item (other than a picture) that isn't in a shared folder
+    offers to move it there
     ("Colleagues get “…” once it's in “Shared”." **Move to “Shared”**), as a step to undo.
   - Items arrive file by file: a folder whose `record.json` hasn't come yet is neither shown nor
     touched, and the item appears when it does.

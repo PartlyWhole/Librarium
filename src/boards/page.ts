@@ -377,12 +377,13 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
     if (items.length) void ready.insert(items, at);
     offerShared(ids);
   };
-  /** On a shared board, library items outside a shared folder are offered a move into one:
-   * colleagues get only what is in it. */
+  /** On a shared board, library items other than pictures outside a shared folder are offered a
+   * move into one: colleagues get only what is in it. */
   const offerShared = (ids: string[]) => {
     const lib = spaceFor("item");
     if (!live?.link.peek() || !lib) return;
-    const out = ids.map((i) => untracked(() => getRecord(i))).filter((r): r is RecordInfo => !!r && r.kind === "item" && sharedFolderOf(lib.kind, folderOf(r)) === null);
+    // Pictures travel with the board itself.
+    const out = ids.map((i) => untracked(() => getRecord(i))).filter((r): r is RecordInfo => !!r && r.kind === "item" && !isPicture(r) && sharedFolderOf(lib.kind, folderOf(r)) === null);
     if (!out.length) return;
     const what = out.length === 1 ? `“${out[0]!.title || "Untitled"}”` : `${out.length} items`;
     const dest = untracked(() => sharedFolders(lib.kind))[0];
@@ -532,6 +533,8 @@ async function mount(host: HTMLElement, params: Record<string, string>, ctx: Pag
   cleanup.push(() => shownBoards.delete(id));
 
   // ---- Changes made elsewhere ----
+  // Pictures a colleague put on the board show once their items arrive.
+  cleanup.push(effect(() => (records(), untracked(() => ready.loadPictures()))));
   let seen = info.version;
   cleanup.push(effect(() => {
     const r = records().get(id);

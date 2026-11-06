@@ -125,6 +125,8 @@ export interface BoardEngine {
   setPeers(peers: Map<string, Peer>): void;
   /** The board is shared (or no longer is). */
   setShared(on: boolean): void;
+  /** Shows pictures whose items have arrived since (from a colleague's board). */
+  loadPictures(): void;
   /** Tells `to` where the pointer is on the drawing (in its coordinates), and when it is pressed
    * or let go; `undefined` stops. */
   followPointer(to: ((p: { x: number; y: number; button: "down" | "up"; tool: PointerTool }) => void) | undefined): void;
@@ -783,6 +785,7 @@ export function mountBoard(host: HTMLElement, o: EngineOptions): Promise<BoardEn
       loadPictures();
       return true;
     },
+    loadPictures,
     setShared(on) {
       shared = on;
     },

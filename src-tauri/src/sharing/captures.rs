@@ -1,9 +1,11 @@
-//! Captures travel with the shared boards they're on. When a page pushes a board, each capture
-//! its elements refer to (a card, a link, an embed in a text box) that the board's document
-//! doesn't hold yet goes into it: title, fields, words, anchor and region pictures. Where the
-//! document arrives, each capture missing from that library is written there as an ordinary
-//! capture with the same ID, marked `sharing.from` (the board's document). It is then that
-//! person's copy: later edits on either side stay where they're made.
+//! Captures and pictures travel with the shared boards they're on. When a page pushes a board,
+//! each capture its elements refer to (a card, a link, an embed in a text box) that the board's
+//! document doesn't hold yet goes into it: title, fields, words, anchor and region pictures. So
+//! does each picture on it (an image item) that isn't in a shared folder, which colleagues get
+//! through Syncthing instead. Where the document arrives, each capture or picture missing from
+//! that library is written there as an ordinary one with the same ID, marked `sharing.from` (the
+//! board's document); pictures go to Library ▸ Attachments. It is then that person's copy: later
+//! edits on either side stay where they're made.
 
 use crate::captures::{self, ANCHOR};
 use crate::error::Result;
@@ -19,6 +21,10 @@ use std::collections::{BTreeSet, HashMap};
 pub const FROM: &str = "sharing.from";
 /// The capture's fields that travel with it.
 const FIELDS: [&str; 4] = [captures::SOURCE, captures::QUOTE, captures::PARTS, captures::LOCATOR];
+
+/// Pictures larger than this don't travel with a board: they reach colleagues through a shared
+/// folder.
+const MAX_PICTURE: u64 = 50 * 1024 * 1024;
 
 /// A capture as a shared document carries it.
 pub struct Carried {
@@ -71,9 +77,9 @@ pub fn carried(lib: &Library, id: Id) -> Option<Carried> {
     })
 }
 
-/// The captures the document holds already, by ID.
-pub fn held(doc: &impl ReadDoc) -> BTreeSet<Id> {
-    match doc.get(ROOT, "captures") {
+/// The captures (`"captures"`) or pictures (`"pictures"`) the document holds already, by ID.
+pub fn held(doc: &impl ReadDoc, key: &str) -> BTreeSet<Id> {
+    match doc.get(ROOT, key) {
         Ok(Some((AmValue::Object(ObjType::Map), m))) => doc.keys(&m).filter_map(|k| parse_id(&k)).collect(),
         _ => BTreeSet::new(),
     }
@@ -161,6 +167,82 @@ pub fn receive(lib: &Library, doc_url: &str, carried: Vec<(Id, Carried)>) -> Res
     Ok(n)
 }
 
+// ---- Pictures ----
+
+/// A picture (an image item) as a shared document carries it.
+pub struct Picture {
+    title: String,
+    /// The file's name when it was added, for the colleague's copy.
+    name: String,
+    bytes: Vec<u8>,
+}
+
+/// Whether an item is in a folder Syncthing shares (it has `.stfolder`).
+fn in_shared_folder(lib: &Library, e: &record::Entry) -> bool {
+    let top = lib.root.join("items");
+    e.dir(lib).ancestors().skip(1).take_while(|d| d.starts_with(&top)).any(|d| d.join(".stfolder").exists())
+}
+
+/// A picture of this library, as it travels; `None` for anything else, a picture in a shared
+/// folder, or one too large.
+pub fn picture(lib: &Library, id: Id) -> Option<Picture> {
+    let e = lib.index.get(id).filter(|e| e.kind == crate::library::KIND && e.field_str(crate::library::FORMAT) == Some("image"))?;
+    if in_shared_folder(lib, &e) {
+        return None;
+    }
+    let path = e.dir(lib).join(e.field_str(crate::library::ORIGINAL)?);
+    if std::fs::metadata(&path).ok()?.len() > MAX_PICTURE {
+        log::warn!("the picture {id} is too large to travel with a shared board");
+        return None;
+    }
+    let name = e.fields.get("provenance").and_then(|p| p["original-name"].as_str()).unwrap_or(&e.title).to_string();
+    Some(Picture { title: e.title.clone(), name, bytes: std::fs::read(path).ok()? })
+}
+
+/// Puts a picture into the document.
+pub fn put_picture(doc: &mut impl Transactable, id: Id, p: &Picture) -> std::result::Result<(), automerge::AutomergeError> {
+    let pics = match doc.get(ROOT, "pictures")? {
+        Some((AmValue::Object(ObjType::Map), m)) => m,
+        _ => doc.put_object(ROOT, "pictures", ObjType::Map)?,
+    };
+    let one = doc.put_object(&pics, id.to_string(), ObjType::Map)?;
+    doc.put(&one, "title", p.title.as_str())?;
+    doc.put(&one, "name", p.name.as_str())?;
+    doc.put(&one, "bytes", ScalarValue::Bytes(p.bytes.clone()))?;
+    Ok(())
+}
+
+/// The pictures the document holds that this library hasn't got.
+pub fn missing_pictures(lib: &Library, doc: &impl ReadDoc) -> Vec<(Id, Picture)> {
+    let Ok(Some((AmValue::Object(ObjType::Map), pics))) = doc.get(ROOT, "pictures") else { return vec![] };
+    let scalar = |obj: &automerge::ObjId, k: &str| match doc.get(obj, k) {
+        Ok(Some((AmValue::Scalar(v), _))) => Some(v.into_owned()),
+        _ => None,
+    };
+    doc.keys(&pics)
+        .filter_map(|k| {
+            let id = parse_id(&k).filter(|id| lib.index.get(*id).is_none())?;
+            let Ok(Some((AmValue::Object(ObjType::Map), one))) = doc.get(&pics, k.as_str()) else { return None };
+            let text = |key: &str| match scalar(&one, key) {
+                Some(ScalarValue::Str(t)) => t.to_string(),
+                _ => String::new(),
+            };
+            let Some(ScalarValue::Bytes(bytes)) = scalar(&one, "bytes") else { return None };
+            Some((id, Picture { title: text("title"), name: text("name"), bytes }))
+        })
+        .collect()
+}
+
+/// Writes the pictures this library hasn't got into Attachments, each with its ID, marked as
+/// from `doc_url`.
+pub fn receive_pictures(lib: &Library, doc_url: &str, pictures: Vec<(Id, Picture)>) {
+    for (id, p) in pictures {
+        if let Err(e) = crate::library::import::receive(lib, id, &p.bytes, &p.name, &p.title, doc_url) {
+            log::warn!("a picture from a shared board ({id}) wasn’t written: {e}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,10 +268,18 @@ mod tests {
         let id = parse_id("01a16f80-3dc5-734e-8ee4-b39e78db3c3f").unwrap();
         let c = Carried { title: "A quote".into(), fields: json!({ "captures.quote": "words", "captures.parts": 1 }).as_object().unwrap().clone(), words: "mine".into(), anchor: "{}".into(), regions: vec![(".region-1.png".into(), vec![137, 80, 78, 71])] };
         put(&mut doc, id, &c).unwrap();
-        assert!(held(&doc).contains(&id));
+        assert!(held(&doc, "captures").contains(&id));
         let back = all(&doc);
         assert_eq!(back.len(), 1);
         assert_eq!((back[0].1.title.as_str(), back[0].1.words.as_str(), back[0].1.regions[0].1.len()), ("A quote", "mine", 4));
         assert_eq!(back[0].1.fields["captures.parts"], 1);
+    }
+
+    #[test]
+    fn picture_round_trip() {
+        let mut doc = automerge::AutoCommit::new();
+        let id = parse_id("01a16f80-3dc5-734e-8ee4-b39e78db3c3f").unwrap();
+        put_picture(&mut doc, id, &Picture { title: "A view".into(), name: "view.png".into(), bytes: vec![137, 80, 78, 71] }).unwrap();
+        assert!(held(&doc, "pictures").contains(&id));
     }
 }

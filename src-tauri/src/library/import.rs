@@ -6,11 +6,13 @@ use super::{saved_with, FOLDER, FORMAT, KIND, ORIGINAL};
 use crate::error::{Error, Result};
 use crate::store::{files, folders, record, Library};
 use crate::types::{ImportFailure, ImportResult, Written};
-use crate::util::{iso_utc, json_bytes, new_id, now_ms, sha256};
+use crate::util::{iso_utc, json_bytes, new_id, now_ms, sha256, Id};
 use base64::Engine as _;
 use serde_json::{json, Value};
 use std::path::Path;
 
+/// The Library folder pictures pasted, dropped or received go to.
+const ATTACHMENTS: &str = "Attachments";
 /// Pasted data larger than this (in base64) is refused: add it as a file instead.
 const MAX_PASTE_B64: usize = 70_000_000;
 
@@ -95,9 +97,20 @@ pub fn import_data(lib: &Library, name: Option<&str>, data: &str, folder: Option
 }
 
 fn import_bytes(lib: &Library, bytes: &[u8], name: &str, folder: Option<&str>) -> Result<Written> {
+    add(lib, new_id(), bytes, name, &stem(name), folder, None)
+}
+
+/// Adds a picture that came with a shared board, with its ID there, to Attachments, marked as
+/// from the board's document `from`.
+pub fn receive(lib: &Library, id: Id, bytes: &[u8], name: &str, title: &str, from: &str) -> Result<Written> {
+    let name = if name.is_empty() { "Picture" } else { name };
+    let title = if title.trim().is_empty() { stem(name) } else { title.to_string() };
+    add(lib, id, bytes, name, &title, Some(ATTACHMENTS), Some(from))
+}
+
+fn add(lib: &Library, id: Id, bytes: &[u8], name: &str, title: &str, folder: Option<&str>, from: Option<&str>) -> Result<Written> {
     let (format, ext) =
         detect(bytes, name).ok_or_else(|| Error::invalid(format!("“{name}” isn’t a PDF, an image or an EPUB.")))?;
-    let id = new_id();
     let now = iso_utc(now_ms());
     let original = format!("original.{ext}");
     let mut rec = json!({
@@ -105,12 +118,12 @@ fn import_bytes(lib: &Library, bytes: &[u8], name: &str, folder: Option<&str>) -
         "kind": KIND,
         "kind-version": 1,
         "created": now,
-        "title": stem(name),
+        "title": title,
         "sha256": sha256(bytes),
         "provenance": {
             "original-name": name,
             "saved-at": now,
-            "saved-with": saved_with("import"),
+            "saved-with": saved_with(if from.is_some() { "shared board" } else { "import" }),
             "source": Value::Null,
         },
         FORMAT: format,
@@ -118,6 +131,9 @@ fn import_bytes(lib: &Library, bytes: &[u8], name: &str, folder: Option<&str>) -
     });
     if let Some(f) = folder {
         rec[FOLDER] = json!(f);
+    }
+    if let Some(from) = from {
+        rec[crate::sharing::captures::FROM] = json!(from);
     }
     let stage = files::stage_dir(lib)?;
     let imported = (|| -> Result<Written> {
